@@ -18,6 +18,8 @@ import re
 import os
 import tqdm
 
+from molpot import DataSet, DataProxy, DataLoader
+
 log = logging.getLogger(__name__)
 
 class Keywords:
@@ -52,7 +54,7 @@ class Keywords:
 class DataError(Exception):
     pass
 
-class BaseDataSet:
+class DataSet:
 
     """
     Base class for all datasets. It includes 5 processes:
@@ -88,10 +90,15 @@ class BaseDataSet:
         urlretrieve(url, fpath)
         return fpath
     
-    def create_dataset(self):
-        raise NotImplementedError
+    def create_dataproxy(self, format) -> DataProxy:
+        if format == "ASE":
+            return ASEDataProxy()
     
-class QM9DataSet(BaseDataSet):
+    def load_dataproxy(self, format) -> DataProxy:
+        if format == "ASE":
+            return ASEDataProxy()
+    
+class QM9DataSet(DataSet):
 
     def __init__(self, data_dir: Optional[Path | str], batch_size: int, n_train: Optional[int], n_valid: Optional[int], n_test: Optional[int], loader: DataLoader, remove_uncharacterized: bool = True):
         super().__init__("QM9", data_dir, batch_size, n_train, n_valid, n_test, loader)
@@ -112,28 +119,25 @@ class QM9DataSet(BaseDataSet):
         self.keywords.set("G", "free_energy", "Ha")
         self.keywords.set("Cv", "heat_capacity", "cal/mol/K")
 
-    def prepare(self):
+    def prepare(self) -> DataProxy:
+        
+        if not self.data_dir / Path('data.meta').exists():
+            atomrefs = self._download_atomrefs()
+            # dataproxy = self.create_dataproxy()
+            if self.remove_uncharacterized:
+                uncharacterized = self._download_uncharacterized()
+            else:
+                uncharacterized = None
+            self._download_data()
+            self.dataproxy = self.dataloader(self.data_dir)
 
-        atomrefs = self._download_atomrefs()
-        dataset = self.create_dataset()
-        if self.remove_uncharacterized:
-            uncharacterized = self._download_uncharacterized()
         else:
-            uncharacterized = None
-        self._download_data(tmpdir, dataset, uncharacterized=uncharacterized)
-        shutil.rmtree(tmpdir)
-        else:
-            dataset = load_dataset(self.datapath, self.format)
-            if self.remove_uncharacterized and len(dataset) == 133885:
-                raise DataError(
-                    "The dataset at the chosen location contains the uncharacterized 3054 molecules. "
-                    + "Choose a different location to reload the data or set `remove_uncharacterized=False`!"
-                )
-            elif not self.remove_uncharacterized and len(dataset) < 133885:
-                raise DataError(
-                    "The dataset at the chosen location does NOT contain the uncharacterized 3054 molecules. "
-                    + "Choose a different location to reload the data or set `remove_uncharacterized=True`!"
-                )
+            self.dataproxy = self.load_dataproxy(self.datapath, self.format)
+            
+        return dataproxy
+    
+    def get_dataset(self):
+        return dataproxy.get_dataset()
         
     def _download_atomrefs(self):
         url = "https://ndownloader.figshare.com/files/3195395"
@@ -160,50 +164,52 @@ class QM9DataSet(BaseDataSet):
         return uncharacterized
     
     def _download_data(
-        self, dataset: Dataset, uncharacterized: Optional[list[int]]
+        self, dataproxy: DataProxy, uncharacterized: Optional[list[int]]
     ):
         url = "https://ndownloader.figshare.com/files/3195389"
         tar_path = self.fetch(url, "gdb9.tar.gz")
         raw_path = self.fetch(url, "gdb9_xyz")
 
-        logging.info("Extracting files...")
+        log.info("Extracting files...")
         tar = tarfile.open(tar_path)
         tar.extractall(raw_path)
         tar.close()
-        logging.info("Done.")
+        log.info("Done.")
 
-        logging.info("Parse xyz files...")
+        log.info("Parse xyz files...")
         ordered_files = sorted(
             os.listdir(raw_path), key=lambda x: (int(re.sub("\D", "", x)), x)
         )
+        return ordered_files
 
-        property_list = []
+        # property_list = []
 
-        irange = np.arange(len(ordered_files), dtype=int)
-        if uncharacterized is not None:
-            irange = np.setdiff1d(irange, np.array(uncharacterized, dtype=int) - 1)
+        # irange = np.arange(len(ordered_files), dtype=int)
+        # if uncharacterized is not None:
+        #     irange = np.setdiff1d(irange, np.array(uncharacterized, dtype=int) - 1)
 
-        for i in tqdm(irange):
-            xyzfile = os.path.join(raw_path, ordered_files[i])
-            properties = {}
+        # for i in tqdm(irange):
+        #     xyzfile = os.path.join(raw_path, ordered_files[i])
+        #     properties = {}
 
-            tmp = io.StringIO()
-            with open(xyzfile, "r") as f:
-                lines = f.readlines()
-                l = lines[1].split()[2:]
-                for pn, p in zip(dataset.available_properties, l):
-                    properties[pn] = np.array([float(p)])
-                for line in lines:
-                    tmp.write(line.replace("*^", "e"))
+        #     tmp = io.StringIO()
+        #     with open(xyzfile, "r") as f:
+        #         lines = f.readlines()
+        #         l = lines[1].split()[2:]
+        #         for pn, p in zip(data.available_properties, l):
+        #             properties[pn] = np.array([float(p)])
+        #         for line in lines:
+        #             tmp.write(line.replace("*^", "e"))
 
-            tmp.seek(0)
-            ats: Atoms = list(read_xyz(tmp, 0))[0]
-            properties[structure.Z] = ats.numbers
-            properties[structure.R] = ats.positions
-            properties[structure.cell] = ats.cell
-            properties[structure.pbc] = ats.pbc
-            property_list.append(properties)
+        #     tmp.seek(0)
+        #     ats: Atoms = list(read_xyz(tmp, 0))[0]
+        #     properties[structure.Z] = ats.numbers
+        #     properties[structure.R] = ats.positions
+        #     properties[structure.cell] = ats.cell
+        #     properties[structure.pbc] = ats.pbc
+        #     property_list.append(properties)
 
-        logging.info("Write atoms to db...")
-        dataset.add_systems(property_list=property_list)
-        logging.info("Done.")
+
+        # log.info("Write atoms to db...")
+        # dataset.add_systems(property_list=property_list)
+        # log.info("Done.")
