@@ -5,39 +5,7 @@ Note: Had to be moved out of Structure class for TorchScript compatibility
 
 """
 from typing import Final
-
-class Keywords:
-
-    def __init__(self, name="_mpot_global"):
-        self._name = name
-        self._maps:dict[str, str] = {}
-        self._units:dict[str, str] = {}
-        self._comments:dict[str, str] = {}
-
-    def __getitem__(self, key):
-        return self._maps[key]
-    
-    def __setitem__(self, key, value):
-        self._maps[key] = value
-
-    def __getattribute__(self, __name: str) -> str:
-        return self._maps[__name]
-    
-    def __setattr__(self, __name: str, value: str) -> None:
-        self._maps[__name] = value
-
-    def get_unit(self, key):
-        return self._units[key]
-    
-    def set_unit(self, key, value):
-        self._units[key] = value
-
-    def set(self, alias, keyword, unit=None, comment=None):
-        self._maps[alias] = keyword
-        self._units[alias] = unit
-        self._comments[alias] = comment
-        self.__annotations__[alias] = Final[str]
-        self.__doc__ += f"\n    {alias}: {keyword} ({unit}) # {comment}"
+from molpy import Keywords
 
 keywords = Keywords()
 keywords.set("idx", "_idx", None, "")

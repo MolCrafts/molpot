@@ -3,24 +3,25 @@
 # date: 2023-09-21
 # version: 0.0.1
 
-import io
+import json
 import logging
-from pathlib import Path
+import os
+import re
+import tarfile
 import tempfile
-from torch.utils.data import Dataset
-
+import time
+from pathlib import Path
 from typing import Any, Optional
 from urllib.request import urlretrieve
+
+import molpy as mp
+import molpot as mpot
 import numpy as np
-
-import tarfile
-import re
-import os
 import tqdm
-from molpot.configs.keywords import Keywords
 
-from molpot.data.dataproxy import DataProxy
 from molpot import keywords as kw
+from molpot.configs.keywords import Keywords
+from molpot.data.dataproxy import DataProxy
 
 log = logging.getLogger(__name__)
 
@@ -38,14 +39,25 @@ class DataSet:
         * Wrap inside a DataLoader.
     """
 
-    def __init__(self, name, data_dir: Optional[Path | str], batch_size: int, n_train: Optional[int], n_valid: Optional[int], n_test: Optional[int], loader: DataLoader):
+    def __init__(self, name, data_dir: Optional[Path | str], batch_size: int, n_train: Optional[int], n_valid: Optional[int], n_test: Optional[int]):
 
+        self.name = name
         if self.data_dir is None:
             self.data_dir = tempfile.mkdtemp()
         else:
             self.data_dir = Path(data_dir)
             if not self.data_dir.exists():
                 self.data_dir.mkdir(parents=True, exist_ok=True)
+
+    def update_meta(self, data: Optional[dict[str, Any]] = None):
+
+        _data = {
+            "name": self.name,
+            "update_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+        }
+        _data.update(data or {})
+        with open(self.data_dir / Path("meta.json"), "w") as f:
+            json.dump(_data, f)
 
     def set_keywords(self, keywords: dict[str, str]):
         self.keywords = keywords
@@ -69,8 +81,8 @@ class DataSet:
     
 class QM9DataSet(DataSet):
 
-    def __init__(self, data_dir: Optional[Path | str], batch_size: int, n_train: Optional[int], n_valid: Optional[int], n_test: Optional[int], loader: DataLoader, remove_uncharacterized: bool = True):
-        super().__init__("QM9", data_dir, batch_size, n_train, n_valid, n_test, loader)
+    def __init__(self, data_dir: Optional[Path | str], batch_size: int, n_train: Optional[int], n_valid: Optional[int], n_test: Optional[int], remove_uncharacterized: bool = True):
+        super().__init__("QM9", data_dir, batch_size, n_train, n_valid, n_test)
         self.remove_uncharacterized = remove_uncharacterized
         self.keywords = Keywords("QM9")
         self.keywords.set("A", "rotational_constant_A", "GHz")
@@ -88,7 +100,6 @@ class QM9DataSet(DataSet):
         self.keywords.set("H", "enthalpy_H", "Ha")
         self.keywords.set("G", "free_energy", "Ha")
         self.keywords.set("Cv", "heat_capacity", "cal/mol/K")
-        kw.update(self.keywords)
 
         self.dataproxy: Optional[DataProxy] = None
 
@@ -101,16 +112,15 @@ class QM9DataSet(DataSet):
 
     def prepare(self) -> DataProxy:
         
-        if not self.data_dir / Path('data.meta').exists():
+        if not self.data_dir / Path('meta.json').exists():
+            self.update_meta()
             atomrefs = self._download_atomrefs()
-            # dataproxy = self.create_dataproxy()
             if self.remove_uncharacterized:
                 uncharacterized = self._download_uncharacterized()
             else:
                 uncharacterized = None
             ordered_files = self._download_data()
             self.dataproxy = self.load_data(ordered_files, atomrefs, uncharacterized)
-
         else:
             self.dataproxy = self.load_dataproxy(self.datapath, self.format)
             
@@ -190,6 +200,8 @@ class QM9DataSet(DataSet):
             # # property_list.append(properties)
             # frame = 
             frame = mp.read_frame(xyzfile, 0)
+            for k in self.keywords:
+                properties[k.alias] = mpot.convert(frame[k.keyword], k.unit, kw.get_unit(k.alias))
             properties[kw.Z] = frame[kw.Z]
             properties[kw.R] = frame["positions"]
             properties[kw.cell] = frame.cell.tolist()

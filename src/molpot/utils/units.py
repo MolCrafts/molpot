@@ -6,7 +6,7 @@ import pint
 
 __u = pint.UnitRegistry()
 
-def convert(src: tuple[float], tgt_unit: str) -> float:
+def convert(value:float, src_unit: str, tgt_unit: str) -> float:
     """
     Convert a value from one unit to another.
 
@@ -17,6 +17,4 @@ def convert(src: tuple[float], tgt_unit: str) -> float:
     Returns:
         The converted value.
     """
-    src_unit = src[1]
-    src_value = src[0]
-    return (src_value * __u(src_unit)).to(tgt_unit).magnitude
+    return (value * __u(src_unit)).to(tgt_unit).magnitude
