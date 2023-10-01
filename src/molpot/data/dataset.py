@@ -5,7 +5,7 @@
 
 import json
 import logging
-import os
+import io
 import re
 import tarfile
 import tempfile
@@ -201,25 +201,17 @@ class QM9DataSet(DataSet):
             xyzfile = files[i]
             properties = {}
 
-            # tmp = io.StringIO()
-            # with open(xyzfile, "r") as f:
-            #     lines = f.readlines()
-            #     l = lines[1].split()[2:]
-            #     for prop, p in zip(self.properties, l):
-            #         properties[prop] = mpot.convert((float(p), None), self.properties[prop])
-            #     for line in lines:
-            #         tmp.write(line.replace("*^", "e"))
+            tmp = io.StringIO()
+            with open(xyzfile, "r") as f:
+                lines = f.readlines()
+                l = lines[1].split()[2:]
+                for prop, p in zip(self.properties, l):
+                    properties[prop] = mpot.convert((float(p), None), self.properties[prop])
+                for line in lines:
+                    tmp.write(line.replace("*^", "e"))
 
-            # tmp.seek(0)
-            # # ats: Atoms = list(read_xyz(tmp, 0))[0]
-            # # properties[structure.Z] = ats.numbers
-            # # properties[structure.R] = ats.positions
-            # # properties[structure.cell] = ats.cell
-            # # properties[structure.pbc] = ats.pbc
-            # # property_list.append(properties)
-            # frame = 
             frame = mp.DataReader(xyzfile, "XYZ").read_frame()
-            for k in self.keywords:
+            for k in self.keywords:**
                 properties[k.alias] = mpot.convert(frame[k.keyword], k.unit, kw.get_unit(k.alias))
             properties[kw.Z] = frame[kw.Z]
             properties[kw.R] = frame["positions"]
