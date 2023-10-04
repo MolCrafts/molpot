@@ -21,11 +21,12 @@ from tqdm import tqdm
 
 from torch.utils.data import DataLoader, Dataset
 
-from molpot import keywords as kw
-from molpot.configs.keywords import Keywords
+from molpot import kw, Keywords
 from molpot.data.dataproxy import DataProxy
 
 log = logging.getLogger(__name__)
+
+__all__ = ["DataSet", "QM9DataSet"]
 
 
 class DataError(Exception):
@@ -134,10 +135,7 @@ class QM9DataSet(DataSet):
 
     @property
     def properties(self) -> dict[str, str]:
-        props = {}
-        for kw in self.keywords:
-            props[kw.keyword] = kw.unit
-        return props
+        return self.keywords.alias
 
     def prepare(self) -> DataProxy:
         if not self.is_prepared:
@@ -206,17 +204,18 @@ class QM9DataSet(DataSet):
         tar_path = self.fetch(url, "gdb9.tar.gz")
         raw_path = self.data_dir / Path("gdb9_xyz")
 
-        log.info("Extracting files...")
-        tar = tarfile.open(tar_path)
-        tar.extractall(raw_path)
-        tar.close()
-        log.info("Done.")
-
+        if not raw_path.exists():
+            log.info("Extracting files...")
+            tar = tarfile.open(tar_path)
+            tar.extractall(raw_path)
+            tar.close()
+            log.info("Done.")
+        
         log.info("Parse xyz files...")
         ordered_files = sorted(
             raw_path.rglob("*.xyz"),
-            key=lambda x: (int(re.sub("\D", "", str(x))), str(x)),
-        )
+            key=lambda x: (int(re.sub(r"\D", "", str(x))), str(x)),
+        )  # sort by index in filename
         return ordered_files
 
     def load_data(self, files, atomrefs, uncharacterized) -> DataProxy:
@@ -230,37 +229,27 @@ class QM9DataSet(DataSet):
 
         for i in tqdm(irange):
             xyzfile = files[i]
-            properties = {}
 
-            tmp = io.StringIO()
             with open(xyzfile, "r") as f:
+                properties = mp.Frame()
                 lines = f.readlines()
-                l = lines[1].split()[2:]
-                for prop, p in zip(self.properties, l):
-                    properties[prop] = molpy.units.convert(
-                        (float(p), None), self.properties[prop]
-                    )
-                for line in lines:
-                    tmp.write(line.replace("*^", "e"))
+                properties[kw.natoms] = int(lines[0])
+                props_line = lines[1].split()[1:]
+                properties['index'] = int(props_line[0])
+                for prop, p in zip(self.properties, props_line[1:]):
+                    src_unit = self.keywords.get_unit(prop)
+                    if prop in kw:
+                        dst_unit = kw.get_unit(prop)
+                        properties[prop] = mp.units.convert(
+                            float(p), src_unit, dst_unit
+                        )
+                    else:
+                        properties[prop] = float(p)
+                
+                properties.atoms[kw.xyz] = [[i.replace('*^', 'E') for i in l.split()[1:4]]
+                 for l in lines[2:-3]]
+                properties.atoms[kw.Z] = [mp.Element.get_atomic_number_by_symbol(l.split()[0]) for l in lines[2:-3]]
 
-            # tmp.seek(0)
-            # # ats: Atoms = list(read_xyz(tmp, 0))[0]
-            # # properties[structure.Z] = ats.numbers
-            # # properties[structure.R] = ats.positions
-            # # properties[structure.cell] = ats.cell
-            # # properties[structure.pbc] = ats.pbc
-            # # property_list.append(properties)
-            # frame =
-            frame = mp.DataReader(xyzfile, "XYZ").read_frame()
-            for k in self.keywords:
-                properties[k.alias] = molpy.units.convert(
-                    frame[k.keyword], k.unit, kw.get_unit(k.alias)
-                )
-            properties[kw.Z] = frame[kw.Z]
-            properties[kw.R] = frame["positions"]
-            properties[kw.cell] = frame.cell.tolist()
-            properties[kw.pbc] = frame.cell.isPBC
-
-            dataproxy[i] = properties
+            dataproxy.add_frame(properties)
 
         return dataproxy

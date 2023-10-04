@@ -22,5 +22,8 @@ class DataProxy:
     def __init__(self):
 
         self._data: Dict[str, torch.Tensor] = {}
+        self._frames = []
 
+    def add_frame(self, frame):
+        self._frames.append(frame)
     

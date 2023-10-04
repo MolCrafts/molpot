@@ -5,110 +5,109 @@ Note: Had to be moved out of Structure class for TorchScript compatibility
 
 """
 from typing import Final
-from molpy import Keywords
+from molpy import kw, Keywords
 
-keywords = Keywords("molpot")
-keywords.set("idx", "_idx", None, "")
-keywords.set("Z", "_atomic_numbers", None, "nuclear charge")
-keywords.set("position", "_positions", None, "atom positions")
-keywords.set("R", "position", None, "atom positions")
-keywords.set("cell", "_cell", None, "unit cell")
-keywords.set("strain", "strain", None, "")
-keywords.set("pbc", "_pbc", None, "periodic boundary conditions")
-keywords.set("seg_m", "_seg_m", None, "start indices of systems")
-keywords.set("idx_m", "_idx_m", None, "indices of systems")
-keywords.set("idx_i", "_idx_i", None, "indices of center atoms")
-keywords.set("idx_j", "_idx_j", None, "indices of neighboring atoms")
-keywords.set(
+__all__ = ["kw", "required_external_fields", "Keywords"]
+
+kw.set("idx", "_idx", None, "")
+kw.set("Z", "_atomic_numbers", None, "nuclear charge")
+kw.set("cell", "_cell", None, "unit cell")
+kw.set("strain", "strain", None, "")
+kw.set("pbc", "_pbc", None, "periodic boundary conditions")
+kw.set("seg_m", "_seg_m", None, "start indices of systems")
+kw.set("idx_m", "_idx_m", None, "indices of systems")
+kw.set("idx_i", "_idx_i", None, "indices of center atoms")
+kw.set("idx_j", "_idx_j", None, "indices of neighboring atoms")
+kw.set(
     "idx_i_lr", "_idx_i_lr", None, "indices of center atoms for long-range"
 )
-keywords.set(
+kw.set(
     "idx_j_lr", "_idx_j_lr", None, "indices of neighboring atoms for long-range"
 )
-keywords.set(
+kw.set(
     "lidx_i",
     "_idx_i_local",
     None,
     "local indices of center atoms (within system)",
 )
-keywords.set(
+kw.set(
     "lidx_j",
     "_idx_j_local",
     None,
     "local indices of neighboring atoms (within system)",
 )
-keywords.set(
+kw.set(
     "Rij",
     "_Rij",
     None,
     "vectors pointing from center atoms to neighboring atoms",
 )
-keywords.set(
+kw.set(
     "Rij_lr",
     "_Rij_lr",
     None,
     "vectors pointing from center atoms to neighboring atoms for long range",
 )
-keywords.set("n_atoms", "_n_atoms", None, "number of atoms")
-keywords.set("offsets", "_offsets", None, "cell offset vectors")
-keywords.set(
+kw.set("n_atoms", "_n_atoms", None, "number of atoms")
+kw.set("offsets", "_offsets", None, "cell offset vectors")
+kw.set(
     "offsets_lr", "_offsets_lr", None, "cell offset vectors for long range"
 )
-keywords.set(
+kw.set(
     "R_strained",
     "position_strained",
     None,
     "atom positions with strain-dependence",
 )
-keywords.set(
+kw.set(
     "cell_strained",
     "cell_strained",
     None,
     "atom positions with strain-dependence",
 )
-keywords.set("n_nbh", "_n_nbh", None, "number of neighbors")
-keywords.set(
+kw.set("n_nbh", "_n_nbh", None, "number of neighbors")
+kw.set(
     "idx_i_triples", "_idx_i_triples", None, "indices of center atom triples"
 )
-keywords.set(
+kw.set(
     "idx_j_triples",
     "_idx_j_triples",
     None,
     "indices of first neighboring atom triples",
 )
-keywords.set(
+kw.set(
     "idx_k_triples",
     "_idx_k_triples",
     None,
     "indices of second neighboring atom triples",
 )
-keywords.set("energy", "energy", None, "")
-keywords.set("forces", "forces", None, "")
-keywords.set("stress", "stress", None, "")
-keywords.set("masses", "masses", None, "")
-keywords.set("dipole_moment", "dipole_moment", None, "")
-keywords.set("polarizability", "polarizability", None, "")
-keywords.set("hessian", "hessian", None, "")
-keywords.set("dipole_derivatives", "dipole_derivatives", None, "")
-keywords.set(
+kw.set("energy", "energy", None, "")
+kw.set("forces", "forces", None, "")
+kw.set("stress", "stress", None, "")
+kw.set("masses", "masses", None, "")
+kw.set("dipole_moment", "dipole_moment", None, "")
+kw.set("polarizability", "polarizability", None, "")
+kw.set("hessian", "hessian", None, "")
+kw.set("dipole_derivatives", "dipole_derivatives", None, "")
+kw.set(
     "polarizability_derivatives", "polarizability_derivatives", None, ""
 )
-keywords.set("total_charge", "total_charge", None, "")
-keywords.set("partial_charges", "partial_charges", None, "")
-keywords.set("spin_multiplicity", "spin_multiplicity", None, "")
-keywords.set("electric_field", "electric_field", None, "")
-keywords.set("magnetic_field", "magnetic_field", None, "")
-keywords.set("nuclear_magnetic_moments", "nuclear_magnetic_moments", None, "")
-keywords.set("shielding", "shielding", None, "")
-keywords.set("nuclear_spin_coupling", "nuclear_spin_coupling", None, "")
+kw.set("total_charge", "total_charge", None, "")
+kw.set("partial_charges", "partial_charges", None, "")
+kw.set("spin_multiplicity", "spin_multiplicity", None, "")
+kw.set("electric_field", "electric_field", None, "")
+kw.set("magnetic_field", "magnetic_field", None, "")
+kw.set("nuclear_magnetic_moments", "nuclear_magnetic_moments", None, "")
+kw.set("shielding", "shielding", None, "")
+kw.set("nuclear_spin_coupling", "nuclear_spin_coupling", None, "")
 
 ## external fields needed for different response properties
 required_external_fields = {
-    keywords.dipole_moment: [keywords.electric_field],
-    keywords.dipole_derivatives: [keywords.electric_field],
-    keywords.partial_charges: [keywords.electric_field],
-    keywords.polarizability: [keywords.electric_field],
-    keywords.polarizability_derivatives: [keywords.electric_field],
-    keywords.shielding: [keywords.magnetic_field],
-    keywords.nuclear_spin_coupling: [keywords.magnetic_field],
+    kw.dipole_moment: [kw.electric_field],
+    kw.dipole_derivatives: [kw.electric_field],
+    kw.partial_charges: [kw.electric_field],
+    kw.polarizability: [kw.electric_field],
+    kw.polarizability_derivatives: [kw.electric_field],
+    kw.shielding: [kw.magnetic_field],
+    kw.nuclear_spin_coupling: [kw.magnetic_field],
 }
