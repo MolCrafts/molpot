@@ -5,7 +5,7 @@
 
 import json
 import logging
-import os
+import io
 import re
 import tarfile
 import tempfile
@@ -27,8 +27,10 @@ from molpot.data.dataproxy import DataProxy
 
 log = logging.getLogger(__name__)
 
+
 class DataError(Exception):
     pass
+
 
 class DataSet:
 
@@ -41,8 +43,15 @@ class DataSet:
         * Wrap inside a DataLoader.
     """
 
-    def __init__(self, name, data_dir: Optional[Path | str], batch_size: int, n_train: Optional[int]=None, n_valid: Optional[int]=None, n_test: Optional[int]=None):
-
+    def __init__(
+        self,
+        name,
+        data_dir: Optional[Path | str],
+        batch_size: int,
+        n_train: Optional[int] = None,
+        n_valid: Optional[int] = None,
+        n_test: Optional[int] = None,
+    ):
         self.name = name
         if data_dir is None:
             self.data_dir = tempfile.mkdtemp()
@@ -73,23 +82,35 @@ class DataSet:
     def prepare(self):
         raise NotImplementedError
 
-    def fetch(self, url, filename, dir:Optional[Path | str]=None)->Path:
+    def fetch(self, url, filename, dir: Optional[Path | str] = None) -> Path:
         if dir is None:
             dir = self.data_dir
-        log.info(f'downloading from {url}...')
+        
         fpath = Path(dir) / Path(filename)
-        urlretrieve(url, fpath)
+        if not Path(dir/filename).exists():
+            log.info(f"downloading from {url}...")
+            urlretrieve(url, fpath)
+        else:
+            log.info(f"{fpath} already exists.")
         return fpath
-    
-    def load_data(self, dir)->DataProxy:
-        raise NotImplementedError
-    
-    def load_dataproxy(self, datapath, format)->DataProxy:
-        raise NotImplementedError
-    
-class QM9DataSet(DataSet):
 
-    def __init__(self, data_dir: Optional[Path | str], batch_size: int, n_train: Optional[int]=None, n_valid: Optional[int]=None, n_test: Optional[int]=None, remove_uncharacterized: bool = True):
+    def load_data(self, dir) -> DataProxy:
+        raise NotImplementedError
+
+    def load_dataproxy(self, datapath, format) -> DataProxy:
+        raise NotImplementedError
+
+
+class QM9DataSet(DataSet):
+    def __init__(
+        self,
+        data_dir: Optional[Path | str],
+        batch_size: int,
+        n_train: Optional[int] = None,
+        n_valid: Optional[int] = None,
+        n_test: Optional[int] = None,
+        remove_uncharacterized: bool = True,
+    ):
         super().__init__("QM9", data_dir, batch_size, n_train, n_valid, n_test)
         self.remove_uncharacterized = remove_uncharacterized
         self.keywords = Keywords("QM9")
@@ -115,11 +136,10 @@ class QM9DataSet(DataSet):
     def properties(self) -> dict[str, str]:
         props = {}
         for kw in self.keywords:
-            props[kw.keyword] = kw.units
+            props[kw.keyword] = kw.unit
         return props
 
     def prepare(self) -> DataProxy:
-        
         if not self.is_prepared:
             atomrefs = self._download_atomrefs()
             if self.remove_uncharacterized:
@@ -127,32 +147,41 @@ class QM9DataSet(DataSet):
             else:
                 uncharacterized = None
             ordered_files = self._download_data()
-            self.dataproxy = self.load_data(ordered_files, atomrefs, uncharacterized)
+            self.dataproxy = self.load_data(
+                ordered_files, atomrefs, uncharacterized
+            )
             self.update_meta()
         else:
             self.dataproxy = self.load_dataproxy(self.datapath, self.format)
-            
+
         return self.dataproxy
-    
+
     def get_loader(self):
         if not self.is_prepared:
             self.prepare()
         return self.dataproxy.get_loader()
-    
+
     def get_train_loader(self):
         return self.dataproxy.get_train_loader()
-    
+
     def get_valid_loader(self):
         return self.dataproxy.get_val_loader()
-    
+
     def get_test_loader(self):
         return self.dataproxy.get_test_loader()
-        
+
     def _download_atomrefs(self):
         url = "https://ndownloader.figshare.com/files/3195395"
-        filename = 'atomref.txt'
+        filename = "atomref.txt"
         atomrefs_path = self.fetch(url, filename)
-        props = [self.keywords.zpve, self.keywords.U0, self.keywords.U, self.keywords.H, self.keywords.G, self.keywords.Cv]
+        props = [
+            self.keywords.zpve,
+            self.keywords.U0,
+            self.keywords.U,
+            self.keywords.H,
+            self.keywords.G,
+            self.keywords.Cv,
+        ]
         atref = {p: np.zeros((100,)) for p in props}
         with open(atomrefs_path) as f:
             lines = f.readlines()
@@ -171,7 +200,7 @@ class QM9DataSet(DataSet):
             for line in lines[9:-1]:
                 uncharacterized.append(int(line.split()[0]))
         return uncharacterized
-    
+
     def _download_data(self):
         url = "https://ndownloader.figshare.com/files/3195389"
         tar_path = self.fetch(url, "gdb9.tar.gz")
@@ -185,30 +214,34 @@ class QM9DataSet(DataSet):
 
         log.info("Parse xyz files...")
         ordered_files = sorted(
-            raw_path.rglob("*.xyz"), key=lambda x: (int(re.sub("\D", "", str(x))), str(x))
+            raw_path.rglob("*.xyz"),
+            key=lambda x: (int(re.sub("\D", "", str(x))), str(x)),
         )
         return ordered_files
-    
-    def load_data(self, files, atomrefs, uncharacterized)->DataProxy:
 
+    def load_data(self, files, atomrefs, uncharacterized) -> DataProxy:
         dataproxy = DataProxy()
 
         irange = np.arange(len(files), dtype=int)
         if uncharacterized is not None:
-            irange = np.setdiff1d(irange, np.array(uncharacterized, dtype=int) - 1)
+            irange = np.setdiff1d(
+                irange, np.array(uncharacterized, dtype=int) - 1
+            )
 
         for i in tqdm(irange):
             xyzfile = files[i]
             properties = {}
 
-            # tmp = io.StringIO()
-            # with open(xyzfile, "r") as f:
-            #     lines = f.readlines()
-            #     l = lines[1].split()[2:]
-            #     for prop, p in zip(self.properties, l):
-            #         properties[prop] = mpot.convert((float(p), None), self.properties[prop])
-            #     for line in lines:
-            #         tmp.write(line.replace("*^", "e"))
+            tmp = io.StringIO()
+            with open(xyzfile, "r") as f:
+                lines = f.readlines()
+                l = lines[1].split()[2:]
+                for prop, p in zip(self.properties, l):
+                    properties[prop] = molpy.units.convert(
+                        (float(p), None), self.properties[prop]
+                    )
+                for line in lines:
+                    tmp.write(line.replace("*^", "e"))
 
             # tmp.seek(0)
             # # ats: Atoms = list(read_xyz(tmp, 0))[0]
@@ -217,10 +250,12 @@ class QM9DataSet(DataSet):
             # # properties[structure.cell] = ats.cell
             # # properties[structure.pbc] = ats.pbc
             # # property_list.append(properties)
-            # frame = 
+            # frame =
             frame = mp.DataReader(xyzfile, "XYZ").read_frame()
             for k in self.keywords:
-                properties[k.alias] = mpot.convert(frame[k.keyword], k.unit, kw.get_unit(k.alias))
+                properties[k.alias] = molpy.units.convert(
+                    frame[k.keyword], k.unit, kw.get_unit(k.alias)
+                )
             properties[kw.Z] = frame[kw.Z]
             properties[kw.R] = frame["positions"]
             properties[kw.cell] = frame.cell.tolist()

@@ -7,7 +7,7 @@ Note: Had to be moved out of Structure class for TorchScript compatibility
 from typing import Final
 from molpy import Keywords
 
-keywords = Keywords()
+keywords = Keywords("molpot")
 keywords.set("idx", "_idx", None, "")
 keywords.set("Z", "_atomic_numbers", None, "nuclear charge")
 keywords.set("position", "_positions", None, "atom positions")
@@ -19,21 +19,69 @@ keywords.set("seg_m", "_seg_m", None, "start indices of systems")
 keywords.set("idx_m", "_idx_m", None, "indices of systems")
 keywords.set("idx_i", "_idx_i", None, "indices of center atoms")
 keywords.set("idx_j", "_idx_j", None, "indices of neighboring atoms")
-keywords.set("idx_i_lr", "_idx_i_lr", None, "indices of center atoms for long-range")
-keywords.set("idx_j_lr", "_idx_j_lr", None, "indices of neighboring atoms for long-range")
-keywords.set("lidx_i", "_idx_i_local", None, "local indices of center atoms (within system)")
-keywords.set("lidx_j", "_idx_j_local", None, "local indices of neighboring atoms (within system)")
-keywords.set("Rij", "_Rij", None, "vectors pointing from center atoms to neighboring atoms")
-keywords.set("Rij_lr", "_Rij_lr", None, "vectors pointing from center atoms to neighboring atoms for long range")
+keywords.set(
+    "idx_i_lr", "_idx_i_lr", None, "indices of center atoms for long-range"
+)
+keywords.set(
+    "idx_j_lr", "_idx_j_lr", None, "indices of neighboring atoms for long-range"
+)
+keywords.set(
+    "lidx_i",
+    "_idx_i_local",
+    None,
+    "local indices of center atoms (within system)",
+)
+keywords.set(
+    "lidx_j",
+    "_idx_j_local",
+    None,
+    "local indices of neighboring atoms (within system)",
+)
+keywords.set(
+    "Rij",
+    "_Rij",
+    None,
+    "vectors pointing from center atoms to neighboring atoms",
+)
+keywords.set(
+    "Rij_lr",
+    "_Rij_lr",
+    None,
+    "vectors pointing from center atoms to neighboring atoms for long range",
+)
 keywords.set("n_atoms", "_n_atoms", None, "number of atoms")
 keywords.set("offsets", "_offsets", None, "cell offset vectors")
-keywords.set("offsets_lr", "_offsets_lr", None, "cell offset vectors for long range")
-keywords.set("R_strained", "position_strained", None, "atom positions with strain-dependence")
-keywords.set("cell_strained", "cell_strained", None, "atom positions with strain-dependence")
+keywords.set(
+    "offsets_lr", "_offsets_lr", None, "cell offset vectors for long range"
+)
+keywords.set(
+    "R_strained",
+    "position_strained",
+    None,
+    "atom positions with strain-dependence",
+)
+keywords.set(
+    "cell_strained",
+    "cell_strained",
+    None,
+    "atom positions with strain-dependence",
+)
 keywords.set("n_nbh", "_n_nbh", None, "number of neighbors")
-keywords.set("idx_i_triples", "_idx_i_triples", None, "indices of center atom triples")
-keywords.set("idx_j_triples", "_idx_j_triples", None, "indices of first neighboring atom triples")
-keywords.set("idx_k_triples", "_idx_k_triples", None, "indices of second neighboring atom triples")
+keywords.set(
+    "idx_i_triples", "_idx_i_triples", None, "indices of center atom triples"
+)
+keywords.set(
+    "idx_j_triples",
+    "_idx_j_triples",
+    None,
+    "indices of first neighboring atom triples",
+)
+keywords.set(
+    "idx_k_triples",
+    "_idx_k_triples",
+    None,
+    "indices of second neighboring atom triples",
+)
 keywords.set("energy", "energy", None, "")
 keywords.set("forces", "forces", None, "")
 keywords.set("stress", "stress", None, "")
@@ -42,7 +90,9 @@ keywords.set("dipole_moment", "dipole_moment", None, "")
 keywords.set("polarizability", "polarizability", None, "")
 keywords.set("hessian", "hessian", None, "")
 keywords.set("dipole_derivatives", "dipole_derivatives", None, "")
-keywords.set("polarizability_derivatives", "polarizability_derivatives", None, "")
+keywords.set(
+    "polarizability_derivatives", "polarizability_derivatives", None, ""
+)
 keywords.set("total_charge", "total_charge", None, "")
 keywords.set("partial_charges", "partial_charges", None, "")
 keywords.set("spin_multiplicity", "spin_multiplicity", None, "")
@@ -62,6 +112,3 @@ required_external_fields = {
     keywords.shielding: [keywords.magnetic_field],
     keywords.nuclear_spin_coupling: [keywords.magnetic_field],
 }
-
-def def_new_keywords(name:str) -> Keywords:
-    return Keywords(name)
