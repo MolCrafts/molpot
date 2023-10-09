@@ -1,5 +1,6 @@
+from functools import partial
 import torch
-from torchdata.datapipes.iter import IterDataPipe, FileLister, FileOpener
+from torchdata.datapipes.iter import IterDataPipe, FileLister, IterableWrapper
 from torchdata.dataloader2 import DataLoader2, MultiProcessingReadingService
 from typing import Optional, Any
 from pathlib import Path
@@ -19,6 +20,10 @@ __all__ = ["Pipline", "QM9"]
 log = logging.getLogger(__name__)
 
 
+def endswith(x: str, suffix):
+    return x.endswith(suffix)
+
+
 class Pipline:
 
     """
@@ -35,6 +40,7 @@ class Pipline:
         name,
         data_dir: Optional[Path | str],
     ):
+        super().__init__()
         self.name = name
         if data_dir is None:
             self.data_dir = Path(tempfile.mkdtemp())
@@ -64,8 +70,8 @@ class Pipline:
             dir = self.data_dir
 
         fpath = Path(dir) / Path(filename)
-        if not Path(dir / filename).exists():
-            log.info(f"downloading from {url}...")
+        if not fpath.exists():
+            log.info(f"downloading from {url}... to {fpath}")
             urlretrieve(url, fpath)
         else:
             log.info(f"{fpath} already exists.")
@@ -105,12 +111,22 @@ class QM9(Pipline):
             uncharacterized = None
         ordered_files = self._download_data()
 
-        datapipe = self._create_datapipe(
-            ordered_files, atomrefs, uncharacterized
+        irange = np.arange(len(ordered_files), dtype=int)
+        if uncharacterized is not None:
+            irange = np.setdiff1d(
+                irange, np.array(uncharacterized, dtype=int) - 1
+            )
+
+        dp = (
+            IterableWrapper((map(str, np.array(ordered_files)[irange])))
+            # can not use lambda due to it is not pickleable
+            .filter(filter_fn=partial(endswith, suffix=".xyz"))
+            .open_files(mode="rt")
+            .read_xyz(keywords=self.keywords).in_memory_cache()
         )
 
-        dl = self._create_dataloader(datapipe)
-
+        rs = MultiProcessingReadingService(num_workers=1)
+        dl = DataLoader2(dp, reading_service=rs)
         return dl
 
     def _download_atomrefs(self):
@@ -162,26 +178,3 @@ class QM9(Pipline):
             key=lambda x: (int(re.sub(r"\D", "", str(x))), str(x)),
         )  # sort by index in filename
         return ordered_files
-
-    def _create_datapipe(
-        self, files, atomrefs, uncharacterized
-    ) -> IterDataPipe:
-        irange = np.arange(len(files), dtype=int)
-        if uncharacterized is not None:
-            irange = np.setdiff1d(
-                irange, np.array(uncharacterized, dtype=int) - 1
-            )
-
-        datapipe = (
-            FileLister([str(self.data_dir)])
-            .filter(lambda file: file.endswith(".xyz"))
-            .open_files(mode="rt")
-            .read_xyz()
-        )
-
-        return datapipe
-
-    def _create_dataloader(self, datapipe) -> DataLoader2:
-        rs = MultiProcessingReadingService(num_workers=4)
-        dl = DataLoader2(datapipe, reading_service=rs)
-        return dl

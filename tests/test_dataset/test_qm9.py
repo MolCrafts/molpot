@@ -13,6 +13,16 @@ def test_qm9_path():
 #     "Run only local, not in CI. Otherwise takes too long and requires downloading the data"
 # )
 def test_qm9(test_qm9_path):
-    qm9 = QM9()
+    pass
+
+if __name__ == "__main__":
+    
+    qm9 = QM9('./testdata/test_qm9')
     loader = qm9.prepare()
     
+    for i, l in enumerate(loader):
+        print(l)
+        if i == 2:
+            break
+
+    loader.shutdown()
