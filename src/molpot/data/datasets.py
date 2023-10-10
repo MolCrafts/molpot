@@ -24,7 +24,7 @@ def endswith(x: str, suffix):
     return x.endswith(suffix)
 
 
-class Pipline:
+class DataSet:
 
     """
     Base class for all datasets. It includes 5 processes:
@@ -78,7 +78,7 @@ class Pipline:
         return fpath
 
 
-class QM9(Pipline):
+class QM9(DataSet):
     def __init__(
         self,
         data_dir: Optional[Path | str] = None,
