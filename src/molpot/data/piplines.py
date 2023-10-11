@@ -1,6 +1,8 @@
-from torchdata.datapipes.iter import IterDataPipe
+from typing import Sequence
+from torchdata.datapipes.iter import IterDataPipe, Collator
 from torchdata.datapipes import functional_datapipe
 import molpy as mp
+import torch
 from molpot import kw
 
 __all__ = [
@@ -25,7 +27,6 @@ class XYZReader(IterDataPipe):
             props_line = lines[1].split()[1:]
             frame["index"] = int(props_line[0])
             for prop, p in zip(local_kw.get_aliases(), props_line[1:]):
-                
                 if prop in local_kw:
                     src_unit = local_kw.get_unit(prop)
                     dst_unit = kw.get_unit(prop)
@@ -43,3 +44,30 @@ class XYZReader(IterDataPipe):
             ]
 
             yield frame
+
+
+@functional_datapipe("collate_frames")
+class CollateFrames(Collator):
+    def __init__(self, source_dp: IterDataPipe, **kwargs):
+        super().__init__(**kwargs)
+
+    def collate(self, batch: Sequence[mp.Frame]):
+        coll_batch = {}
+
+        props_keys = batch[0]._props.keys()
+        atoms_keys = batch[0].atoms.keys()
+
+        for k in props_keys:
+            coll_batch[k] = [frame[k] for frame in batch]
+
+        for k in atoms_keys:
+            coll_batch[k] = [frame.atoms[k] for frame in batch]
+
+        seg_m = torch.cumsum(coll_batch[kw.natoms], dim=0)
+        seg_m = torch.cat(
+            [torch.zeros((1,), dtype=seg_m.dtype), seg_m], dim=0
+        )  # prepend 0 to seg_m
+        idx_m = torch.repeat_interleave(
+            torch.arange(len(batch)), repeats=coll_batch[kw.natoms], dim=0
+        )
+        coll_batch[kw.idx_m] = idx_m
