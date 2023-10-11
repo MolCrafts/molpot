@@ -124,7 +124,9 @@ class QM9(DataSet):
             # can not use lambda due to it is not pickleable
             .filter(filter_fn=partial(endswith, suffix=".xyz"))
             .open_files(mode="rt")
-            .read_xyz(keywords=self.keywords).in_memory_cache()
+            .read_xyz(keywords=self.keywords)
+            .collate_frames()
+            .in_memory_cache()
         )
 
         # rs = MultiProcessingReadingService(num_workers=1)

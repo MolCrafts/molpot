@@ -2,6 +2,7 @@ from typing import Sequence
 from torchdata.datapipes.iter import IterDataPipe, Collator
 from torchdata.datapipes import functional_datapipe
 import molpy as mp
+import molpot as mpot
 import torch
 from molpot import kw
 
@@ -45,13 +46,12 @@ class XYZReader(IterDataPipe):
 
             yield frame
 
-
 @functional_datapipe("collate_frames")
 class CollateFrames(Collator):
-    def __init__(self, source_dp: IterDataPipe, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, datapipe, **kwargs):
+        super().__init__(datapipe, collate_fn=self.collate, **kwargs)
 
-    def collate(self, batch: Sequence[mp.Frame]):
+    def _collate(self, batch: Sequence[mp.Frame]):
         coll_batch = {}
 
         props_keys = batch[0]._props.keys()
@@ -71,3 +71,16 @@ class CollateFrames(Collator):
             torch.arange(len(batch)), repeats=coll_batch[kw.natoms], dim=0
         )
         coll_batch[kw.idx_m] = idx_m
+
+# @functional_datapipe("calc_nblist")
+# def CalcNBList(IterDataPipe):
+#     def __init__(self, source_dp: IterDataPipe, cutoff:float, **kwargs):
+#         self.dp = source_dp
+#         self.cutoff = cutoff
+
+#     def __iter__(self):
+#         nblist = mpot.transform.TorchNeighborList(cutoff=self.cutoff)
+#         for d in self.source_dp:
+#             xyz = d[kw.R]
+#             nblist(xyz)
+#             yield frame

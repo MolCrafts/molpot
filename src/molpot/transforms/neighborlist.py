@@ -7,8 +7,6 @@ import numpy as np
 from typing import Optional, Dict, List
 
 __all__ = [
-    "ASENeighborList",
-    "MatScipyNeighborList",
     "TorchNeighborList",
     "NeighborsCounter",
     "TripleGenerator",
@@ -50,7 +48,7 @@ class CachedNeighborList(Transform):
         neighbor_list: Transform,
         nbh_transforms: Optional[List[torch.nn.Module]] = None,
         keep_cache: bool = False,
-        cache_workdir: str = None,
+        cache_workdir: Optional[str] = None,
     ):
         """
         Args:
