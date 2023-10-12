@@ -5,6 +5,7 @@ import molpy as mp
 import molpot as mpot
 import torch
 from molpot import kw
+from molpot.transforms import TorchNeighborList
 
 __all__ = [
     "XYZReader",
@@ -72,15 +73,14 @@ class CollateFrames(Collator):
         )
         coll_batch[kw.idx_m] = idx_m
 
-# @functional_datapipe("calc_nblist")
-# def CalcNBList(IterDataPipe):
-#     def __init__(self, source_dp: IterDataPipe, cutoff:float, **kwargs):
-#         self.dp = source_dp
-#         self.cutoff = cutoff
+@functional_datapipe("calc_nblist")
+class CalcNBList(IterDataPipe):
+    def __init__(self, source_dp: IterDataPipe, cutoff:float):
+        self.dp = source_dp
+        self.cutoff = cutoff
 
-#     def __iter__(self):
-#         nblist = mpot.transform.TorchNeighborList(cutoff=self.cutoff)
-#         for d in self.source_dp:
-#             xyz = d[kw.R]
-#             nblist(xyz)
-#             yield frame
+    def __iter__(self):
+        nblist = TorchNeighborList(cutoff=self.cutoff)
+        for d in self.dp:
+            d = nblist(d)
+            yield d

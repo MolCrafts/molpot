@@ -2,6 +2,8 @@ import pytest
 import torch
 from molpot import kw
 from molpot.transforms import TorchNeighborList
+from torchdata.datapipes.iter import IterableWrapper
+from torchdata.dataloader2 import DataLoader2
 
 @pytest.fixture(params=[0])
 def neighbor_list(request):
@@ -17,14 +19,33 @@ class TestNeighborLists:
     """
 
     def test_neighbor_list(self, neighbor_list, environment):
-        cutoff, props, neighbors_ref = environment
+        cutoff, input, neighbors_ref = environment
         neighbor_list = neighbor_list(cutoff)
-        neighbors = neighbor_list(props)
-        R = props[kw.R]
+        neighbors = neighbor_list(input)
+        R = input[kw.R]
         neighbors[kw.Rij] = (
             R[neighbors[kw.idx_j]]
             - R[neighbors[kw.idx_i]]
-            + props[kw.offsets]
+            + input[kw.offsets]
+        )
+
+        neighbors = self._sort_neighbors(neighbors)
+        neighbors_ref = self._sort_neighbors(neighbors_ref)
+
+        for nbl, nbl_ref in zip(neighbors, neighbors_ref):
+            torch.testing.assert_close(nbl, nbl_ref)
+
+    def test_nblist_pipeline(self, neighbor_list, environment):
+
+        cutoff, input, neighbors_ref = environment
+        dp = IterableWrapper([input])
+        dp = dp.calc_nblist(cutoff = cutoff)
+        neighbors = next(iter(DataLoader2(dp)))
+        R = input[kw.R]
+        neighbors[kw.Rij] = (
+            R[neighbors[kw.idx_j]]
+            - R[neighbors[kw.idx_i]]
+            + neighbors[kw.offsets]
         )
 
         neighbors = self._sort_neighbors(neighbors)
