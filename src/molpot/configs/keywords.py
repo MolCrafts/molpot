@@ -7,8 +7,6 @@ Note: Had to be moved out of Structure class for TorchScript compatibility
 from typing import Final
 from molpy import kw, Keywords
 
-__all__ = ["kw", "required_external_fields", "Keywords"]
-
 kw.set("idx", "_idx", None, "")
 kw.set("Z", "_atomic_numbers", None, "nuclear charge")
 kw.set("cell", "_cell", None, "unit cell")
@@ -111,3 +109,5 @@ required_external_fields = {
     kw.shielding: [kw.magnetic_field],
     kw.nuclear_spin_coupling: [kw.magnetic_field],
 }
+
+__all__ = ["kw", "required_external_fields", "Keywords"]

@@ -2,7 +2,7 @@ import os
 import torch
 import shutil
 from .base import Transform
-from dirsync import sync
+# from dirsync import sync
 import numpy as np
 from typing import Optional, Dict, List
 
@@ -18,135 +18,135 @@ __all__ = [
 ]
 
 import molpot as mpot
-from molpot import keywords as kw
-import fasteners
+from molpot import kw
+# import fasteners
 
 
-class CacheException(Exception):
-    pass
+# class CacheException(Exception):
+#     pass
 
 
-class CachedNeighborList(Transform):
-    """
-    Dynamic caching of neighbor lists.
-    This wraps a neighbor list and stores the results the first time it is called
-    for a dataset entry with the pid provided by AtomsDataset. Particularly,
-    for large systems, this speeds up training significantly.
+# class CachedNeighborList(Transform):
+#     """
+#     Dynamic caching of neighbor lists.
+#     This wraps a neighbor list and stores the results the first time it is called
+#     for a dataset entry with the pid provided by AtomsDataset. Particularly,
+#     for large systems, this speeds up training significantly.
 
-    Note:
-        The provided cache location should be unique to the used dataset. Otherwise,
-        wrong neighborhoods will be provided. The caching location can be reused
-        across multiple runs, by setting `keep_cache=True`.
-    """
+#     Note:
+#         The provided cache location should be unique to the used dataset. Otherwise,
+#         wrong neighborhoods will be provided. The caching location can be reused
+#         across multiple runs, by setting `keep_cache=True`.
+#     """
 
-    is_preprocessor: bool = True
-    is_postprocessor: bool = False
+#     is_preprocessor: bool = True
+#     is_postprocessor: bool = False
 
-    def __init__(
-        self,
-        cache_path: str,
-        neighbor_list: Transform,
-        nbh_transforms: Optional[List[torch.nn.Module]] = None,
-        keep_cache: bool = False,
-        cache_workdir: Optional[str] = None,
-    ):
-        """
-        Args:
-            cache_path: Path of caching directory.
-            neighbor_list: the neighbor list to use
-            nbh_transforms: transforms for manipulating the neighbor lists
-                provided by neighbor_list
-            keep_cache: Keep cache at `cache_location` at the end of training, or copy
-                built/updated cache there from `cache_workdir` (if set). A pre-existing
-                cache at `cache_location` will not be deleted, while a temporary cache
-                at `cache_workdir` will always be removed.
-            cache_workdir: If this is set, the cache will be build here, e.g. a cluster
-                scratch space for faster performance. An existing cache at
-                `cache_location` is copied here at the beginning of training, and
-                afterwards (if `keep_cache=True`) the final cache is copied to
-                `cache_workdir`.
-        """
-        super().__init__()
-        self.neighbor_list = neighbor_list
-        self.nbh_transforms = nbh_transforms or []
-        self.keep_cache = keep_cache
-        self.cache_path = cache_path
-        self.cache_workdir = cache_workdir
-        self.preexisting_cache = os.path.exists(self.cache_path)
-        self.has_tmp_workdir = cache_workdir is not None
+#     def __init__(
+#         self,
+#         cache_path: str,
+#         neighbor_list: Transform,
+#         nbh_transforms: Optional[List[torch.nn.Module]] = None,
+#         keep_cache: bool = False,
+#         cache_workdir: Optional[str] = None,
+#     ):
+#         """
+#         Args:
+#             cache_path: Path of caching directory.
+#             neighbor_list: the neighbor list to use
+#             nbh_transforms: transforms for manipulating the neighbor lists
+#                 provided by neighbor_list
+#             keep_cache: Keep cache at `cache_location` at the end of training, or copy
+#                 built/updated cache there from `cache_workdir` (if set). A pre-existing
+#                 cache at `cache_location` will not be deleted, while a temporary cache
+#                 at `cache_workdir` will always be removed.
+#             cache_workdir: If this is set, the cache will be build here, e.g. a cluster
+#                 scratch space for faster performance. An existing cache at
+#                 `cache_location` is copied here at the beginning of training, and
+#                 afterwards (if `keep_cache=True`) the final cache is copied to
+#                 `cache_workdir`.
+#         """
+#         super().__init__()
+#         self.neighbor_list = neighbor_list
+#         self.nbh_transforms = nbh_transforms or []
+#         self.keep_cache = keep_cache
+#         self.cache_path = cache_path
+#         self.cache_workdir = cache_workdir
+#         self.preexisting_cache = os.path.exists(self.cache_path)
+#         self.has_tmp_workdir = cache_workdir is not None
 
-        os.makedirs(cache_path, exist_ok=True)
+#         os.makedirs(cache_path, exist_ok=True)
 
-        if self.has_tmp_workdir:
-            # cache workdir should be empty to avoid loading nbh lists from earlier runs
-            if os.path.exists(cache_workdir):
-                raise CacheException("The provided `cache_workdir` already exists!")
+#         if self.has_tmp_workdir:
+#             # cache workdir should be empty to avoid loading nbh lists from earlier runs
+#             if os.path.exists(cache_workdir):
+#                 raise CacheException("The provided `cache_workdir` already exists!")
 
-            # copy existing nbh lists to cache workdir
-            if self.preexisting_cache:
-                shutil.copytree(cache_path, cache_workdir)
-            self.cache_location = cache_workdir
-        else:
-            # use cache_location to store and load neighborlists
-            self.cache_location = cache_path
+#             # copy existing nbh lists to cache workdir
+#             if self.preexisting_cache:
+#                 shutil.copytree(cache_path, cache_workdir)
+#             self.cache_location = cache_workdir
+#         else:
+#             # use cache_location to store and load neighborlists
+#             self.cache_location = cache_path
 
-    def forward(
-        self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
-        cache_file = os.path.join(
-            self.cache_location, f"cache_{inputs[kw.idx][0]}.pt"
-        )
+#     def forward(
+#         self,
+#         inputs: Dict[str, torch.Tensor],
+#     ) -> Dict[str, torch.Tensor]:
+#         cache_file = os.path.join(
+#             self.cache_location, f"cache_{inputs[kw.idx][0]}.pt"
+#         )
 
-        # try to read cached NBL
-        try:
-            data = torch.load(cache_file)
-            inputs.update(data)
-        except IOError:
-            # acquire lock for caching
-            lock = fasteners.InterProcessLock(
-                os.path.join(
-                    self.cache_location, f"cache_{inputs[kw.idx][0]}.lock"
-                )
-            )
-            with lock:
-                # retry reading, in case other process finished in the meantime
-                try:
-                    data = torch.load(cache_file)
-                    inputs.update(data)
-                except IOError:
-                    # now it is save to calculate and cache
-                    inputs = self.neighbor_list(inputs)
-                    for nbh_transform in self.nbh_transforms:
-                        inputs = nbh_transform(inputs)
-                    data = {
-                        kw.idx_i: inputs[kw.idx_i],
-                        kw.idx_j: inputs[kw.idx_j],
-                        kw.offsets: inputs[kw.offsets],
-                    }
-                    torch.save(data, cache_file)
-                except Exception as e:
-                    print(e)
-        return inputs
+#         # try to read cached NBL
+#         try:
+#             data = torch.load(cache_file)
+#             inputs.update(data)
+#         except IOError:
+#             # acquire lock for caching
+#             lock = fasteners.InterProcessLock(
+#                 os.path.join(
+#                     self.cache_location, f"cache_{inputs[kw.idx][0]}.lock"
+#                 )
+#             )
+#             with lock:
+#                 # retry reading, in case other process finished in the meantime
+#                 try:
+#                     data = torch.load(cache_file)
+#                     inputs.update(data)
+#                 except IOError:
+#                     # now it is save to calculate and cache
+#                     inputs = self.neighbor_list(inputs)
+#                     for nbh_transform in self.nbh_transforms:
+#                         inputs = nbh_transform(inputs)
+#                     data = {
+#                         kw.idx_i: inputs[kw.idx_i],
+#                         kw.idx_j: inputs[kw.idx_j],
+#                         kw.offsets: inputs[kw.offsets],
+#                     }
+#                     torch.save(data, cache_file)
+#                 except Exception as e:
+#                     print(e)
+#         return inputs
 
-    def teardown(self):
-        if not self.keep_cache and not self.preexisting_cache:
-            try:
-                shutil.rmtree(self.cache_path)
-            except:
-                pass
+#     def teardown(self):
+#         if not self.keep_cache and not self.preexisting_cache:
+#             try:
+#                 shutil.rmtree(self.cache_path)
+#             except:
+#                 pass
 
-        if self.cache_workdir is not None:
-            if self.keep_cache:
-                try:
-                    sync(self.cache_workdir, self.cache_path, "sync")
-                except:
-                    pass
+#         if self.cache_workdir is not None:
+#             if self.keep_cache:
+#                 try:
+#                     sync(self.cache_workdir, self.cache_path, "sync")
+#                 except:
+#                     pass
 
-            try:
-                shutil.rmtree(self.cache_workdir)
-            except:
-                pass
+#             try:
+#                 shutil.rmtree(self.cache_workdir)
+#             except:
+#                 pass
 
 class NeighborListTransform(Transform):
     """
