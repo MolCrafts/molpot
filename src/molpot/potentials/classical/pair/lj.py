@@ -3,8 +3,7 @@
 # date: 2023-09-26
 # version: 0.0.1
 
-from molpot.model.base import Potential
-
+from molpot.potentials.base import Potential
 
 class LJ126(Potential):
 

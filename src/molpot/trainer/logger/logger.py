@@ -1,7 +1,7 @@
 import logging
 import logging.config
 from pathlib import Path
-from molpot.train.utils import read_json
+from molpot.trainer.utils import read_json
 
 DEFAULT_CONFIG = 
 {

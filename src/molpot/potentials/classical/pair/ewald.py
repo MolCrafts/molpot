@@ -1,5 +1,10 @@
 import torch
+import torch.nn as nn
 from molpot import kw
+from typing import Optional
+import numpy as np
+
+kw.set("Eewald", "_mpot_Eewald_", "Ha", "Ewald energy")
 
 class EnergyEwald(torch.nn.Module):
     """
@@ -21,7 +26,6 @@ class EnergyEwald(torch.nn.Module):
         self,
         alpha: float,
         k_max: int,
-        output_key: str,
         use_long_range_nblist: bool = True,
         screening_fn: Optional[nn.Module] = None,
     ):
@@ -29,14 +33,8 @@ class EnergyEwald(torch.nn.Module):
 
         # Get the appropriate Coulomb constant
         # ke is convert unit for Ha * Bohr
-        # ke = spk_units.convert_units("Ha", energy_unit) * spk_units.convert_units(
-        #     "Bohr", position_unit
-        # )
-        # self.register_buffer("ke", torch.Tensor([ke]))
-
-        self.charges_key = charges_key
-        self.output_key = output_key
-        self.model_outputs = [output_key]
+        self.register_buffer("ke", torch.Tensor([1]))
+        self.output_key = kw.Eewald
         self.use_long_range_nblist = use_long_range_nblist
 
         self.screening_fn = screening_fn
@@ -144,8 +142,8 @@ class EnergyEwald(torch.nn.Module):
 
         potential_ij = q[idx_i] * q[idx_j] * f_r
 
-        y = snn.scatter_add(potential_ij, idx_i, dim_size=n_atoms)
-        y = snn.scatter_add(y, idx_m, dim_size=n_molecules)
+        y = torch.scatter_add(potential_ij, idx_i, dim_size=n_atoms)
+        y = torch.scatter_add(y, idx_m, dim_size=n_molecules)
         y = 0.5 * self.ke * y.squeeze(-1)
 
         return y
@@ -176,7 +174,7 @@ class EnergyEwald(torch.nn.Module):
         v_box = torch.abs(torch.linalg.det(box))
 
         if torch.any(torch.isclose(v_box, torch.zeros_like(v_box))):
-            raise EnergyEwaldError("Simulation box has no volume.")
+            raise ValueError("Simulation box has no volume.")
 
         # 1) compute the prefactor
         prefactor = 2.0 * np.pi / v_box
@@ -195,10 +193,10 @@ class EnergyEwald(torch.nn.Module):
         kvec_dot_pos = torch.sum(kvecs[idx_m] * positions[:, None, :], dim=2)
 
         # charge densities MN x K -> M x K
-        q_real = snn.scatter_add(
+        q_real = torch.scatter_add(
             (q[:, None] * torch.cos(kvec_dot_pos)), idx_m, dim_size=n_molecules
         )
-        q_imag = snn.scatter_add(
+        q_imag = torch.scatter_add(
             (q[:, None] * torch.sin(kvec_dot_pos)), idx_m, dim_size=n_molecules
         )
         # Compute square of density
@@ -208,7 +206,7 @@ class EnergyEwald(torch.nn.Module):
         y_ewald = prefactor * torch.sum(q_dens * q_gauss / k_squared, dim=1)
 
         # 4) self interaction correction -> MN
-        self_interaction = torch.sqrt(self.alpha / np.pi) * snn.scatter_add(
+        self_interaction = torch.sqrt(self.alpha / np.pi) * torch.scatter_add(
             q**2, idx_m, dim_size=n_molecules
         )
 
