@@ -16,7 +16,7 @@ import molpot as mpot
 from molpot import kw
 import molpy as mp
 
-__all__ = ["DataSet", "QM9"]
+__all__ = ["DataSet", "DataLoader2", "QM9"]
 
 
 log = logging.getLogger(__name__)
@@ -41,15 +41,19 @@ class DataSet:
         self,
         name,
         data_dir: Optional[Path | str],
+        pipelines:dict[str, dict[str, Any]] = {},
+        num_workers: int = 0,
     ):
         super().__init__()
         self.name = name
+        self._pipelines = pipelines
         if data_dir is None:
             self.data_dir = Path(tempfile.mkdtemp())
         else:
             self.data_dir = Path(data_dir)
         if not self.data_dir.exists():
             self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.num_workers = num_workers
 
     def update_meta(self, data: Optional[dict[str, Any]] = None):
         _data = {
@@ -66,6 +70,18 @@ class DataSet:
 
     def prepare(self):
         raise NotImplementedError
+    
+    def _create_dataloader(self, datapipe:IterDataPipe)->DataLoader2:
+
+        for pipeline in self._pipelines:
+            getattr(datapipe, pipeline)()
+
+        if self.num_workers > 1:
+            rs = MultiProcessingReadingService(self.num_workers)
+        else:
+            rs = None
+        dl = DataLoader2(IterDataPipe, reading_service=rs)
+        return dl
 
     def fetch(self, url, filename, dir: Optional[Path | str] = None) -> Path:
         if dir is None:
@@ -125,13 +141,8 @@ class QM9(DataSet):
             .filter(filter_fn=partial(endswith, suffix=".xyz"))
             .open_files(mode="rt")
             .read_xyz(keywords=self.keywords)
-            .collate_frames()
-            .in_memory_cache()
         )
-
-        # rs = MultiProcessingReadingService(num_workers=1)
-        dl = DataLoader2(dp)
-        return dl
+        return super()._create_dataloader(dp)
 
     def _download_atomrefs(self):
         url = "https://ndownloader.figshare.com/files/3195395"

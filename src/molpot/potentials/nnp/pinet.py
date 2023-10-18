@@ -11,7 +11,7 @@ from .layers import ANNOutput
 import molpot as mpot
 from molpot import kw, Keywords
 
-class FFLayer(nn.modules):
+class FFLayer(nn.Module):
 
     def __init__(self, n_nodes=[64, 64], **kwargs):
 
