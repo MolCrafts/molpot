@@ -41,7 +41,7 @@ class DataSet:
         self,
         name,
         data_dir: Optional[Path | str],
-        pipelines:dict[str, dict[str, Any]] = {},
+        pipelines: dict[str, dict[str, Any]] = {},
         num_workers: int = 0,
     ):
         super().__init__()
@@ -70,18 +70,22 @@ class DataSet:
 
     def prepare(self):
         raise NotImplementedError
-    
-    def _create_dataloader(self, datapipe:IterDataPipe)->DataLoader2:
 
-        for pipeline in self._pipelines:
-            getattr(datapipe, pipeline)()
+    def _create_dataloader(self, datapipe: IterDataPipe) -> DataLoader2:
+        for pipeline, args in self._pipelines.items():
+            datapipe = getattr(datapipe, pipeline)(**args)
+            if isinstance(datapipe, tuple):
+                break
 
         if self.num_workers > 1:
             rs = MultiProcessingReadingService(self.num_workers)
         else:
             rs = None
-        dl = DataLoader2(IterDataPipe, reading_service=rs)
-        return dl
+        make_dataloader = partial(DataLoader2, reading_service=rs)
+        if isinstance(datapipe, tuple):
+            return list(map(make_dataloader, datapipe))
+        else:
+            return make_dataloader(datapipe)
 
     def fetch(self, url, filename, dir: Optional[Path | str] = None) -> Path:
         if dir is None:
@@ -122,7 +126,7 @@ class QM9(DataSet):
         self.keywords.set("Cv", "heat_capacity", "cal/mol/K")
 
     def prepare(self) -> DataLoader2:
-        atomrefs = self._download_atomrefs()
+        # atomrefs = self._download_atomrefs()
         if self.remove_uncharacterized:
             uncharacterized = self._download_uncharacterized()
         else:
@@ -131,9 +135,7 @@ class QM9(DataSet):
 
         irange = np.arange(len(ordered_files), dtype=int)
         if uncharacterized is not None:
-            irange = np.setdiff1d(
-                irange, np.array(uncharacterized, dtype=int) - 1
-            )
+            irange = np.setdiff1d(irange, np.array(uncharacterized, dtype=int) - 1)
 
         dp = (
             IterableWrapper((map(str, np.array(ordered_files)[irange])))
@@ -196,20 +198,21 @@ class QM9(DataSet):
 
 
 class _GDMLDataModule(DataSet):
-
-    def __init__(self, molecule: str, datasets_dict: dict[str, str], download_url: str, data_dir: Optional[Path | str]):
+    def __init__(
+        self,
+        molecule: str,
+        datasets_dict: dict[str, str],
+        download_url: str,
+        data_dir: Optional[Path | str],
+    ):
         super().__init__("_GDMLData", data_dir)
         self.url = download_url
         self.datasets_dict = datasets_dict
         self.molecule = molecule
 
     def prepare(self) -> DataLoader2:
-
         properties = self._download_data()
-        dp = (
-            IterableWrapper(properties)
-            .in_memory_cache()
-        )
+        dp = IterableWrapper(properties).in_memory_cache()
 
         # rs = MultiProcessingReadingService(num_workers=1)
         dl = DataLoader2(dp)
@@ -217,7 +220,7 @@ class _GDMLDataModule(DataSet):
 
     def _download_data(
         self,
-    ):        
+    ):
         raw_path = self.fetch(self.url, self.datasets_dict[self.molecule])
         data = np.load(raw_path)
 
@@ -225,7 +228,9 @@ class _GDMLDataModule(DataSet):
         frames = []
         for positions, energies, forces in zip(data["R"], data["E"], data["F"]):
             frame = mp.Frame()
-            frame[kw.energy] = energies if type(energies) is np.ndarray else np.array([energies])
+            frame[kw.energy] = (
+                energies if type(energies) is np.ndarray else np.array([energies])
+            )
             frame[kw.forces] = forces
             frame[kw.Z] = numbers
             frame[kw.R] = positions
@@ -234,9 +239,9 @@ class _GDMLDataModule(DataSet):
             frames.append(frames)
 
         return frames
-    
-class MD17(_GDMLDataModule):
 
+
+class MD17(_GDMLDataModule):
     atomrefs = {
         kw.energy: [
             0.0,
@@ -267,11 +272,17 @@ class MD17(_GDMLDataModule):
         # toluene_ccsdt='toluene_ccsd_t.zip',
         uracil="md17_uracil.npz",
     )
+
     def __init__(self, data_dir: Optional[Path | str], molecule: str):
-        super().__init__(molecule, self.datasets_dict, "http://www.quantum-machine.org/gdml/data/npz/", data_dir)
+        super().__init__(
+            molecule,
+            self.datasets_dict,
+            "http://www.quantum-machine.org/gdml/data/npz/",
+            data_dir,
+        )
+
 
 class MD22(_GDMLDataModule):
-
     atomrefs = {
         kw.energy: [
             0.0,
@@ -294,5 +305,11 @@ class MD22(_GDMLDataModule):
         "buckyball-catcher": "md22_buckyball-catcher.npz",
         "double-walled_nanotube": "md22_double-walled_nanotube.npz",
     }
+
     def __init__(self, data_dir: Optional[Path | str], molecule: str):
-        super().__init__(molecule, self.datasets_dict, "http://www.quantum-machine.org/gdml/repo/datasets/", data_dir)
+        super().__init__(
+            molecule,
+            self.datasets_dict,
+            "http://www.quantum-machine.org/gdml/repo/datasets/",
+            data_dir,
+        )

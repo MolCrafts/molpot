@@ -7,45 +7,47 @@ from datetime import datetime
 from .parse_json import read_json, write_json
 import json, jsonschema
 
-DEFAULT_CONFIG = json.load(open("config.json", "r"))
+SCHEMA = json.load(open(Path(__file__).parent / "config_schema.json", "r"))
+
 
 class ConfigParser:
-    def __init__(
-        self, config_path: Path | str, format: str = "json", resume=None, run_id=None
-    ):
+    def __init__(self, id: str, config: dict):
         """
         class to parse configuration json file. Handles hyperparameters for training, initializations of modules, checkpoint saving
         and logging module.
         :param config: Dict containing configurations, hyperparameters for training. contents of `config.json` file for example.
         :param resume: String, path to the checkpoint being loaded.
         :param modification: Dict keychain:value, specifying position values to be replaced from config dict.
-        :param run_id: Unique Identifier for training processes. Used to save checkpoints and training log. Timestamp is being used as default
+        :param id: Unique Identifier for training processes. Used to save checkpoints and training log. Timestamp is being used as default
         """
-        self.resume = resume
+        self.id = id
+        self._config = config
+        if id is None:  # use timestamp as default run-id
+            id = datetime.now().strftime(r"%m%d_%H%M%S")
 
-        if format == "json":
-            self._config = read_json(config_path)
-        else:
-            raise NotImplementedError
-        
-        # validate configs
-        jsonschema.validate(instance=self._configs, schema=DEFAULT_CONFIG)
+        exper_name = config["name"]
 
         # set save_dir where trained model and log will be saved.
-        save_dir = Path(self.config["trainer"]["save_dir"])
+        save_dir = Path(config["trainer"]["save_dir"])
 
-        exper_name = self.config["name"]
-        if run_id is None:  # use timestamp as default run-id
-            run_id = datetime.now().strftime(r"%m%d_%H%M%S")
-        self._save_dir = save_dir / "models" / exper_name / run_id
-        self._log_dir = save_dir / "log" / exper_name / run_id
+        _save_dir = save_dir / "models" / exper_name / id
+        _log_dir = save_dir / "log" / exper_name / id
 
         # make directory for saving checkpoints and log.
-        self._save_dir.mkdir(parents=True, exist_ok=False)
-        self._log_dir.mkdir(parents=True, exist_ok=False)
+        _save_dir.mkdir(parents=True, exist_ok=True)
+        _log_dir.mkdir(parents=True, exist_ok=True)
 
         # save updated config file to the checkpoint dir
-        write_json(self.config, self.save_dir / "config.json")
+        write_json(config, save_dir / "config.json")
+
+    @classmethod
+    def from_json(cls, id: str, config_path: Path | str):
+        _config = read_json(config_path)
+
+        # validate configs
+        jsonschema.validate(instance=_config, schema=SCHEMA)
+
+        return cls(id, _config)
 
     @classmethod
     def from_args(cls, args):

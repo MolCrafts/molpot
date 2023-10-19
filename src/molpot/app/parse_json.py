@@ -11,7 +11,7 @@ def write_json(configs, config_path):
 
 
 CONFIG_EXAMPLE = {
-    "name": "MolPot Config Example",
+    "name": "MolPot_Config_Example",
     "n_gpu": 0,
     "model": {"type": "PiNet", "args": {}},
     "data_loader": {
@@ -21,13 +21,13 @@ CONFIG_EXAMPLE = {
             "batch_size": 128,
             "pipelines": {
                 "shuffle": {},
-                "random_split": {
+            },
+            "num_workers": 2,
+            "random_split": {
                     "total_length": 10,
                     "weights": {"train": 0.8, "valid": 0.2},
                     "seed": 0,
-                },
             },
-            "num_workers": 2,
         },
     },
     "optimizer": {

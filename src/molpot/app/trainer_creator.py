@@ -6,7 +6,7 @@ from .config_parser import ConfigParser
 from ..data import get_data_loader
 from ..potentials import get_potential
 from .utils import prepare_device
-from ..trainer import get_criterion, Trainer, get_metric
+from ..trainer import get_criterion, Trainer, get_metric, get_optimizer, get_lr_scheduler
 
 
 # fix random seeds for reproducibility
@@ -16,33 +16,42 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 np.random.seed(SEED)
 
-def create_trainer(config_parser: ConfigParser):
 
+def create_trainer(config_parser: ConfigParser):
     config = config_parser.config
-    data_loader = get_data_loader(config['data_loader'])
-    model = get_potential(config['arch'])
+    data_loader = get_data_loader(config["data_loader"])
+    if isinstance(data_loader, tuple):
+        data_loader, valid_data_loader = data_loader
+    model = get_potential(config["arch"])
     # TODO: convert to functional
 
     # prepare for (multi-device) GPU training
-    device, device_ids = prepare_device(config['n_gpu'])
+    device, device_ids = prepare_device(config["n_gpu"])
     model = model.to(device)
     if len(device_ids) > 1:
         model = torch.nn.DataParallel(model, device_ids=device_ids)
 
     # get function handles of loss and metrics
-    criterion = get_criterion(config['loss'])
-    metrics = [get_metric(met) for met in config['metrics']]
+    criterion = get_criterion(config["loss"])
+    metrics = [get_metric(met) for met in config["metrics"]]
 
-    # build optimizer, learning rate scheduler. delete every lines containing lr_scheduler for disabling scheduler
-    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
-    optimizer = get_optimizer(config['optimizer'], trainable_params)
-    lr_scheduler = get_lr_scheduler('lr_scheduler', torch.optim.lr_scheduler, optimizer)
+    # convert nn.Modules to functional
+    # params = dict(model.named_parameters())
+    # f = torch.func.functional_call(model, params)
+    # trainable_params = filter(lambda p: p.requires_grad, model.parameters())
+    optimizer = get_optimizer(config["optimizer"])
+    lr_scheduler = get_lr_scheduler(config["lr_scheduler"])
 
-    trainer = Trainer(model, criterion, metrics, optimizer,
-                      config=config,
-                      device=device,
-                      data_loader=data_loader,
-                      valid_data_loader=valid_data_loader,
-                      lr_scheduler=lr_scheduler)
+    return Trainer(
+        model,
+        criterion,
+        metrics,
+        optimizer,
+        config=config,
+        device=device,
+        data_loader=data_loader,
+        valid_data_loader=valid_data_loader,
+        lr_scheduler=lr_scheduler,
+    )
 
-    trainer.train()
+    # trainer.train()
