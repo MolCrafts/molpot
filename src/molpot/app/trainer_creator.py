@@ -19,7 +19,7 @@ np.random.seed(SEED)
 
 def create_trainer(config_parser: ConfigParser):
     config = config_parser.config
-    data_loader = get_data_loader(config["data_loader"])
+    data_loader = get_data_loader(config["data_loader"]).prepare()
     if isinstance(data_loader, tuple):
         data_loader, valid_data_loader = data_loader
     model = get_potential(config["model"])
@@ -41,6 +41,8 @@ def create_trainer(config_parser: ConfigParser):
     # trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     optimizer = get_optimizer(config["optimizer"])
     lr_scheduler = get_lr_scheduler(config["lr_scheduler"])
+    optimizer = optimizer(model.parameters())
+    lr_scheduler = lr_scheduler(optimizer)
 
     return Trainer(
         model,

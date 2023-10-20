@@ -54,13 +54,13 @@ class PILayer(nn.Module):
         out_nodes[-1] *= n_basis
         self.n_basis = n_basis
 
-        self.ff_layer = FFLayer(in_feature, out_nodes, activation=nn.Identity())
+        self.ff_layer = FFLayer(in_feature*2, out_nodes, activation=nn.Identity())
 
     def forward(self, prop, idx_i, idx_j, basis):
         prop_i = prop[idx_i]
         prop_j = prop[idx_j]
 
-        inter = torch.cat([prop_i, prop_j])
+        inter = torch.cat([prop_i, prop_j], axis=-1)
         inter = self.ff_layer(inter)
         inter = inter.reshape((-1, self.out_features[-1], self.n_basis))
         inter = torch.einsum("pcb,pb->pc", inter, basis)
@@ -128,13 +128,12 @@ class IPLayer(nn.Module):
 
 
 class OutLayer(nn.Module):
-    def __init__(self, in_features, out_features):
+    def __init__(self, in_features: int, out_features):
         super(OutLayer, self).__init__()
         self.ff_layer = FFLayer(in_features, out_features[:-1])
         self.out_layer = nn.Linear(out_features[-2], out_features[-1], bias=False)
 
-    def forward(self, tensors):
-        ind_1, p1, p3, prev_output = tensors
+    def forward(self, p1, prev_output):
         p1 = self.ff_layer(p1)
         output = self.out_layer(p1) + prev_output
         return output
@@ -146,12 +145,12 @@ class GCBlock(nn.Module):
         ii_nodes = ii_nodes.copy()
         ii_nodes[-1] *= 3
         self.pp1_layer = FFLayer(1, pp_nodes, activation)
-        self.pi1_layer = PILayer(pi_nodes)
-        self.ii1_layer = FFLayer(ii_nodes, activation=activation, bias=False)
+        self.pi1_layer = PILayer(1, pi_nodes)
+        self.ii1_layer = FFLayer(1, ii_nodes, activation=activation, bias=False)
         self.ip1_layer = IPLayer()
 
         self.pix_layer = PIXLayer()
-        self.ii3_layer = FFLayer(ii_nodes, activation=activation, bias=False)
+        self.ii3_layer = FFLayer(3, ii_nodes, activation=activation, bias=False)
         self.ip3_layer = IPLayer()
 
         self.dot_layer = DotLayer()
@@ -203,7 +202,6 @@ class PiNet(nn.Module):
         pi_nodes=[16, 16],
         ii_nodes=[16, 16],
         out_nodes=[16, 16],
-        out_units=1,
         out_pool=False,
         act="tanh",
         depth=4,
@@ -242,10 +240,10 @@ class PiNet(nn.Module):
         gc_blocks = [GCBlock([], pi_nodes, ii_nodes, activation=act)]
         gc_blocks += [
             GCBlock(pp_nodes, pi_nodes, ii_nodes, activation=act)
-            for i in range(depth - 1)
+            for _ in range(depth - 1)
         ]
         self.gc_blocks = nn.Sequential(*gc_blocks)
-        self.out_layers = [OutLayer(out_nodes, out_units) for i in range(depth)]
+        self.out_layers = [OutLayer(1, out_nodes) for _ in range(depth)]
         self.ann_output = ANNOutput(out_pool)
 
     def forward(self, tensors):
@@ -285,8 +283,8 @@ class PiNet(nn.Module):
                     kw.basis: basis,
                 }
             )
-            output = self.out_layers[i]([tensors["ind_1"], p1, p3, output])
-            tensors["p1"] = self.res_update[i]([tensors["p1"], p1])
+            output = self.out_layers[i](p1, output)
+            tensors["p1"] = self.res_update[i](tensors["p1"], p1)
             # tensors["p3"] = self.res_update[i]([tensors["p3"], p3])
 
         output = self.ann_output([tensors["ind_1"], output])

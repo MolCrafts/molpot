@@ -41,7 +41,7 @@ class DataSet:
         self,
         name,
         data_dir: Optional[Path | str],
-        pipelines: dict[str, dict[str, Any]] = {},
+        pipelines: list[dict] = {},
         num_workers: int = 0,
     ):
         super().__init__()
@@ -72,8 +72,9 @@ class DataSet:
         raise NotImplementedError
 
     def _create_dataloader(self, datapipe: IterDataPipe) -> DataLoader2:
-        for pipeline, args in self._pipelines.items():
-            datapipe = getattr(datapipe, pipeline)(**args)
+        for pipeline in self._pipelines:
+            args = pipeline.get("args", {})
+            datapipe = getattr(datapipe, pipeline['type'])(**args)
             if isinstance(datapipe, tuple):
                 break
 

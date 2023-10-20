@@ -1,22 +1,19 @@
+from functools import partial
 import torch
 
 
 def get_optimizer(config):
-    if config["type"] == "adam":
-        optimizer = torch.optim.Adam(config["args"])
+    if config["type"] == "Adam":
+        optimizer = partial(torch.optim.Adam, **config["args"])
     else:
         raise NotImplementedError
 
-    if "lr_scheduler" in config:
-        lr_scheduler = getattr(torch.optim.lr_scheduler, config["lr_scheduler"]["type"])
-        opt = lr_scheduler(optimizer, **config["lr_scheduler"]["args"])
-
-    return opt
+    return optimizer
 
 
 def get_lr_scheduler(config):
     if config["type"] == "StepLR":
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(config["args"])
+        lr_scheduler = partial(torch.optim.lr_scheduler.StepLR, **config["args"])
     else:
         raise NotImplementedError
 

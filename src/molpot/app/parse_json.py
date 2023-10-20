@@ -18,15 +18,18 @@ CONFIG_EXAMPLE = {
         "type": "QM9",
         "args": {
             "data_dir": "data/",
-            "pipelines": {
-                "batch": {"batch_size": 128},
-                "shuffle": {},
-                "random_split": {
+            "pipelines": [
+                {"type": "batch", "args": {"batch_size": 128}},
+                {"type": "shuffle", "args": {}},
+                {
+                    "type": "random_split",
+                    "args": {
                         "total_length": 10,
                         "weights": {"train": 0.8, "valid": 0.2},
                         "seed": 0,
+                    },
                 },
-            },
+            ],
             "num_workers": 2,
         },
     },
@@ -34,8 +37,8 @@ CONFIG_EXAMPLE = {
         "type": "Adam",
         "args": {"lr": 0.001, "weight_decay": 0, "amsgrad": True},
     },
-    "loss": "nll_loss",
-    "metrics": ["accuracy", "top_k_acc"],
+    "loss": {"type": "nll_loss", "args": {}},
+    "metrics": [{"type": "accuracy", "args": {}}, {"type": "top_k_acc", "args": {}}],
     "lr_scheduler": {"type": "StepLR", "args": {"step_size": 50, "gamma": 0.1}},
     "trainer": {
         "epochs": 100,

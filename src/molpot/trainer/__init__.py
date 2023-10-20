@@ -12,5 +12,7 @@ def get_criterion(config):
 def get_metric(config):
     if config['type'] == 'accuracy':
         return accuracy
+    elif config['type'] == 'top_k_acc':
+        return top_k_acc
     else:
         raise NotImplementedError
