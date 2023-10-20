@@ -18,16 +18,16 @@ CONFIG_EXAMPLE = {
         "type": "QM9",
         "args": {
             "data_dir": "data/",
-            "batch_size": 128,
             "pipelines": {
+                "batch": {"batch_size": 128},
                 "shuffle": {},
+                "random_split": {
+                        "total_length": 10,
+                        "weights": {"train": 0.8, "valid": 0.2},
+                        "seed": 0,
+                },
             },
             "num_workers": 2,
-            "random_split": {
-                    "total_length": 10,
-                    "weights": {"train": 0.8, "valid": 0.2},
-                    "seed": 0,
-            },
         },
     },
     "optimizer": {

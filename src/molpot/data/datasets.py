@@ -77,7 +77,7 @@ class DataSet:
             if isinstance(datapipe, tuple):
                 break
 
-        if self.num_workers > 1:
+        if self.num_workers:
             rs = MultiProcessingReadingService(self.num_workers)
         else:
             rs = None
@@ -104,9 +104,11 @@ class QM9(DataSet):
     def __init__(
         self,
         data_dir: Optional[Path | str] = None,
+        pipelines: dict[str, dict[str, Any]] = {},
+        num_workers: int = 0,
         remove_uncharacterized: bool = True,
     ):
-        super().__init__("QM9", data_dir)
+        super().__init__("QM9", data_dir, pipelines, num_workers)
         self.remove_uncharacterized = remove_uncharacterized
         self.keywords = mpot.Keywords("QM9")
         self.keywords.set("A", "rotational_constant_A", "GHz")

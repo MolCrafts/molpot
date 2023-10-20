@@ -22,7 +22,7 @@ def create_trainer(config_parser: ConfigParser):
     data_loader = get_data_loader(config["data_loader"])
     if isinstance(data_loader, tuple):
         data_loader, valid_data_loader = data_loader
-    model = get_potential(config["arch"])
+    model = get_potential(config["model"])
     # TODO: convert to functional
 
     # prepare for (multi-device) GPU training
