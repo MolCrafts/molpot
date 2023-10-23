@@ -44,4 +44,4 @@ class TestPiNet:
         fc = cutoff_fn(dist)
         basis = basis_fn(dist, fc=fc)
         y = pilayer(x, idx_i, idx_j, basis)
-        assert y.shape == (i, beta)
+        assert y.shape == (i*j, beta)

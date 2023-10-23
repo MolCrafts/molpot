@@ -13,7 +13,7 @@ import numpy as np
 import re
 import tarfile
 import molpot as mpot
-from molpot import kw
+from molpot import alias
 import molpy as mp
 
 __all__ = ["DataSet", "DataLoader2", "QM9"]
@@ -65,8 +65,8 @@ class DataSet:
             json.dump(_data, f)
         self.is_prepared = True
 
-    def set_keywords(self, keywords: dict[str, str]):
-        self.keywords = keywords
+    def set_keywords(self, aliases: dict[str, str]):
+        self.aliases = aliases
 
     def prepare(self):
         raise NotImplementedError
@@ -111,22 +111,22 @@ class QM9(DataSet):
     ):
         super().__init__("QM9", data_dir, pipelines, num_workers)
         self.remove_uncharacterized = remove_uncharacterized
-        self.keywords = mpot.Keywords("QM9")
-        self.keywords.set("A", "rotational_constant_A", "GHz")
-        self.keywords.set("B", "rotational_constant_B", "GHz")
-        self.keywords.set("C", "rotational_constant_C", "GHz")
-        self.keywords.set("mu", "dipole_moment", "Debye")
-        self.keywords.set("alpha", "isotropic_polarizability", "a0 a0 a0")
-        self.keywords.set("homo", "homo", "Ha")
-        self.keywords.set("lumo", "lumo", "Ha")
-        self.keywords.set("gap", "gap", "Ha")
-        self.keywords.set("r2", "electronic_spatial_extent", "a0 a0")
-        self.keywords.set("zpve", "zpve", "Ha")
-        self.keywords.set("U0", "energy_U0", "")
-        self.keywords.set("U", "energy_U", "Ha")
-        self.keywords.set("H", "enthalpy_H", "Ha")
-        self.keywords.set("G", "free_energy", "Ha")
-        self.keywords.set("Cv", "heat_capacity", "cal/mol/K")
+        self.aliases = mpot.Aliases("QM9")
+        self.aliases.set("A", "rotational_constant_A", "GHz", "")
+        self.aliases.set("B", "rotational_constant_B", "GHz", "")
+        self.aliases.set("C", "rotational_constant_C", "GHz", "")
+        self.aliases.set("mu", "dipole_moment", "Debye", "")
+        self.aliases.set("alpha", "isotropic_polarizability", "a0 a0 a0", "")
+        self.aliases.set("homo", "homo", "Ha", "")
+        self.aliases.set("lumo", "lumo", "Ha", "")
+        self.aliases.set("gap", "gap", "Ha", "")
+        self.aliases.set("r2", "electronic_spatial_extent", "a0 a0", "")
+        self.aliases.set("zpve", "zpve", "Ha", "")
+        self.aliases.set("U0", "energy_U0", "", "")
+        self.aliases.set("U", "energy_U", "Ha", "")
+        self.aliases.set("H", "enthalpy_H", "Ha", "")
+        self.aliases.set("G", "free_energy", "Ha", "")
+        self.aliases.set("Cv", "heat_capacity", "cal/mol/K", "")
 
     def prepare(self) -> DataLoader2:
         # atomrefs = self._download_atomrefs()
@@ -145,7 +145,7 @@ class QM9(DataSet):
             # can not use lambda due to it is not pickleable
             .filter(filter_fn=partial(endswith, suffix=".xyz"))
             .open_files(mode="rt")
-            .read_xyz(keywords=self.keywords)
+            .read_xyz(aliases=self.aliases)
         )
         return super()._create_dataloader(dp)
 
@@ -154,12 +154,12 @@ class QM9(DataSet):
         filename = "atomref.txt"
         atomrefs_path = self.fetch(url, filename)
         props = [
-            self.keywords.zpve,
-            self.keywords.U0,
-            self.keywords.U,
-            self.keywords.H,
-            self.keywords.G,
-            self.keywords.Cv,
+            self.aliases.zpve,
+            self.aliases.U0,
+            self.aliases.U,
+            self.aliases.H,
+            self.aliases.G,
+            self.aliases.Cv,
         ]
         atref = {p: np.zeros((100,)) for p in props}
         with open(atomrefs_path) as f:
@@ -231,12 +231,12 @@ class _GDMLDataModule(DataSet):
         frames = []
         for positions, energies, forces in zip(data["R"], data["E"], data["F"]):
             frame = mp.Frame()
-            frame[kw.energy] = (
+            frame[alias.energy] = (
                 energies if type(energies) is np.ndarray else np.array([energies])
             )
-            frame[kw.forces] = forces
-            frame[kw.Z] = numbers
-            frame[kw.R] = positions
+            frame[alias.forces] = forces
+            frame[alias.Z] = numbers
+            frame[alias.R] = positions
             frame.box.set_matrix(np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]]))
             frame.box.pbc = np.array([False, False, False])
             frames.append(frames)
@@ -246,7 +246,7 @@ class _GDMLDataModule(DataSet):
 
 class MD17(_GDMLDataModule):
     atomrefs = {
-        kw.energy: [
+        alias.energy: [
             0.0,
             -313.5150902000774,
             0.0,
@@ -287,7 +287,7 @@ class MD17(_GDMLDataModule):
 
 class MD22(_GDMLDataModule):
     atomrefs = {
-        kw.energy: [
+        alias.energy: [
             0.0,
             -313.5150902000774,
             0.0,

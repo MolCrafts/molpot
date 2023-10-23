@@ -5,9 +5,9 @@ import numpy as np
 import molpy as mp
 import molpot as mpot
 import torch
-from molpot import kw
+from molpot import alias, Aliases
 from molpot.transforms import TorchNeighborList
-from typing import Iterable
+from typing import Iterable, Optional
 
 __all__ = [
     "XYZReader",
@@ -18,33 +18,35 @@ __all__ = [
 
 @functional_datapipe("read_xyz")
 class XYZReader(IterDataPipe):
-    def __init__(self, source_dp: IterDataPipe, keywords: mp.Keywords):
+    def __init__(self, source_dp: IterDataPipe, alias: Aliases):
         super().__init__()
         self.source_dp = source_dp
-        self.keywords = keywords
+        self.local_alias = alias
 
     def __iter__(self):
-        local_kw = self.keywords
+
+        local_alias = self.local_alias
+
         for d in self.source_dp:
             frame = mp.Frame()
 
             lines = d[1].readlines()
-            frame[kw.natoms] = int(lines[0])
+            frame[alias.natoms] = int(lines[0])
             props_line = lines[1].split()[1:]
             frame["index"] = int(props_line[0])
-            for prop, p in zip(local_kw.get_aliases(), props_line[1:]):
-                if prop in local_kw:
-                    src_unit = local_kw.get_unit(prop)
-                    dst_unit = kw.get_unit(prop)
+            for prop, p in zip(local_alias.get_aliases(), props_line[1:]):
+                if prop in local_alias:
+                    src_unit = local_alias.get_unit(prop)
+                    dst_unit = alias.get_unit(prop)
                     frame[prop] = mp.units.convert(float(p), src_unit, dst_unit)
                 else:
                     frame[prop] = float(p)
 
-            frame.atoms[kw.xyz] = [
+            frame.atoms[alias.xyz] = [
                 [i.replace("*^", "E") for i in line.split()[1:4]]
                 for line in lines[2:-3]
             ]
-            frame.atoms[kw.Z] = [
+            frame.atoms[alias.Z] = [
                 mp.Element.get_atomic_number_by_symbol(line.split()[0])
                 for line in lines[2:-3]
             ]
@@ -61,19 +63,19 @@ def _collate(batch: Sequence[mp.Frame]):
     atoms_keys = batch[0].atoms.keys()
 
     for k in props_keys:
-        coll_batch[k] = np.concatenate([frame[k] for frame in batch])
+        coll_batch[k] = torch.concat([torch.atleast_1d(torch.tensor(frame[k])) for frame in batch])
 
     for k in atoms_keys:
-        coll_batch[k] = np.concatenate([frame.atoms[k] for frame in batch])
+        coll_batch[k] = torch.concat([torch.tensor(frame.atoms[k]) for frame in batch])
 
-    seg_m = torch.cumsum(coll_batch[kw.natoms], dim=0)
+    seg_m = torch.cumsum(coll_batch[alias.natoms], dim=0)
     seg_m = torch.cat(
         [torch.zeros((1,), dtype=seg_m.dtype), seg_m], dim=0
     )  # prepend 0 to seg_m
     idx_m = torch.repeat_interleave(
-        torch.arange(len(batch)), repeats=coll_batch[kw.natoms], dim=0
+        torch.arange(len(batch)), repeats=coll_batch[alias.natoms], dim=0
     )
-    coll_batch[kw.idx_m] = idx_m
+    coll_batch[alias.idx_m] = idx_m
 
     return coll_batch
 

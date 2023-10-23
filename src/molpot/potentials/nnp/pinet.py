@@ -9,7 +9,7 @@ from torch import nn
 from .layers import PolynomialBasis, GaussianBasis, CutoffFunc
 from .layers import ANNOutput
 import molpot as mpot
-from molpot import kw, Keywords
+from molpot import alias, Aliases
 
 __all__ = [
     "PiNet",
@@ -227,9 +227,9 @@ class PiNet(nn.Module):
         if act == "tanh":
             act = nn.Tanh()
         self.depth = depth
-        self.kw = Keywords("PiNet")
-        self.kw.set("p1", "_pinet_p1", None, "invariant property")
-        self.kw.set("p3", "_pinet_p3", None, "equalvariant property")
+        self.alias = Aliases("PiNet")
+        self.alias.set("p1", "_pinet_p1", None, "invariant property")
+        self.alias.set("p3", "_pinet_p3", None, "equalvariant property")
         self.cutoff = CutoffFunc(rc, cutoff_type)
         if basis_type == "polynomial":
             self.basis_fn = PolynomialBasis(n_basis)
@@ -276,11 +276,11 @@ class PiNet(nn.Module):
         for i in range(self.depth):
             p1, p3 = self.gc_blocks[i](
                 {
-                    kw.ind_2: tensors["ind_2"],
-                    kw.p1: tensors["p1"],
-                    kw.p3: tensors["p3"],
-                    kw.diff: tensors["diff"],
-                    kw.basis: basis,
+                    self.alias.ind_2: tensors["ind_2"],
+                    self.alias.p1: tensors["p1"],
+                    self.alias.p3: tensors["p3"],
+                    self.alias.diff: tensors["diff"],
+                    self.alias.basis: basis,
                 }
             )
             output = self.out_layers[i](p1, output)
