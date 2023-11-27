@@ -1,7 +1,6 @@
 from functools import partial
-import torch
-from torchdata.datapipes.iter import IterDataPipe, FileLister, IterableWrapper
-from torchdata.dataloader2 import DataLoader2, MultiProcessingReadingService
+from torchdata.datapipes.iter import IterDataPipe, IterableWrapper
+from torchdata.dataloader2 import DataLoader2
 from typing import Optional, Any
 from pathlib import Path
 import tempfile
@@ -41,12 +40,10 @@ class DataSet:
         self,
         name,
         data_dir: Optional[Path | str],
-        pipelines: list[dict] = {},
         num_workers: int = 0,
     ):
         super().__init__()
         self.name = name
-        self._pipelines = pipelines
         if data_dir is None:
             self.data_dir = Path(tempfile.mkdtemp())
         else:
@@ -71,23 +68,6 @@ class DataSet:
     def prepare(self):
         raise NotImplementedError
 
-    def _create_dataloader(self, datapipe: IterDataPipe) -> DataLoader2:
-        for pipeline in self._pipelines:
-            args = pipeline.get("args", {})
-            datapipe = getattr(datapipe, pipeline['type'])(**args)
-            if isinstance(datapipe, tuple):
-                break
-
-        if self.num_workers:
-            rs = MultiProcessingReadingService(self.num_workers)
-        else:
-            rs = None
-        make_dataloader = partial(DataLoader2, reading_service=rs)
-        if isinstance(datapipe, tuple):
-            return list(map(make_dataloader, datapipe))
-        else:
-            return make_dataloader(datapipe)
-
     def fetch(self, url, filename, dir: Optional[Path | str] = None) -> Path:
         if dir is None:
             dir = self.data_dir
@@ -105,11 +85,10 @@ class QM9(DataSet):
     def __init__(
         self,
         data_dir: Optional[Path | str] = None,
-        pipelines: dict[str, dict[str, Any]] = {},
         num_workers: int = 0,
         remove_uncharacterized: bool = True,
     ):
-        super().__init__("QM9", data_dir, pipelines, num_workers)
+        super().__init__("QM9", data_dir, num_workers)
         self.remove_uncharacterized = remove_uncharacterized
         self.aliases = mpot.Aliases("QM9")
         self.aliases.set("A", "rotational_constant_A", "GHz", "")
@@ -128,7 +107,7 @@ class QM9(DataSet):
         self.aliases.set("G", "free_energy", "Ha", "")
         self.aliases.set("Cv", "heat_capacity", "cal/mol/K", "")
 
-    def prepare(self) -> DataLoader2:
+    def prepare(self) -> IterDataPipe:
         # atomrefs = self._download_atomrefs()
         if self.remove_uncharacterized:
             uncharacterized = self._download_uncharacterized()
@@ -140,14 +119,13 @@ class QM9(DataSet):
         if uncharacterized is not None:
             irange = np.setdiff1d(irange, np.array(uncharacterized, dtype=int) - 1)
 
-        dp = (
+        return (
             IterableWrapper((map(str, np.array(ordered_files)[irange])))
             # can not use lambda due to it is not pickleable
             .filter(filter_fn=partial(endswith, suffix=".xyz"))
             .open_files(mode="rt")
             .read_xyz(aliases=self.aliases)
         )
-        return super()._create_dataloader(dp)
 
     def _download_atomrefs(self):
         url = "https://ndownloader.figshare.com/files/3195395"

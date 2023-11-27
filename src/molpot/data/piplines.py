@@ -23,7 +23,7 @@ class XYZReader(IterDataPipe):
         self.source_dp = source_dp
         self.local_alias = alias
 
-    def __iter__(self):
+    def __iter__(self) -> Iterable[mp.Frame]:
 
         local_alias = self.local_alias
 
