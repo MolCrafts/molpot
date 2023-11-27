@@ -5,7 +5,8 @@ from functools import reduce, partial
 from operator import getitem
 from datetime import datetime
 from .parse_json import read_json, write_json
-import json, jsonschema
+import json
+# import json, jsonschema
 
 SCHEMA = json.load(open(Path(__file__).parent / "config_schema.json", "r"))
 

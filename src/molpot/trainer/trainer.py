@@ -2,7 +2,6 @@ from abc import abstractmethod
 import numpy as np
 from numpy import inf
 import torch
-from torchvision.utils import make_grid
 from .utils import inf_loop, MetricTracker
 from .logger.visualization import TensorboardWriter
 
