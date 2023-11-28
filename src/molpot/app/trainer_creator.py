@@ -3,7 +3,7 @@ import collections
 import torch
 import numpy as np
 from .config_parser import ConfigParser
-from ..data import get_data_loader
+from ..piplines import get_data_loader
 from ..potentials import get_potential
 from .utils import prepare_device
 from ..trainer import get_criterion, Trainer, get_metric, get_optimizer, get_lr_scheduler

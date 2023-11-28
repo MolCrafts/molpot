@@ -1,5 +1,6 @@
-from .piplines import *
+from .readers import *
 from .datasets import *
+from .dataloaders import *
 from torchdata.datapipes.iter import *
 
 def get_data_loader(config:dict)->DataLoader2:

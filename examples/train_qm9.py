@@ -16,6 +16,3 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader])->str:
     trainer = mpot.Trainer(mpot.PiNet(), mpot.MSELoss(), mpot.Adam(), mpot.Metric())
     trainer.train()
     return "done"
-
-if __name__ == "__main__":
-    train_qm9(load_qm9())
