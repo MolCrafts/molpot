@@ -124,7 +124,7 @@ class QM9(DataSet):
             # can not use lambda due to it is not pickleable
             .filter(filter_fn=partial(endswith, suffix=".xyz"))
             .open_files(mode="rt")
-            .read_xyz(aliases=self.aliases)
+            .read_xyz()
         )
 
     def _download_atomrefs(self):

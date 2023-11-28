@@ -18,13 +18,12 @@ __all__ = [
 
 @functional_datapipe("read_xyz")
 class XYZReader(IterDataPipe):
-    def __init__(self, source_dp: IterDataPipe, alias: Aliases):
+    def __init__(self, source_dp: IterDataPipe):
         super().__init__()
         self.source_dp = source_dp
         self.local_alias = alias
 
     def __iter__(self) -> Iterable[mp.Frame]:
-
         local_alias = self.local_alias
 
         for d in self.source_dp:
@@ -53,8 +52,8 @@ class XYZReader(IterDataPipe):
 
             yield frame
 
-def _collate(batch: Sequence[mp.Frame]):
 
+def _collate(batch: Sequence[mp.Frame]):
     assert isinstance(batch, Iterable), "batch must be an iterable"
 
     coll_batch = {}
@@ -63,7 +62,9 @@ def _collate(batch: Sequence[mp.Frame]):
     atoms_keys = batch[0].atoms.keys()
 
     for k in props_keys:
-        coll_batch[k] = torch.concat([torch.atleast_1d(torch.tensor(frame[k])) for frame in batch])
+        coll_batch[k] = torch.concat(
+            [torch.atleast_1d(torch.tensor(frame[k])) for frame in batch]
+        )
 
     for k in atoms_keys:
         coll_batch[k] = torch.concat([torch.tensor(frame.atoms[k]) for frame in batch])
@@ -79,14 +80,16 @@ def _collate(batch: Sequence[mp.Frame]):
 
     return coll_batch
 
+
 @functional_datapipe("collate_frames")
 class CollateFrames(Collator):
     def __init__(self, datapipe, **kwargs):
         super().__init__(datapipe, collate_fn=_collate, **kwargs)
 
+
 @functional_datapipe("calc_nblist")
 class CalcNBList(IterDataPipe):
-    def __init__(self, source_dp: IterDataPipe, cutoff:float):
+    def __init__(self, source_dp: IterDataPipe, cutoff: float):
         self.dp = source_dp
         self.cutoff = cutoff
 
