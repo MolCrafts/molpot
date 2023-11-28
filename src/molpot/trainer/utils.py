@@ -1,33 +1,5 @@
-import json
 import torch
-from pathlib import Path
-from itertools import repeat
-from collections import OrderedDict, defaultdict
-
-
-def ensure_dir(dirname):
-    dirname = Path(dirname)
-    if not dirname.is_dir():
-        dirname.mkdir(parents=True, exist_ok=False)
-
-
-def read_json(fname):
-    fname = Path(fname)
-    with fname.open("rt") as handle:
-        return json.load(handle, object_hook=OrderedDict)
-
-
-def write_json(content, fname):
-    fname = Path(fname)
-    with fname.open("wt") as handle:
-        json.dump(content, handle, indent=4, sort_keys=False)
-
-
-def inf_loop(data_loader):
-    """wrapper function for endless data loader."""
-    for loader in repeat(data_loader):
-        yield from loader
-
+from collections import defaultdict
 
 def prepare_device(n_gpu_use):
     """
@@ -52,8 +24,8 @@ def prepare_device(n_gpu_use):
 
 
 class MetricTracker:
-    def __init__(self, *keys, writer=None):
-        self.writer = writer
+    def __init__(self):
+        # self.writer = writer
         self._totals = defaultdict(float)
         self._counts = defaultdict(float)
         self._average = defaultdict(float)
@@ -64,8 +36,8 @@ class MetricTracker:
             self._data[col].values[:] = 0
 
     def update(self, key, value, n=1):
-        if self.writer is not None:
-            self.writer.add_scalar(key, value)
+        # if self.writer is not None:
+        #     self.writer.add_scalar(key, value)
         self._data.total[key] += value * n
         self._data.counts[key] += n
         self._data.average[key] = self._data.total[key] / self._data.counts[key]

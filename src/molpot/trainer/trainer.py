@@ -1,27 +1,31 @@
 from abc import abstractmethod
+from pathlib import Path
 import numpy as np
 from numpy import inf
 import torch
-from .utils import inf_loop, MetricTracker
+from .utils import MetricTracker, prepare_device
 from .logger.visualization import TensorboardWriter
+
+import logging
 
 class BaseTrainer:
     """
     Base class for all trainers
     """
-    def __init__(self, model, criterion, metric_ftns, optimizer, config):
-        self.config = config
-        self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
+    def __init__(self, model, criterion, metric_ftns, optimizer, train_cfg:dict, resume_path:Path|None=None, device=None):
+        
+        self.logger = logging.getLogger(__class__.__name__)
 
         self.model = model
         self.criterion = criterion
         self.metric_ftns = metric_ftns
         self.optimizer = optimizer
 
-        cfg_trainer = config['trainer']
-        self.epochs = cfg_trainer['epochs']
-        self.save_period = cfg_trainer['save_period']
-        self.monitor = cfg_trainer.get('monitor', 'off')
+        self.epochs = train_cfg['epochs']
+        self.save_freq = train_cfg['save_freq']
+        self.monitor = train_cfg.get('monitor', 'off')
+
+        self.device, self.device_ids = prepare_device(device)
 
         # configuration to monitor model performance and save best
         if self.monitor == 'off':
@@ -32,22 +36,24 @@ class BaseTrainer:
             assert self.mnt_mode in ['min', 'max']
 
             self.mnt_best = inf if self.mnt_mode == 'min' else -inf
-            self.early_stop = cfg_trainer.get('early_stop', inf)
+            self.early_stop = train_cfg.get('early_stop', 0)
             if self.early_stop <= 0:
                 self.early_stop = inf
 
         self.start_epoch = 1
 
-        self.checkpoint_dir = config.save_dir
+        self.checkpoint_dir = train_cfg.get('saved', None)
+        if self.checkpoint_dir is None:
+            self.logger.warning("Warning: No checkpoint directory specified! Saving in current directory.")
 
         # setup visualization writer instance                
-        # self.writer = TensorboardWriter(config.log_dir, self.logger, cfg_trainer['tensorboard'])
+        # self.writer = TensorboardWriter(config.log_dir, self.logger, train_cfg['tensorboard'])
 
-        if config.resume is not None:
-            self._resume_checkpoint(config.resume)
+        if resume_path is not None:
+            self._resume_checkpoint(resume_path)
 
     @abstractmethod
-    def _train_epoch(self, epoch):
+    def _train_epoch(self, epoch:int)->dict[str, float]:
         """
         Training logic for an epoch
 
@@ -69,7 +75,7 @@ class BaseTrainer:
 
             # print logged informations to the screen
             for key, value in log.items():
-                self.logger.info('    {:15s}: {}'.format(str(key), value))
+                self.logger.info(f'    {key:15s}: {value}')
 
             # evaluate model performance according to configured metric, save best checkpoint as model_best
             best = False
@@ -96,7 +102,7 @@ class BaseTrainer:
                                      "Training stops.".format(self.early_stop))
                     break
 
-            if epoch % self.save_period == 0:
+            if epoch % self.save_freq == 0:
                 self._save_checkpoint(epoch, save_best=best)
 
     def _save_checkpoint(self, epoch, save_best=False):
@@ -107,14 +113,14 @@ class BaseTrainer:
         :param log: logging information of the epoch
         :param save_best: if True, rename the saved checkpoint to 'model_best.pth'
         """
-        arch = type(self.model).__name__
+        name = type(self.model).__name__
         state = {
-            'arch': arch,
+            'name': name,
             'epoch': epoch,
             'state_dict': self.model.state_dict(),
             'optimizer': self.optimizer.state_dict(),
             'monitor_best': self.mnt_best,
-            'config': self.config
+            'config': self._hyperparameters
         }
         filename = str(self.checkpoint_dir / 'checkpoint-epoch{}.pth'.format(epoch))
         torch.save(state, filename)
@@ -156,26 +162,18 @@ class Trainer(BaseTrainer):
     """
     Trainer class
     """
-    def __init__(self, model, criterion, metric_ftns, optimizer, config, device,
-                 data_loader, valid_data_loader=None, lr_scheduler=None, len_epoch=None):
-        super().__init__(model, criterion, metric_ftns, optimizer, config)
-        self.config = config
-        self.device = device
-        self.data_loader = data_loader
-        if len_epoch is None:
-            # epoch-based training
-            self.len_epoch = len(self.data_loader)
-        else:
-            # iteration-based training
-            self.data_loader = inf_loop(data_loader)
-            self.len_epoch = len_epoch
+    def __init__(self, model, criterion, metric_ftns, optimizer, train_cfg, device,
+                 train_data_loader, valid_data_loader=None, lr_scheduler=None, log_step=100):
+        super().__init__(model, criterion, metric_ftns, optimizer, train_cfg, device)
+        self.train_data_loader = train_data_loader
         self.valid_data_loader = valid_data_loader
         self.do_validation = self.valid_data_loader is not None
         self.lr_scheduler = lr_scheduler
-        self.log_step = int(np.sqrt(data_loader.batch_size))
+        self.log_step = int(np.sqrt(train_data_loader.batch_size))
 
-        self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
-        self.valid_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
+        self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns])
+        self.valid_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns])
+        self.log_step = log_step
 
     def _train_epoch(self, epoch):
         """
@@ -195,7 +193,7 @@ class Trainer(BaseTrainer):
             loss.backward()
             self.optimizer.step()
 
-            self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
+            # self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss.item())
             for met in self.metric_ftns:
                 self.train_metrics.update(met.__name__, met(output, target))
@@ -205,9 +203,9 @@ class Trainer(BaseTrainer):
                     epoch,
                     self._progress(batch_idx),
                     loss.item()))
-                self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
+                # self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
-            if batch_idx == self.len_epoch:
+            if batch_idx == self.epochs:
                 break
         log = self.train_metrics.result()
 
@@ -235,15 +233,15 @@ class Trainer(BaseTrainer):
                 output = self.model(data)
                 loss = self.criterion(output, target)
 
-                self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
+                # self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss.item())
                 for met in self.metric_ftns:
                     self.valid_metrics.update(met.__name__, met(output, target))
-                self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
+                # self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
         # add histogram of model parameters to the tensorboard
-        for name, p in self.model.named_parameters():
-            self.writer.add_histogram(name, p, bins='auto')
+#         for name, p in self.model.named_parameters():
+#             self.writer.add_histogram(name, p, bins='auto')
         return self.valid_metrics.result()
 
     def _progress(self, batch_idx):
