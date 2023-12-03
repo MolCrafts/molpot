@@ -9,3 +9,6 @@ class Potential(nn.Module):
 
     def forward(self, inputs):
         raise NotImplementedError
+    
+    def cite(self)->str:
+        raise NotImplementedError

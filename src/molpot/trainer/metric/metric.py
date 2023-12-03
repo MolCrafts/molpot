@@ -1,5 +1,7 @@
 import torch
 
+__all__ = ["accuracy", "top_k_acc"]
+
 
 def accuracy(output, target):
     with torch.no_grad():
