@@ -1,6 +1,8 @@
 from pathlib import Path
 from molpot.trainer.logger.logger import LogAdapter
 import torch
+
+from molpot.trainer.utils import prepare_device
 from .metric.tracker import MetricTracker
 from .metric import get_metric
 from ..potentials import Potential
@@ -79,29 +81,32 @@ class Trainer(BaseTrainer):
         self.valid_data_loader = valid_data_loader
 
         self.metrics = metrics
-        self.metric_fns = [get_metric(m) for m in self.metrics]
+        self.metric_fns = {metric: get_metric(metric) for metric in metrics}
 
         self.lr_scheduler = lr_scheduler
+        self.device, self.device_ids = prepare_device(config["trainer"]["device"])
 
-    def train(self, nstep: int):
+    def train(self, nsteps: int):
         self._pre_train()
+        result = {}
         for i, (data, target) in enumerate(self.train_data_loader):
             nstep = i + self.start_step
-            result = {
-                'nstep': nstep,
-                'data': data.to(self.device),
-                'target': target.to(self.device)
-            }
+            result.update(
+                {
+                    "nstep": nstep,
+                    "data": data.to(self.device),
+                    "target": target.to(self.device),
+                }
+            )
             result = self._pre_iter(result)
             result = self._train(result)
             result = self._train_log(result)
             result = self._valid(result)
-            result = self._valid_log(result)
             result = self._post_iter(result)
 
-            if i >= nstep:
+            if i >= nsteps:
                 break
-        self._post_train()
+        self._post_train(result)
 
     def _pre_train(self):
         if self.resume:
@@ -111,55 +116,66 @@ class Trainer(BaseTrainer):
 
         self.train_metrics = MetricTracker("train")
         self.valid_metrics = MetricTracker("valid")
-        self.logger = LogAdapter(self.config["name"], self.save_dir)
+        self.logger = LogAdapter(self.model.name, self.save_dir)
 
-    def _pre_iter(self):
+    def _pre_iter(self, results: dict):
         self.optimizer.zero_grad()
+        return results
 
-    def _train(self, result:dict):
+    def _train(self, result: dict):
         self.model.train()
         data = result["data"]
         target = result["target"]
-        self.optimizer.zero_grad()
         output = self.model(data)
         loss = self.criterion(output, target)
         loss.backward()
-        return {
-            'output': output,
-            'loss': loss,
-        }
-    
-    def _valid(self, result:dict):
+        result.update(
+            {
+                "output": output,
+                "loss": loss,
+            }
+        )
+        self.optimizer.step()
+        return result
+
+    def _valid(self, result: dict):
+        nstep = result["nstep"]
+        if nstep % 100 != 0:
+            return result
+
         self.model.eval()
+
         with torch.no_grad():
             for i, (data, target) in enumerate(self.valid_data_loader):
                 data, target = data.to(self.device), target.to(self.device)
                 output = self.model(data)
                 loss = self.criterion(output, target)
-                result["valid_loss"].update(loss.item(), data.size(0))
+                self.valid_metrics.update("loss", loss.item())
+                for m, metric_fn in self.metric_fns.items():
+                    self.valid_metrics.update(
+                        m, metric_fn(result["output"], result["loss"])
+                    )
         return result
 
-    def _train_log(self, result:dict):
+    def _train_log(self, result: dict):
         self.train_metrics.update("loss", result["loss"].item())
-        for metric_fn in self.metric_fns:
-            self.train_metrics.update(metric_fn(result["output"], result["target"]))
+        for m, metric_fn in self.metric_fns.items():
+            self.train_metrics.update(m, metric_fn(result["output"], result["loss"]))
+        return result
 
-    def _valid_log(self, result:dict):
-        self.valid_metrics.update("loss", result["valid_loss"].item())
-        for metric_fn in self.metric_fns:
-            self.valid_metrics.update(metric_fn(result["output"], result["target"]))
-
-    def _post_iter(self, result:dict):
-        self.optimizer.step()
-        self.lr_scheduler.step()
+    def _post_iter(self, result: dict):
+        
+        if result["nstep"] % 100 == 0:
+            self.lr_scheduler.step()
 
         # print status
         # TODO: use a log adapter
-        self.logger.info(
-            "Step {:06d} | Train Loss {:.4f} | Valid Loss {:.4f}".format(
-                result["nstep"], self.train_metrics.result["loss"], self.valid_metrics.result["loss"]
-            )
-        )
 
-    def _post_train(self, result:dict):
-        self._save_checkpoint(self.start_step, save_best=True)
+        self.logger.info(
+            f"Step {result['nstep']:06d} | Train Loss {self.train_metrics.result['loss']:.4f} | Valid Loss {self.valid_metrics.result['loss']:.4f} | eps {float(self.model.eps):.4f} | sig {float(self.model.sig):.4f}"
+        )
+        return result
+
+    def _post_train(self, result: dict):
+        # self._save_checkpoint(self.start_step, save_best=True)
+        return result

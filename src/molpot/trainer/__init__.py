@@ -1,5 +1,5 @@
 from .loss import nll_loss
-from .metric import accuracy, top_k_acc
+from .metric.metric import accuracy, top_k_acc
 from .trainer import Trainer
 from .optimizers import get_optimizer, get_lr_scheduler
 

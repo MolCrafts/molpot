@@ -20,10 +20,10 @@ __all__ = ['DataLoader', 'create_dataloader']
 class DataLoader(DataLoader2):
     pass
 
-def create_dataloader(datapipe: IterDataPipe, num_workers=Optional[int]=None) -> DataLoader:
+def create_dataloader(datapipe: IterDataPipe, nworkers:int | None=None) -> DataLoader:
 
-    if num_workers:
-        rs = MultiProcessingReadingService(num_workers)
+    if nworkers:
+        rs = MultiProcessingReadingService(nworkers)
     else:
         rs = None
     make_dataloader = partial(DataLoader, reading_service=rs)

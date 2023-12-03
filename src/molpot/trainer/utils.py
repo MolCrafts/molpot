@@ -1,10 +1,11 @@
 import torch
-from collections import defaultdict
 
-def prepare_device(n_gpu_use):
+def prepare_device(config:dict):
     """
     setup GPU device if available. get gpu device indices which are used for DataParallel
     """
+    if config["type"] == "cpu":
+        n_gpu_use = 0
     n_gpu = torch.cuda.device_count()
     if n_gpu_use > 0 and n_gpu == 0:
         print(

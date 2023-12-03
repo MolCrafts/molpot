@@ -12,3 +12,6 @@ class Potential(nn.Module):
     
     def cite(self)->str:
         raise NotImplementedError
+    
+    def name(self)->str:
+        return self.name
