@@ -4,23 +4,34 @@ Keys to access structure properties.
 Note: Had to be moved out of Structure class for TorchScript compatibility
 
 """
-from molpy import Aliases
+from molpy import Alias as mpAlias
 
-alias = Aliases('default')
-alias.set('idx', '_idx', None, '')
-alias.set('idx_m', '_idx_m', None, 'indices of systems')
-alias.set('idx_i', '_idx_i', None, 'indices of center atoms')
-alias.set('idx_j', '_idx_j', None, 'indices of neighboring atoms')
-alias.set('idx_i_lr', '_idx_i_lr', None, 'indices of center atoms for long-range')
-alias.set('idx_j_lr', '_idx_j_lr', None, 'indices of neighboring atoms for long-range')
-alias.set('offsets', '_offsets', None, 'cell offset vectors')
-alias.set('energy', 'energy', None, '')
+__all__ = ["Alias"]
+
+class Alias(mpAlias):
+
+    def __new__(cls, name: None | str = None):
+        cls.__alias_scopes['default'].update({
+            'idx': cls.Item('idx', '_idx', None, ''),
+            'Z': cls.Item('Z', '_atomic_numbers', None, 'nuclear charge'),
+        })
+        return super().__new__(cls)
+
+# alias = Alias('default')
+# alias.set('idx', '_idx', None, '')
+# alias.set('idx_m', '_idx_m', None, 'indices of systems')
+# alias.set('idx_i', '_idx_i', None, 'indices of center atoms')
+# alias.set('idx_j', '_idx_j', None, 'indices of neighboring atoms')
+# alias.set('idx_i_lr', '_idx_i_lr', None, 'indices of center atoms for # long-range')
+# alias.set('idx_j_lr', '_idx_j_lr', None, 'indices of neighboring atoms for # long-range')
+# alias.set('offsets', '_offsets', None, 'cell offset vectors')
+# alias.set('energy', 'energy', None, '')
 
 # kw.set("idx", "_idx", None, "")
 # kw.set("Z", "_atomic_numbers", None, "nuclear charge")
-alias.set("cell", "_cell", None, "unit cell")
+# alias.set("cell", "_cell", None, "unit cell")
 # kw.set("strain", "strain", None, "")
-alias.set("pbc", "_pbc", None, "periodic boundary conditions")
+# alias.set("pbc", "_pbc", None, "periodic boundary conditions")
 # kw.set("seg_m", "_seg_m", None, "start indices of systems")
 # kw.set("idx_m", "_idx_m", None, "indices of systems")
 # kw.set("idx_i", "_idx_i", None, "indices of center atoms")
@@ -43,12 +54,12 @@ alias.set("pbc", "_pbc", None, "periodic boundary conditions")
 #     None,
 #     "local indices of neighboring atoms (within system)",
 # )
-alias.set(
-    "Rij",
-    "_Rij",
-    None,
-    "vectors pointing from center atoms to neighboring atoms",
-)
+# alias.set(
+#     "Rij",
+#     "_Rij",
+#     None,
+#     "vectors pointing from center atoms to neighboring atoms",
+# )
 # kw.set(
 #     "Rij_lr",
 #     "_Rij_lr",

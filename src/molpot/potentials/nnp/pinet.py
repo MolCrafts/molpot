@@ -9,7 +9,7 @@ from torch import nn
 from .layers import PolynomialBasis, GaussianBasis, CutoffFunc
 from .layers import ANNOutput
 import molpot as mpot
-from molpot import alias, Aliases
+from molpot import Alias
 
 __all__ = [
     "PiNet",
@@ -227,7 +227,7 @@ class PiNet(nn.Module):
         if act == "tanh":
             act = nn.Tanh()
         self.depth = depth
-        self.alias = Aliases("PiNet")
+        self.alias = Alias("PiNet")
         self.alias.set("p1", "_pinet_p1", None, "invariant property")
         self.alias.set("p3", "_pinet_p3", None, "equalvariant property")
         self.cutoff = CutoffFunc(rc, cutoff_type)

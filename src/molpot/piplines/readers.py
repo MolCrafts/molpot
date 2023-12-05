@@ -5,23 +5,47 @@ import numpy as np
 import molpy as mp
 import molpot as mpot
 import torch
-from molpot import alias, Aliases
+from molpot import Alias
 from molpot.transforms import TorchNeighborList
 from typing import Iterable, Optional
 
 __all__ = [
-    "XYZReader",
+    "ChemFilesReader",
+    "QM9Reader",
     "CollateFrames",
     "CalcNBList",
 ]
 
 
-@functional_datapipe("read_xyz")
-class XYZReader(IterDataPipe):
+@functional_datapipe("read_chemfiles")
+class ChemFilesReader(IterDataPipe):
+    def __init__(
+        self, source_dp: IterDataPipe, ext: str, in_memory: bool = True, **kwargs
+    ):
+        super().__init__()
+        self.source_dp = source_dp
+        self.kwargs = kwargs
+        self.ext = ext
+        self.in_memory = in_memory
+
+    def __iter__(self) -> mp.Frame:
+        if self.in_memory:
+            for d in self.source_dp:
+                loader = mp.MemoryLoader(d)
+                yield loader.load_frame()
+
+        else:
+            for d in self.source_dp:
+                loader = mp.DataLoader(d)
+                yield loader.load_frame()
+
+
+@functional_datapipe("read_qm9")
+class QM9Reader(IterDataPipe):
     def __init__(self, source_dp: IterDataPipe):
         super().__init__()
         self.source_dp = source_dp
-        self.local_alias = alias
+        self.local_alias = Alias("qm9")
 
     def __iter__(self) -> Iterable[mp.Frame]:
         local_alias = self.local_alias
@@ -30,22 +54,22 @@ class XYZReader(IterDataPipe):
             frame = mp.Frame()
 
             lines = d[1].readlines()
-            frame[alias.natoms] = int(lines[0])
+            frame[Alias.natoms] = int(lines[0])
             props_line = lines[1].split()[1:]
-            frame["index"] = int(props_line[0])
+            frame[Alias.idx] = int(props_line[0])
             for prop, p in zip(local_alias.get_aliases(), props_line[1:]):
                 if prop in local_alias:
                     src_unit = local_alias.get_unit(prop)
-                    dst_unit = alias.get_unit(prop)
+                    dst_unit = Alias.get_unit(prop)
                     frame[prop] = mp.units.convert(float(p), src_unit, dst_unit)
                 else:
                     frame[prop] = float(p)
 
-            frame.atoms[alias.xyz] = [
+            frame.atoms[Alias.xyz] = [
                 [i.replace("*^", "E") for i in line.split()[1:4]]
                 for line in lines[2:-3]
             ]
-            frame.atoms[alias.Z] = [
+            frame.atoms[Alias.Z] = [
                 mp.Element.get_atomic_number_by_symbol(line.split()[0])
                 for line in lines[2:-3]
             ]
