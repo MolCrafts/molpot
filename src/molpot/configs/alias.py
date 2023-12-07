@@ -10,12 +10,11 @@ __all__ = ["Alias"]
 
 class Alias(mpAlias):
 
-    def __new__(cls, name: None | str = None):
-        cls.__alias_scopes['default'].update({
-            'idx': cls.Item('idx', '_idx', None, ''),
-            'Z': cls.Item('Z', '_atomic_numbers', None, 'nuclear charge'),
-        })
-        return super().__new__(cls)
+    scropes = mpAlias.scopes['default'].update({
+        'idx': mpAlias.Item('idx', '_idx', None, int, ''),
+        'Z': mpAlias.Item('Z', '_atomic_numbers', None, int, 'nuclear charge'),
+    })
+
 
 # alias = Alias('default')
 # alias.set('idx', '_idx', None, '')
