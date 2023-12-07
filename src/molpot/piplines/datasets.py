@@ -63,7 +63,7 @@ class DataSet:
             with open(self.data_dir / Path("meta.json"), "w") as f:
                 json.dump(self._data, f)
 
-    def prepare(self):
+    def prepare(self) -> IterDataPipe:
         raise NotImplementedError
 
     def fetch(self, url, filename, dir: Optional[Path | str] = None) -> Path:

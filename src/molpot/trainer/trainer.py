@@ -7,6 +7,7 @@ from .metric.tracker import MetricTracker
 from .metric import get_metric
 from ..potentials import Potential
 import logging
+from .strategy import EarlyStop, PlannedStop
 
 
 class BaseTrainer:
@@ -87,13 +88,15 @@ class Trainer(BaseTrainer):
         self.device, self.device_ids = prepare_device(config["trainer"]["device"])
 
     def train(self, nsteps: int):
+        plannedStop = PlannedStop(nsteps)
+        earlyStop = EarlyStop()
         self._pre_train()
         result = {}
+        nstep = self.start_step + 1
         for i, (data, target) in enumerate(self.train_data_loader):
-            nstep = i + self.start_step
             result.update(
                 {
-                    "nstep": nstep,
+                    "nstep": nstep + i,
                     "data": data.to(self.device),
                     "target": target.to(self.device),
                 }
@@ -104,8 +107,9 @@ class Trainer(BaseTrainer):
             result = self._valid(result)
             result = self._post_iter(result)
 
-            if i >= nsteps:
+            if plannedStop(result["nstep"]) or earlyStop(result):
                 break
+
         self._post_train(result)
 
     def _pre_train(self):
@@ -179,3 +183,12 @@ class Trainer(BaseTrainer):
     def _post_train(self, result: dict):
         # self._save_checkpoint(self.start_step, save_best=True)
         return result
+
+
+class OfflineALTrainer(Trainer):
+    
+    def _post_iter(self, result: dict):
+        return super()._post_iter(result)
+
+class OnlineALTrainer(Trainer):
+    pass
