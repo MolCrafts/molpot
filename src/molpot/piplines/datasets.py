@@ -12,7 +12,7 @@ import numpy as np
 import re
 import tarfile
 import molpot as mpot
-from molpot import Alias
+from molpot import alias
 import molpy as mp
 
 __all__ = ["DataSet", "DataLoader2", "QM9"]
