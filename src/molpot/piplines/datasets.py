@@ -12,18 +12,12 @@ import numpy as np
 import re
 import tarfile
 import molpot as mpot
-from molpot import alias
 import molpy as mp
 
 __all__ = ["DataSet", "DataLoader2", "QM9"]
 
 
 log = logging.getLogger(__name__)
-
-
-def endswith(x: str, suffix):
-    return x.endswith(suffix)
-
 
 class DataSet:
 
@@ -66,11 +60,10 @@ class DataSet:
     def prepare(self) -> IterDataPipe:
         raise NotImplementedError
 
-    def fetch(self, url, filename, dir: Optional[Path | str] = None) -> Path:
+    def fetch(self, url, filename, dir: Path | str) -> Path:
+        fpath = Path(dir) / Path(filename)
         if dir is None:
             dir = self.data_dir
-
-        fpath = Path(dir) / Path(filename)
         if not fpath.exists():
             log.info(f"downloading from {url}... to {fpath}")
             urlretrieve(url, fpath)
@@ -83,50 +76,50 @@ class QM9(DataSet):
     def __init__(
         self,
         data_dir: Optional[Path | str] = None,
-        in_memory: bool = True,
+        in_memory: bool = False,
         remove_uncharacterized: bool = True,
     ):
         super().__init__("QM9", data_dir, in_memory)
         self.remove_uncharacterized = remove_uncharacterized
-        self.aliases = mpot.Aliases("QM9")
-        self.aliases.set("A", "rotational_constant_A", "GHz", "")
-        self.aliases.set("B", "rotational_constant_B", "GHz", "")
-        self.aliases.set("C", "rotational_constant_C", "GHz", "")
-        self.aliases.set("mu", "dipole_moment", "Debye", "")
-        self.aliases.set("alpha", "isotropic_polarizability", "a0 a0 a0", "")
-        self.aliases.set("homo", "homo", "Ha", "")
-        self.aliases.set("lumo", "lumo", "Ha", "")
-        self.aliases.set("gap", "gap", "Ha", "")
-        self.aliases.set("r2", "electronic_spatial_extent", "a0 a0", "")
-        self.aliases.set("zpve", "zpve", "Ha", "")
-        self.aliases.set("U0", "energy_U0", "", "")
-        self.aliases.set("U", "energy_U", "Ha", "")
-        self.aliases.set("H", "enthalpy_H", "Ha", "")
-        self.aliases.set("G", "free_energy", "Ha", "")
-        self.aliases.set("Cv", "heat_capacity", "cal/mol/K", "")
+        mpot.alias("QM9")
+        mpot.alias.QM9.set("A", "_A", float, "GHz", "rotational_constant_A")
+        mpot.alias.QM9.set("B", "_B", float, "GHz", "rotational_constant_B")
+        mpot.alias.QM9.set("C", "_C", float, "GHz", "rotational_constant_C")
+        mpot.alias.QM9.set("mu", "_mu", float, "Debye", "dipole_moment")
+        mpot.alias.QM9.set("alpha", "_alpha", float, "a0 a0 a0", "isotropic_polarizability")
+        mpot.alias.QM9.set("homo", "_homo", float, "Ha", "homo")
+        mpot.alias.QM9.set("lumo", "_lumo", float, "Ha", "lump")
+        mpot.alias.QM9.set("gap", "_gap", float, "Ha", "gap")
+        mpot.alias.QM9.set("r2", "_r2", float, "a0 a0", "electronic_spatial_extent")
+        mpot.alias.QM9.set("zpve", "_zpve", float, "Ha", "zpve")
+        mpot.alias.QM9.set("U0", "_U0", float, "", "_energy_U0")
+        mpot.alias.QM9.set("U", "_U", float, "Ha", "_energy_U")
+        mpot.alias.QM9.set("H", "_H", float, "Ha", "_enthalpy_H")
+        mpot.alias.QM9.set("G", "_G", float, "Ha", "_free_energy")
+        mpot.alias.QM9.set("Cv", "_Cv", float, "cal/mol/K", "_heat_capacity")
 
     def prepare(self) -> IterDataPipe:
         if self.in_memory:
             import requests
             import io
 
-            qm9_url = "https://ndownloader.figshare.com/files/3195389"
-            qm9_bytes = requests.get(qm9_url, allow_redirects=True).content
-            qm9_fobj = io.BytesIO(qm9_bytes)
-            qm9_fobj.seek(0)
-            qm9_tar = tarfile.open(fileobj=qm9_fobj, mode="r:bz2")
-            names = qm9_tar.getnames()
+            # qm9_url = "https://ndownloader.figshare.com/files/3195389"
+            # qm9_bytes = requests.get(qm9_url, allow_redirects=True).content
+            # qm9_fobj = io.BytesIO(qm9_bytes)
+            # qm9_fobj.seek(0)
+            # qm9_tar = tarfile.open(fileobj=qm9_fobj, mode="r:bz2")
+            # names = qm9_tar.getnames()
 
-            exclude_url = "https://figshare.com/ndownloader/files/3195404"
-            exclude_bytes = requests.get(exclude_url, allow_redirects=True).content
-            exclude_fobj = io.TextIOWrapper(io.BytesIO(exclude_bytes))
-            exclude = [int(line.split()[0]) for line in exclude_fobj.readlines()[9:-1]]
-            names = [name for name in names if int(name[-10:-4]) not in exclude]
-            dp = IterableWrapper(names).map(
-                lambda x: io.TestIOWrapper(
-                    qm9_tar.extractfile(x)
-                ).readlines()
-            ).read_qm9()
+            # exclude_url = "https://figshare.com/ndownloader/files/3195404"
+            # exclude_bytes = requests.get(exclude_url, allow_redirects=True).content
+            # exclude_fobj = io.TextIOWrapper(io.BytesIO(exclude_bytes))
+            # exclude = [int(line.split()[0]) for line in exclude_fobj.readlines()[9:-1]]
+            # names = [name for name in names if int(name[-10:-4]) not in exclude]
+            # dp = IterableWrapper(names).map(
+            #     lambda x: io.TestIOWrapper(
+            #         qm9_tar.extractfile(x)
+            #     ).readlines()
+            # ).read_qm9()
 
         else:
             # atomrefs = self._download_atomrefs()
@@ -139,17 +132,17 @@ class QM9(DataSet):
             irange = np.arange(len(ordered_files), dtype=int)
             if uncharacterized is not None:
                 irange = np.setdiff1d(irange, np.array(uncharacterized, dtype=int) - 1)
+            
             dp = (
-                IterableWrapper((map(str, np.array(ordered_files)[irange])))
-                # can not use lambda due to it is not pickleable
-                .filter(filter_fn=partial(endswith, suffix=".xyz")).read_qm9()
+                IterableWrapper(map(str, np.array(ordered_files)[irange]))
+                .read_qm9()
             )
         return dp
 
     def _download_atomrefs(self):
         url = "https://ndownloader.figshare.com/files/3195395"
         filename = "atomref.txt"
-        atomrefs_path = self.fetch(url, filename)
+        atomrefs_path = self.fetch(url, filename, self.data_dir)
         props = [
             self.aliases.zpve,
             self.aliases.U0,
@@ -169,7 +162,7 @@ class QM9(DataSet):
 
     def _download_uncharacterized(self):
         at_url = "https://ndownloader.figshare.com/files/3195404"
-        path = self.fetch(at_url, "uncharacterized.txt")
+        path = self.fetch(at_url, "uncharacterized.txt", self.data_dir)
         uncharacterized = []
         with open(path) as f:
             lines = f.readlines()
@@ -179,9 +172,10 @@ class QM9(DataSet):
 
     def _download_data(self):
         url = "https://ndownloader.figshare.com/files/3195389"
-        tar_path = self.fetch(url, "gdb9.tar.gz")
+        tar_path = self.fetch(url, "gdb9.tar.gz", self.data_dir)
         raw_path = self.data_dir / Path("gdb9_xyz")
 
+        _sort_qm9 = lambda x: (int(re.sub(r"\D", "", str(x))), str(x))
         if not raw_path.exists():
             log.info("Extracting files...")
             tar = tarfile.open(tar_path)
@@ -192,7 +186,7 @@ class QM9(DataSet):
         log.info("Parse xyz files...")
         ordered_files = sorted(
             raw_path.rglob("*.xyz"),
-            key=lambda x: (int(re.sub(r"\D", "", str(x))), str(x)),
+            key=_sort_qm9,
         )  # sort by index in filename
         return ordered_files
 
@@ -228,12 +222,12 @@ class QM9(DataSet):
 #         frames = []
 #         for positions, energies, forces in zip(data["R"], data["E"], data["F"]):
 #             frame = mp.Frame()
-#             frame[Alias.energy] = (
+#             frame[mpot.Alias.energy] = (
 #                 energies if type(energies) is np.ndarray else np.array([energies])
 #             )
-#             frame[Alias.forces] = forces
-#             frame[Alias.Z] = numbers
-#             frame[Alias.R] = positions
+#             frame[mpot.Alias.forces] = forces
+#             frame[mpot.Alias.Z] = numbers
+#             frame[mpot.Alias.R] = positions
 #             frame.box.set_matrix(np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]]))
 #             frame.box.pbc = np.array([False, False, False])
 #             frames.append(frames)
@@ -243,7 +237,7 @@ class QM9(DataSet):
 
 # class MD17(_GDMLDataModule):
 #     atomrefs = {
-#         Alias.energy: [
+#         mpot.Alias.energy: [
 #             0.0,
 #             -313.5150902000774,
 #             0.0,
@@ -284,7 +278,7 @@ class QM9(DataSet):
 
 # class MD22(_GDMLDataModule):
 #     atomrefs = {
-#         Alias.energy: [
+#         mpot.Alias.energy: [
 #             0.0,
 #             -313.5150902000774,
 #             0.0,

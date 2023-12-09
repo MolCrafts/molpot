@@ -3,4 +3,5 @@ from .piplines import *
 from .transforms import *
 from .app import *
 from .potentials import *
-from .alias import *
+from ._alias import alias
+from .trainer import *

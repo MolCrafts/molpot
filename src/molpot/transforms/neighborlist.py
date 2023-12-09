@@ -18,7 +18,6 @@ __all__ = [
 ]
 
 import molpot as mpot
-from molpot import alias
 # import fasteners
 
 
@@ -95,7 +94,7 @@ from molpot import alias
 #         inputs: Dict[str, torch.Tensor],
 #     ) -> Dict[str, torch.Tensor]:
 #         cache_file = os.path.join(
-#             self.cache_location, f"cache_{inputs[alias.idx][0]}.pt"
+#             self.cache_location, f"cache_{inputs[mpot.alias.idx][0]}.pt"
 #         )
 
 #         # try to read cached NBL
@@ -106,7 +105,7 @@ from molpot import alias
 #             # acquire lock for caching
 #             lock = fasteners.InterProcessLock(
 #                 os.path.join(
-#                     self.cache_location, f"cache_{inputs[alias.idx][0]}.lock"
+#                     self.cache_location, f"cache_{inputs[mpot.alias.idx][0]}.lock"
 #                 )
 #             )
 #             with lock:
@@ -120,9 +119,9 @@ from molpot import alias
 #                     for nbh_transform in self.nbh_transforms:
 #                         inputs = nbh_transform(inputs)
 #                     data = {
-#                         alias.idx_i: inputs[alias.idx_i],
-#                         alias.idx_j: inputs[alias.idx_j],
-#                         alias.offsets: inputs[alias.offsets],
+#                         mpot.alias.idx_i: inputs[mpot.alias.idx_i],
+#                         mpot.alias.idx_j: inputs[mpot.alias.idx_j],
+#                         mpot.alias.offsets: inputs[mpot.alias.offsets],
 #                     }
 #                     torch.save(data, cache_file)
 #                 except Exception as e:
@@ -171,15 +170,15 @@ class NeighborListTransform(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-        Z = inputs[alias.Z]
-        R = inputs[alias.R]
-        cell = inputs[alias.cell].view(3, 3)
-        pbc = inputs[alias.pbc]
+        Z = inputs[mpot.alias.Z]
+        R = inputs[mpot.alias.R]
+        cell = inputs[mpot.alias.cell].view(3, 3)
+        pbc = inputs[mpot.alias.pbc]
 
         idx_i, idx_j, offset = self._build_neighbor_list(Z, R, cell, pbc, self._cutoff)
-        inputs[alias.idx_i] = idx_i.detach()
-        inputs[alias.idx_j] = idx_j.detach()
-        inputs[alias.offsets] = offset
+        inputs[mpot.alias.idx_i] = idx_i.detach()
+        inputs[mpot.alias.idx_j] = idx_j.detach()
+        inputs[mpot.alias.offsets] = offset
         return inputs
 
     def _build_neighbor_list(
@@ -256,18 +255,18 @@ class NeighborListTransform(Transform):
 #         inputs: Dict[str, torch.Tensor],
 #     ) -> Dict[str, torch.Tensor]:
 
-#         Rij = inputs[alias.Rij]
-#         idx_i = inputs[alias.idx_i]
-#         idx_j = inputs[alias.idx_j]
-#         offsets = inputs[alias.offsets]
+#         Rij = inputs[mpot.alias.Rij]
+#         idx_i = inputs[mpot.alias.idx_i]
+#         idx_j = inputs[mpot.alias.idx_j]
+#         offsets = inputs[mpot.alias.offsets]
 
-#         rij = torch.norm(inputs[alias.Rij], dim=-1)
+#         rij = torch.norm(inputs[mpot.alias.Rij], dim=-1)
 #         cidx = torch.nonzero(rij <= self.cutoff).squeeze(-1)
 
-#         inputs[alias.Rij] = Rij[cidx]
-#         inputs[alias.idx_i] = idx_i[cidx]
-#         inputs[alias.idx_j] = idx_j[cidx]
-#         inputs[alias.offsets] = offsets[cidx]
+#         inputs[mpot.alias.Rij] = Rij[cidx]
+#         inputs[mpot.alias.idx_i] = idx_i[cidx]
+#         inputs[mpot.alias.idx_j] = idx_j[cidx]
+#         inputs[mpot.alias.offsets] = offsets[cidx]
 
 #         return inputs
 
@@ -275,7 +274,7 @@ class NeighborListTransform(Transform):
 #         """Make sure the list is up-to-date."""
 
 #         # get sample index
-#         sample_idx = inputs[alias.idx].item()
+#         sample_idx = inputs[mpot.alias.idx].item()
 
 #         # check if previous neighbor list exists and make sure that this is not the
 #         # first update step
@@ -283,15 +282,15 @@ class NeighborListTransform(Transform):
 #             # load previous inputs
 #             previous_inputs = self.previous_inputs[sample_idx]
 #             # extract previous structure
-#             previous_positions = np.array(previous_inputs[alias.R], copy=True)
+#             previous_positions = np.array(previous_inputs[mpot.alias.R], copy=True)
 #             previous_cell = np.array(
-#                 previous_inputs[alias.cell].view(3, 3), copy=True
+#                 previous_inputs[mpot.alias.cell].view(3, 3), copy=True
 #             )
-#             previous_pbc = np.array(previous_inputs[alias.pbc], copy=True)
+#             previous_pbc = np.array(previous_inputs[mpot.alias.pbc], copy=True)
 #             # extract current structure
-#             positions = inputs[alias.R]
-#             cell = inputs[alias.cell].view(3, 3)
-#             pbc = inputs[alias.pbc]
+#             positions = inputs[mpot.alias.R]
+#             cell = inputs[mpot.alias.cell].view(3, 3)
+#             pbc = inputs[mpot.alias.pbc]
 #             # check if structure change is sufficiently small to reuse previous neighbor
 #             # list
 #             if (
@@ -301,14 +300,14 @@ class NeighborListTransform(Transform):
 #                 < 0.25 * self.cutoff_skin**2
 #             ):
 #                 # reuse previous neighbor list
-#                 inputs[alias.idx_i] = (
-#                     previous_inputs[alias.idx_i].clone()
+#                 inputs[mpot.alias.idx_i] = (
+#                     previous_inputs[mpot.alias.idx_i].clone()
 #                 )
-#                 inputs[alias.idx_j] = (
-#                     previous_inputs[alias.idx_j].clone()
+#                 inputs[mpot.alias.idx_j] = (
+#                     previous_inputs[mpot.alias.idx_j].clone()
 #                 )
-#                 inputs[alias.offsets] = (
-#                     previous_inputs[alias.offsets].clone()
+#                 inputs[mpot.alias.offsets] = (
+#                     previous_inputs[mpot.alias.offsets].clone()
 #                 )
 #                 return False, inputs
 
@@ -324,14 +323,14 @@ class NeighborListTransform(Transform):
 #             inputs = nbh_transform(inputs)
 
 #         # store new reference conformation and remove old one
-#         sample_idx = inputs[alias.idx].item()
+#         sample_idx = inputs[mpot.alias.idx].item()
 #         stored_inputs = {
-#             alias.R: inputs[alias.R].detach().clone(),
-#             alias.cell: inputs[alias.cell].detach().clone(),
-#             alias.pbc: inputs[alias.pbc].detach().clone(),
-#             alias.idx_i: inputs[alias.idx_i].detach().clone(),
-#             alias.idx_j: inputs[alias.idx_j].detach().clone(),
-#             alias.offsets: inputs[alias.offsets].detach().clone(),
+#             mpot.alias.R: inputs[mpot.alias.R].detach().clone(),
+#             mpot.alias.cell: inputs[mpot.alias.cell].detach().clone(),
+#             mpot.alias.pbc: inputs[mpot.alias.pbc].detach().clone(),
+#             mpot.alias.idx_i: inputs[mpot.alias.idx_i].detach().clone(),
+#             mpot.alias.idx_j: inputs[mpot.alias.idx_j].detach().clone(),
+#             mpot.alias.offsets: inputs[mpot.alias.offsets].detach().clone(),
 #         }
 #         self.previous_inputs.update({sample_idx: stored_inputs})
 
@@ -484,18 +483,18 @@ class NeighborsFilter(Transform):
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
 
-        n_neighbors = inputs[alias.idx_i].shape[0]
+        n_neighbors = inputs[mpot.alias.idx_i].shape[0]
         slab_indices = inputs[self.selection_name].tolist()
         kept_nbh_indices = []
         for nbh_idx in range(n_neighbors):
-            i = inputs[alias.idx_i][nbh_idx].item()
-            j = inputs[alias.idx_j][nbh_idx].item()
+            i = inputs[mpot.alias.idx_i][nbh_idx].item()
+            j = inputs[mpot.alias.idx_j][nbh_idx].item()
             if i not in slab_indices or j not in slab_indices:
                 kept_nbh_indices.append(nbh_idx)
 
-        inputs[alias.idx_i] = inputs[alias.idx_i][kept_nbh_indices]
-        inputs[alias.idx_j] = inputs[alias.idx_j][kept_nbh_indices]
-        inputs[alias.offsets] = inputs[alias.offsets][kept_nbh_indices]
+        inputs[mpot.alias.idx_i] = inputs[mpot.alias.idx_i][kept_nbh_indices]
+        inputs[mpot.alias.idx_j] = inputs[mpot.alias.idx_j][kept_nbh_indices]
+        inputs[mpot.alias.offsets] = inputs[mpot.alias.offsets][kept_nbh_indices]
 
         return inputs
 
@@ -522,7 +521,7 @@ class TripleGenerator(Transform):
             Rij[idx_j_triples] -> Rij vector in triple
             Rij[idx_k_triples] -> Rik vector in triple
         """
-        idx_i = inputs[alias.idx_i]
+        idx_i = inputs[mpot.alias.idx_i]
 
         _, n_neighbors = torch.unique_consecutive(idx_i, return_counts=True)
 
@@ -542,9 +541,9 @@ class TripleGenerator(Transform):
         idx_jk_triples = torch.cat(idx_jk_triples)
         idx_j_triples, idx_k_triples = idx_jk_triples.split(1, dim=-1)
 
-        inputs[alias.idx_i_triples] = idx_i_triples
-        inputs[alias.idx_j_triples] = idx_j_triples.squeeze(-1)
-        inputs[alias.idx_k_triples] = idx_k_triples.squeeze(-1)
+        inputs[mpot.alias.idx_i_triples] = idx_i_triples
+        inputs[mpot.alias.idx_j_triples] = idx_j_triples.squeeze(-1)
+        inputs[mpot.alias.idx_k_triples] = idx_k_triples.squeeze(-1)
         return inputs
 
 
@@ -569,14 +568,14 @@ class NeighborsCounter(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-        idx_i = inputs[alias.idx_i]
+        idx_i = inputs[mpot.alias.idx_i]
 
         if self.sorted:
             _, n_nbh = torch.unique_consecutive(idx_i, return_counts=True)
         else:
             _, n_nbh = torch.unique(idx_i, return_counts=True)
 
-        inputs[alias.n_nbh] = n_nbh
+        inputs[mpot.alias.n_nbh] = n_nbh
         return inputs
 
 
@@ -601,9 +600,9 @@ class PositionWrapper(Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-        R = inputs[alias.R]
-        cell = inputs[alias.cell].view(3, 3)
-        pbc = inputs[alias.pbc]
+        R = inputs[mpot.alias.R]
+        cell = inputs[mpot.alias.cell].view(3, 3)
+        pbc = inputs[mpot.alias.pbc]
 
         inverse_cell = torch.inverse(cell)
         inv_positions = torch.sum(R[..., None] * inverse_cell[None, ...], dim=1)
@@ -621,6 +620,6 @@ class PositionWrapper(Transform):
         # Convert to positions
         R_wrapped = torch.sum(inv_positions[..., None] * cell[None, ...], dim=1)
 
-        inputs[alias.R] = R_wrapped
+        inputs[mpot.alias.R] = R_wrapped
 
         return inputs
