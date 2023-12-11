@@ -4,6 +4,7 @@
 # version: 0.0.1
 
 from typing import Callable
+from ..base import Potential
 import torch
 from torch import nn
 from .layers import PolynomialBasis, GaussianBasis, CutoffFunc
@@ -186,7 +187,7 @@ class ResUpdate(nn.Module):
         return old + new
 
 
-class PiNet(nn.Module):
+class PiNet(Potential):
     """This class implements the Keras Model for the PiNet network."""
 
     def __init__(
@@ -222,7 +223,7 @@ class PiNet(nn.Module):
             cutoff_type (string): cutoff function to use with the basis.
             act (string): activation function to use
         """
-        super(PiNet, self).__init__()
+        super(PiNet, self).__init__('PiNet')
         if act == "tanh":
             act = nn.Tanh()
         self.depth = depth

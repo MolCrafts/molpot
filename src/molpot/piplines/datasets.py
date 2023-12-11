@@ -135,6 +135,7 @@ class QM9(DataSet):
             
             dp = (
                 IterableWrapper(map(str, np.array(ordered_files)[irange]))
+                .open_files()
                 .read_qm9()
             )
         return dp
@@ -144,12 +145,12 @@ class QM9(DataSet):
         filename = "atomref.txt"
         atomrefs_path = self.fetch(url, filename, self.data_dir)
         props = [
-            self.aliases.zpve,
-            self.aliases.U0,
-            self.aliases.U,
-            self.aliases.H,
-            self.aliases.G,
-            self.aliases.Cv,
+            mpot.alias.QM9.zpve,
+            mpot.alias.QM9.U0,
+            mpot.alias.QM9.U,
+            mpot.alias.QM9.H,
+            mpot.alias.QM9.G,
+            mpot.alias.QM9.Cv,
         ]
         atref = {p: np.zeros((100,)) for p in props}
         with open(atomrefs_path) as f:

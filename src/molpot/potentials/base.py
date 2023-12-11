@@ -5,7 +5,7 @@ class Potential(nn.Module):
 
     def __init__(self, name):
         super().__init__()
-        self.name = name
+        self._name = name
 
     def forward(self, inputs):
         raise NotImplementedError
@@ -13,5 +13,6 @@ class Potential(nn.Module):
     def cite(self)->str:
         raise NotImplementedError
     
+    @property
     def name(self)->str:
-        return self.name
+        return self._name
