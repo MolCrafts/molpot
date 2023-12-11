@@ -48,7 +48,7 @@ class QM9Reader(IterDataPipe):
             frame[alias.natoms] = int(lines[0])
             props_line = lines[1].split()[1:]
             frame[alias.idx] = int(props_line[0])
-            for prop, p in zip(alias.alias(), props_line[1:]):
+            for prop, p in zip(alias.QM9.alias(), props_line[1:]):
                 if prop in alias:
                     src_unit = alias.QM9.get_unit(prop)
                     dst_unit = alias.get_unit(prop)
