@@ -4,17 +4,13 @@ Keys to access structure properties.
 Note: Had to be moved out of Structure class for TorchScript compatibility
 
 """
-from molpy import Alias as mpAlias
+from molpy import Alias
 
-__all__ = ["Alias"]
-
-class Alias(mpAlias):
-
-    scropes = mpAlias.scopes['default'].update({
-        'idx': mpAlias.Item('idx', '_idx', None, int, ''),
-        'Z': mpAlias.Item('Z', '_atomic_numbers', None, int, 'nuclear charge'),
-    })
-
+__all__ = ["alias"]
+    
+alias = Alias()
+alias.set("idx", "_idx", int, None, "")
+alias.set("Z", "_atomic_numbers", int, None, "nuclear charge")
 
 # alias = Alias('default')
 # alias.set('idx', '_idx', None, '')

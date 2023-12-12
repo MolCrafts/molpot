@@ -12,7 +12,7 @@ import numpy as np
 import re
 import tarfile
 import molpot as mpot
-from molpot import Alias
+from molpot import alias
 import molpy as mp
 
 __all__ = ["DataSet", "DataLoader2", "QM9"]
@@ -63,7 +63,7 @@ class DataSet:
             with open(self.data_dir / Path("meta.json"), "w") as f:
                 json.dump(self._data, f)
 
-    def prepare(self):
+    def prepare(self) -> IterDataPipe:
         raise NotImplementedError
 
     def fetch(self, url, filename, dir: Optional[Path | str] = None) -> Path:

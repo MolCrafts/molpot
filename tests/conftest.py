@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from molpot import Alias
+from molpot import alias
 
 
 @pytest.fixture(scope="session")
@@ -100,13 +100,13 @@ import torch
 @pytest.fixture
 def single_atom():
     props = {
-        Alias.Z: torch.tensor([6]),
-        Alias.R: torch.tensor([[0.0, 0.0, 0.0]], dtype=torch.float64),
-        Alias.cell: torch.tensor(
+        alias.Z: torch.tensor([6]),
+        alias.R: torch.tensor([[0.0, 0.0, 0.0]], dtype=torch.float64),
+        alias.cell: torch.tensor(
             [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], dtype=torch.float64
         ),
-        Alias.pbc: torch.tensor([False, False, False]),
-        Alias.natoms: torch.tensor([1]),
+        alias.pbc: torch.tensor([False, False, False]),
+        alias.natoms: torch.tensor([1]),
     }
     return props
 
@@ -114,15 +114,15 @@ def single_atom():
 @pytest.fixture
 def two_atoms():
     props = {
-        Alias.Z: torch.tensor([6, 2]),
-        Alias.R: torch.tensor(
+        alias.Z: torch.tensor([6, 2]),
+        alias.R: torch.tensor(
             [[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]], dtype=torch.float64
         ),
-        Alias.cell: torch.tensor(
+        alias.cell: torch.tensor(
             [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], dtype=torch.float64
         ),
-        Alias.pbc: torch.tensor([False, False, False]),
-        Alias.natoms: torch.tensor([2]),
+        alias.pbc: torch.tensor([False, False, False]),
+        alias.natoms: torch.tensor([2]),
     }
     return props
 
@@ -130,16 +130,16 @@ def two_atoms():
 @pytest.fixture
 def four_atoms():
     props = {
-        Alias.Z: torch.tensor([6, 2, 1, 7]),
-        Alias.R: torch.tensor(
+        alias.Z: torch.tensor([6, 2, 1, 7]),
+        alias.R: torch.tensor(
             [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0, 1.0]],
             dtype=torch.float64,
         ),
-        Alias.cell: torch.tensor(
+        alias.cell: torch.tensor(
             [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], dtype=torch.float64
         ),
-        Alias.pbc: torch.tensor([False, False, False]),
-        Alias.natoms: torch.tensor([4]),
+        alias.pbc: torch.tensor([False, False, False]),
+        alias.natoms: torch.tensor([4]),
     }
     return props
 
@@ -147,11 +147,11 @@ def four_atoms():
 @pytest.fixture
 def single_site_crystal():
     props = {
-        Alias.Z: torch.tensor([6]),
-        Alias.R: torch.tensor([[0.0, 0.0, 0.0]], dtype=torch.float64),
-        Alias.cell: torch.eye(3, dtype=torch.float64),
-        Alias.pbc: torch.tensor([True, True, True]),
-        Alias.natoms: torch.tensor([1]),
+        alias.Z: torch.tensor([6]),
+        alias.R: torch.tensor([[0.0, 0.0, 0.0]], dtype=torch.float64),
+        alias.cell: torch.eye(3, dtype=torch.float64),
+        alias.pbc: torch.tensor([True, True, True]),
+        alias.natoms: torch.tensor([1]),
     }
     return props
 
@@ -159,13 +159,13 @@ def single_site_crystal():
 @pytest.fixture
 def two_site_crystal():
     props = {
-        Alias.Z: torch.tensor([6, 1]),
-        Alias.R: torch.tensor(
+        alias.Z: torch.tensor([6, 1]),
+        alias.R: torch.tensor(
             [[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]], dtype=torch.float64
         ),
-        Alias.cell: torch.eye(3, dtype=torch.float64),
-        Alias.pbc: torch.tensor([True, True, True]),
-        Alias.natoms: torch.tensor([2]),
+        alias.cell: torch.eye(3, dtype=torch.float64),
+        alias.pbc: torch.tensor([True, True, True]),
+        alias.natoms: torch.tensor([2]),
     }
     return props
 
@@ -194,8 +194,8 @@ def environment_periodic():
     """
     cutoff = 5.0
     props = {
-        Alias.Z: torch.tensor(np.ones(5) * 18),
-        Alias.R: torch.tensor(
+        alias.Z: torch.tensor(np.ones(5) * 18),
+        alias.R: torch.tensor(
             [
                 [1.8475400, 3.1888300, 2.88069500],
                 [5.1524600, 1.4996200, 4.04490500],
@@ -205,14 +205,14 @@ def environment_periodic():
             ],
             dtype=torch.float64,
         ),
-        Alias.cell: torch.tensor(
+        alias.cell: torch.tensor(
             [[[7.0, 0.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 8.0]]], dtype=torch.float64
         ),
-        Alias.pbc: torch.tensor([True, True, True]),
-        Alias.natoms: torch.tensor([5]),
+        alias.pbc: torch.tensor([True, True, True]),
+        alias.natoms: torch.tensor([5]),
     }
     neighbors = {
-        Alias.idx_i: torch.LongTensor(
+        alias.idx_i: torch.LongTensor(
             [
                 0,
                 0,
@@ -252,7 +252,7 @@ def environment_periodic():
                 4,
             ]
         ),
-        Alias.idx_j: torch.LongTensor(
+        alias.idx_j: torch.LongTensor(
             [
                 4,
                 1,
@@ -292,7 +292,7 @@ def environment_periodic():
                 2,
             ]
         ),
-        Alias.offsets: torch.tensor(
+        alias.offsets: torch.tensor(
             [
                 [0.0, 0.0, -8.0],
                 [-7.0, 0.0, 0.0],
@@ -333,7 +333,7 @@ def environment_periodic():
             ],
             dtype=torch.float64,
         ),
-        Alias.Rij: torch.tensor(
+        alias.Rij: torch.tensor(
             [
                 [0.31884, -1.83127, -4.55375],
                 [-3.69508, -1.68921, 1.16421],
@@ -387,8 +387,8 @@ def environment_nonperiodic():
     """
     cutoff = 5.0
     props = {
-        Alias.Z: torch.tensor(np.ones(5) * 18),
-        Alias.R: torch.tensor(
+        alias.Z: torch.tensor(np.ones(5) * 18),
+        alias.R: torch.tensor(
             [
                 [1.8475400, 3.1888300, 2.88069500],
                 [5.1524600, 1.4996200, 4.04490500],
@@ -398,20 +398,20 @@ def environment_nonperiodic():
             ],
             dtype=torch.float64,
         ),
-        Alias.cell: torch.tensor(
+        alias.cell: torch.tensor(
             [[[7.0, 0.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 8.0]]], dtype=torch.float64
         ),
-        Alias.pbc: torch.tensor([False, False, False]),
-        Alias.natoms: torch.tensor([5]),
+        alias.pbc: torch.tensor([False, False, False]),
+        alias.natoms: torch.tensor([5]),
     }
     neighbors = {
-        Alias.idx_i: torch.LongTensor(
+        alias.idx_i: torch.LongTensor(
             [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4]
         ),
-        Alias.idx_j: torch.LongTensor(
+        alias.idx_j: torch.LongTensor(
             [1, 2, 3, 4, 0, 2, 3, 4, 4, 3, 1, 0, 0, 1, 2, 0, 1, 2]
         ),
-        Alias.Rij: torch.tensor(
+        alias.Rij: torch.tensor(
             [
                 [3.30492, -1.68921, 1.16421],
                 [2.13209, 1.22716, 2.89348],

@@ -5,7 +5,7 @@ import numpy as np
 import molpy as mp
 import molpot as mpot
 import torch
-from molpot import Alias
+from molpot import alias
 from molpot.transforms import TorchNeighborList
 from typing import Iterable, Optional
 
@@ -45,7 +45,7 @@ class QM9Reader(IterDataPipe):
     def __init__(self, source_dp: IterDataPipe):
         super().__init__()
         self.source_dp = source_dp
-        self.local_alias = Alias("qm9")
+        self.local_alias = alias("qm9")
 
     def __iter__(self) -> Iterable[mp.Frame]:
         local_alias = self.local_alias
@@ -54,22 +54,22 @@ class QM9Reader(IterDataPipe):
             frame = mp.Frame()
 
             lines = d[1].readlines()
-            frame[Alias.natoms] = int(lines[0])
+            frame[alias.natoms] = int(lines[0])
             props_line = lines[1].split()[1:]
-            frame[Alias.idx] = int(props_line[0])
+            frame[alias.idx] = int(props_line[0])
             for prop, p in zip(local_alias.get_aliases(), props_line[1:]):
                 if prop in local_alias:
                     src_unit = local_alias.get_unit(prop)
-                    dst_unit = Alias.get_unit(prop)
+                    dst_unit = alias.get_unit(prop)
                     frame[prop] = mp.units.convert(float(p), src_unit, dst_unit)
                 else:
                     frame[prop] = float(p)
 
-            frame.atoms[Alias.xyz] = [
+            frame.atoms[alias.xyz] = [
                 [i.replace("*^", "E") for i in line.split()[1:4]]
                 for line in lines[2:-3]
             ]
-            frame.atoms[Alias.Z] = [
+            frame.atoms[alias.Z] = [
                 mp.Element.get_atomic_number_by_symbol(line.split()[0])
                 for line in lines[2:-3]
             ]
