@@ -4,6 +4,7 @@ import molpy as mp
 from typing import Iterable
 from torchdata.datapipes.iter import IterDataPipe
 from molpot import alias
+import torch
 
 __all__ = [
     "ChemFilesReader",
@@ -56,10 +57,13 @@ class QM9Reader(IterDataPipe):
                 else:
                     frame[prop] = float(p)
 
-            frame.atoms[alias.xyz] = [
-                [i.replace("*^", "E") for i in line.split()[1:4]]
+            xyz = torch.tensor([
+                [float(i.replace("*^", "E")) for i in line.split()[1:4]]
                 for line in lines[2:-3]
-            ]
+            ])
+
+            frame.atoms[alias.xyz] = mp.units.convert(xyz, "angstrom", alias['xyz'].unit)
+
             frame.atoms[alias.Z] = [
                 mp.Element.get_atomic_number_by_symbol(line.split()[0])
                 for line in lines[2:-3]

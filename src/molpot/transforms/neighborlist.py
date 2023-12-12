@@ -5,6 +5,7 @@ from .base import Transform
 # from dirsync import sync
 import numpy as np
 from typing import Optional, Dict, List
+import molpy as mp
 
 __all__ = [
     "TorchNeighborList",
@@ -18,134 +19,7 @@ __all__ = [
 ]
 
 import molpot as mpot
-# import fasteners
 
-
-# class CacheException(Exception):
-#     pass
-
-
-# class CachedNeighborList(Transform):
-#     """
-#     Dynamic caching of neighbor lists.
-#     This wraps a neighbor list and stores the results the first time it is called
-#     for a dataset entry with the pid provided by AtomsDataset. Particularly,
-#     for large systems, this speeds up training significantly.
-
-#     Note:
-#         The provided cache location should be unique to the used dataset. Otherwise,
-#         wrong neighborhoods will be provided. The caching location can be reused
-#         across multiple runs, by setting `keep_cache=True`.
-#     """
-
-#     is_preprocessor: bool = True
-#     is_postprocessor: bool = False
-
-#     def __init__(
-#         self,
-#         cache_path: str,
-#         neighbor_list: Transform,
-#         nbh_transforms: Optional[List[torch.nn.Module]] = None,
-#         keep_cache: bool = False,
-#         cache_workdir: Optional[str] = None,
-#     ):
-#         """
-#         Args:
-#             cache_path: Path of caching directory.
-#             neighbor_list: the neighbor list to use
-#             nbh_transforms: transforms for manipulating the neighbor lists
-#                 provided by neighbor_list
-#             keep_cache: Keep cache at `cache_location` at the end of training, or copy
-#                 built/updated cache there from `cache_workdir` (if set). A pre-existing
-#                 cache at `cache_location` will not be deleted, while a temporary cache
-#                 at `cache_workdir` will always be removed.
-#             cache_workdir: If this is set, the cache will be build here, e.g. a cluster
-#                 scratch space for faster performance. An existing cache at
-#                 `cache_location` is copied here at the beginning of training, and
-#                 afterwards (if `keep_cache=True`) the final cache is copied to
-#                 `cache_workdir`.
-#         """
-#         super().__init__()
-#         self.neighbor_list = neighbor_list
-#         self.nbh_transforms = nbh_transforms or []
-#         self.keep_cache = keep_cache
-#         self.cache_path = cache_path
-#         self.cache_workdir = cache_workdir
-#         self.preexisting_cache = os.path.exists(self.cache_path)
-#         self.has_tmp_workdir = cache_workdir is not None
-
-#         os.makedirs(cache_path, exist_ok=True)
-
-#         if self.has_tmp_workdir:
-#             # cache workdir should be empty to avoid loading nbh lists from earlier runs
-#             if os.path.exists(cache_workdir):
-#                 raise CacheException("The provided `cache_workdir` already exists!")
-
-#             # copy existing nbh lists to cache workdir
-#             if self.preexisting_cache:
-#                 shutil.copytree(cache_path, cache_workdir)
-#             self.cache_location = cache_workdir
-#         else:
-#             # use cache_location to store and load neighborlists
-#             self.cache_location = cache_path
-
-#     def forward(
-#         self,
-#         inputs: Dict[str, torch.Tensor],
-#     ) -> Dict[str, torch.Tensor]:
-#         cache_file = os.path.join(
-#             self.cache_location, f"cache_{inputs[mpot.alias.idx][0]}.pt"
-#         )
-
-#         # try to read cached NBL
-#         try:
-#             data = torch.load(cache_file)
-#             inputs.update(data)
-#         except IOError:
-#             # acquire lock for caching
-#             lock = fasteners.InterProcessLock(
-#                 os.path.join(
-#                     self.cache_location, f"cache_{inputs[mpot.alias.idx][0]}.lock"
-#                 )
-#             )
-#             with lock:
-#                 # retry reading, in case other process finished in the meantime
-#                 try:
-#                     data = torch.load(cache_file)
-#                     inputs.update(data)
-#                 except IOError:
-#                     # now it is save to calculate and cache
-#                     inputs = self.neighbor_list(inputs)
-#                     for nbh_transform in self.nbh_transforms:
-#                         inputs = nbh_transform(inputs)
-#                     data = {
-#                         mpot.alias.idx_i: inputs[mpot.alias.idx_i],
-#                         mpot.alias.idx_j: inputs[mpot.alias.idx_j],
-#                         mpot.alias.offsets: inputs[mpot.alias.offsets],
-#                     }
-#                     torch.save(data, cache_file)
-#                 except Exception as e:
-#                     print(e)
-#         return inputs
-
-#     def teardown(self):
-#         if not self.keep_cache and not self.preexisting_cache:
-#             try:
-#                 shutil.rmtree(self.cache_path)
-#             except:
-#                 pass
-
-#         if self.cache_workdir is not None:
-#             if self.keep_cache:
-#                 try:
-#                     sync(self.cache_workdir, self.cache_path, "sync")
-#                 except:
-#                     pass
-
-#             try:
-#                 shutil.rmtree(self.cache_workdir)
-#             except:
-#                 pass
 
 class NeighborListTransform(Transform):
     """
@@ -168,22 +42,20 @@ class NeighborListTransform(Transform):
 
     def forward(
         self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
-        Z = inputs[mpot.alias.Z]
-        R = inputs[mpot.alias.R]
-        cell = inputs[mpot.alias.cell].view(3, 3)
-        pbc = inputs[mpot.alias.pbc]
+        inputs: mp.Frame,
+    ) -> mp.Frame:
+        R = inputs.atoms[mpot.alias.R]
+        cell = inputs.box.matrix
+        pbc = inputs.box.pbc
 
-        idx_i, idx_j, offset = self._build_neighbor_list(Z, R, cell, pbc, self._cutoff)
-        inputs[mpot.alias.idx_i] = idx_i.detach()
-        inputs[mpot.alias.idx_j] = idx_j.detach()
-        inputs[mpot.alias.offsets] = offset
+        idx_i, idx_j, offset = self._build_neighbor_list(R, cell, pbc, self._cutoff)
+        inputs.atoms[mpot.alias.idx_i] = idx_i.detach()
+        inputs.atoms[mpot.alias.idx_j] = idx_j.detach()
+        inputs.atoms[mpot.alias.offsets] = offset
         return inputs
 
     def _build_neighbor_list(
         self,
-        Z: torch.Tensor,
         positions: torch.Tensor,
         cell: torch.Tensor,
         pbc: torch.Tensor,
@@ -192,149 +64,6 @@ class NeighborListTransform(Transform):
         """Override with specific neighbor list implementation"""
         raise NotImplementedError
 
-# class BufferNeighborList(Transform):
-#     """
-#     Neighbor list provider utilizing a cutoff skin for computational efficiency. Wrapper
-#     around neighbor list classes such as, e.g., ASENeighborList. Designed for use cases
-#     with gradual structural changes such ase MD simulations and structure relaxations.
-
-#     Note:
-#         - Not meant to be used for training, since the shuffling of training data
-#             results in large structural deviations between subsequent training samples.
-#         - Not transferable between different molecule conformations or varying atom
-#             indexing.
-#     """
-
-#     is_preprocessor: bool = True
-#     is_postprocessor: bool = False
-
-#     def __init__(
-#         self,
-#         neighbor_list: Transform,
-#         nbh_transforms: Optional[List[torch.nn.Module]] = None,
-#         cutoff_skin: float = 0.3,
-#     ):
-#         """
-#         Args:
-#             neighbor_list: the neighbor list to use
-#             nbh_transforms: transforms for manipulating the neighbor lists
-#                 provided by neighbor_list
-#             cutoff_skin: float
-#                 If no atom has moved more than cutoff_skin/2 since the neighbor list
-#                 has been updated the last time, then the neighbor list is reused.
-#                 This will save some expensive rebuilds of the list.
-#         """
-
-#         super().__init__()
-
-#         self.neighbor_list = neighbor_list
-#         self.cutoff = neighbor_list._cutoff
-#         self.cutoff_skin = cutoff_skin
-#         self.neighbor_list._cutoff = self.cutoff + cutoff_skin
-#         self.nbh_transforms = nbh_transforms or []
-#         self.distance_calculator = spk.atomistic.PairwiseDistances()
-#         self.previous_inputs = {}
-
-#     # @timeit
-#     def forward(
-#         self,
-#         inputs: Dict[str, torch.Tensor],
-#     ) -> Dict[str, torch.Tensor]:
-
-#         update_required, inputs = self._update(inputs)
-#         inputs = self.distance_calculator(inputs)
-#         inputs = self._remove_neighbors_in_skin(inputs)
-
-#         return inputs
-
-#     def reset(self):
-#         self.previous_inputs = {}
-
-#     def _remove_neighbors_in_skin(
-#         self,
-#         inputs: Dict[str, torch.Tensor],
-#     ) -> Dict[str, torch.Tensor]:
-
-#         Rij = inputs[mpot.alias.Rij]
-#         idx_i = inputs[mpot.alias.idx_i]
-#         idx_j = inputs[mpot.alias.idx_j]
-#         offsets = inputs[mpot.alias.offsets]
-
-#         rij = torch.norm(inputs[mpot.alias.Rij], dim=-1)
-#         cidx = torch.nonzero(rij <= self.cutoff).squeeze(-1)
-
-#         inputs[mpot.alias.Rij] = Rij[cidx]
-#         inputs[mpot.alias.idx_i] = idx_i[cidx]
-#         inputs[mpot.alias.idx_j] = idx_j[cidx]
-#         inputs[mpot.alias.offsets] = offsets[cidx]
-
-#         return inputs
-
-#     def _update(self, inputs):
-#         """Make sure the list is up-to-date."""
-
-#         # get sample index
-#         sample_idx = inputs[mpot.alias.idx].item()
-
-#         # check if previous neighbor list exists and make sure that this is not the
-#         # first update step
-#         if sample_idx in self.previous_inputs.keys():
-#             # load previous inputs
-#             previous_inputs = self.previous_inputs[sample_idx]
-#             # extract previous structure
-#             previous_positions = np.array(previous_inputs[mpot.alias.R], copy=True)
-#             previous_cell = np.array(
-#                 previous_inputs[mpot.alias.cell].view(3, 3), copy=True
-#             )
-#             previous_pbc = np.array(previous_inputs[mpot.alias.pbc], copy=True)
-#             # extract current structure
-#             positions = inputs[mpot.alias.R]
-#             cell = inputs[mpot.alias.cell].view(3, 3)
-#             pbc = inputs[mpot.alias.pbc]
-#             # check if structure change is sufficiently small to reuse previous neighbor
-#             # list
-#             if (
-#                 (previous_pbc == pbc.numpy()).any()
-#                 and (previous_cell == cell.numpy()).any()
-#                 and ((previous_positions - positions.numpy()) ** 2).sum(1).max()
-#                 < 0.25 * self.cutoff_skin**2
-#             ):
-#                 # reuse previous neighbor list
-#                 inputs[mpot.alias.idx_i] = (
-#                     previous_inputs[mpot.alias.idx_i].clone()
-#                 )
-#                 inputs[mpot.alias.idx_j] = (
-#                     previous_inputs[mpot.alias.idx_j].clone()
-#                 )
-#                 inputs[mpot.alias.offsets] = (
-#                     previous_inputs[mpot.alias.offsets].clone()
-#                 )
-#                 return False, inputs
-
-#         # build new neighbor list
-#         inputs = self._build(inputs)
-#         return True, inputs
-
-#     def _build(self, inputs):
-
-#         # apply all transforms to obtain new neighbor list
-#         inputs = self.neighbor_list(inputs)
-#         for nbh_transform in self.nbh_transforms:
-#             inputs = nbh_transform(inputs)
-
-#         # store new reference conformation and remove old one
-#         sample_idx = inputs[mpot.alias.idx].item()
-#         stored_inputs = {
-#             mpot.alias.R: inputs[mpot.alias.R].detach().clone(),
-#             mpot.alias.cell: inputs[mpot.alias.cell].detach().clone(),
-#             mpot.alias.pbc: inputs[mpot.alias.pbc].detach().clone(),
-#             mpot.alias.idx_i: inputs[mpot.alias.idx_i].detach().clone(),
-#             mpot.alias.idx_j: inputs[mpot.alias.idx_j].detach().clone(),
-#             mpot.alias.offsets: inputs[mpot.alias.offsets].detach().clone(),
-#         }
-#         self.previous_inputs.update({sample_idx: stored_inputs})
-
-#         return inputs
 
 class TorchNeighborList(NeighborListTransform):
     """
@@ -346,7 +75,11 @@ class TorchNeighborList(NeighborListTransform):
         https://github.com/aiqm/torchani/blob/master/torchani/aev.py
     """
 
-    def _build_neighbor_list(self, Z, positions, cell, pbc, cutoff):
+    def _build_neighbor_list(self, positions, cell, pbc, cutoff):
+
+        cell = torch.tensor(cell, dtype=torch.float32)
+        pbc = torch.tensor(pbc, dtype=torch.bool)
+
         # Check if shifts are needed for periodic boundary conditions
         if torch.all(pbc == 0):
             shifts = torch.zeros(0, 3, device=cell.device, dtype=torch.long)
@@ -410,7 +143,7 @@ class TorchNeighborList(NeighborListTransform):
         in_cutoff = torch.nonzero(distances < cutoff, as_tuple=False)
 
         # 6) Reduce tensors to relevant components
-        pair_index = in_cutoff.squeeze()
+        pair_index = in_cutoff.squeeze()  # potential bug if in_cutoff.shape == (1, 1)
         atom_index_i = pi_all[pair_index]
         atom_index_j = pj_all[pair_index]
         offsets = shifts_all[pair_index]

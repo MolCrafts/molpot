@@ -103,23 +103,23 @@ class QM9(DataSet):
             import requests
             import io
 
-            # qm9_url = "https://ndownloader.figshare.com/files/3195389"
-            # qm9_bytes = requests.get(qm9_url, allow_redirects=True).content
-            # qm9_fobj = io.BytesIO(qm9_bytes)
-            # qm9_fobj.seek(0)
-            # qm9_tar = tarfile.open(fileobj=qm9_fobj, mode="r:bz2")
-            # names = qm9_tar.getnames()
+            qm9_url = "https://ndownloader.figshare.com/files/3195389"
+            qm9_bytes = requests.get(qm9_url, allow_redirects=True).content
+            qm9_fobj = io.BytesIO(qm9_bytes)
+            qm9_fobj.seek(0)
+            qm9_tar = tarfile.open(fileobj=qm9_fobj, mode="r:bz2")
+            names = qm9_tar.getnames()
 
-            # exclude_url = "https://figshare.com/ndownloader/files/3195404"
-            # exclude_bytes = requests.get(exclude_url, allow_redirects=True).content
-            # exclude_fobj = io.TextIOWrapper(io.BytesIO(exclude_bytes))
-            # exclude = [int(line.split()[0]) for line in exclude_fobj.readlines()[9:-1]]
-            # names = [name for name in names if int(name[-10:-4]) not in exclude]
-            # dp = IterableWrapper(names).map(
-            #     lambda x: io.TestIOWrapper(
-            #         qm9_tar.extractfile(x)
-            #     ).readlines()
-            # ).read_qm9()
+            exclude_url = "https://figshare.com/ndownloader/files/3195404"
+            exclude_bytes = requests.get(exclude_url, allow_redirects=True).content
+            exclude_fobj = io.TextIOWrapper(io.BytesIO(exclude_bytes))
+            exclude = [int(line.split()[0]) for line in exclude_fobj.readlines()[9:-1]]
+            names = [name for name in names if int(name[-10:-4]) not in exclude]
+            dp = IterableWrapper(names).map(
+                lambda x: io.TestIOWrapper(
+                    qm9_tar.extractfile(x)
+                ).readlines()
+            ).read_qm9()
 
         else:
             # atomrefs = self._download_atomrefs()
@@ -190,121 +190,3 @@ class QM9(DataSet):
             key=_sort_qm9,
         )  # sort by index in filename
         return ordered_files
-
-
-# class _GDMLDataModule(DataSet):
-#     def __init__(
-#         self,
-#         molecule: str,
-#         datasets_dict: dict[str, str],
-#         download_url: str,
-#         data_dir: Optional[Path | str],
-#     ):
-#         super().__init__("_GDMLData", data_dir)
-#         self.url = download_url
-#         self.datasets_dict = datasets_dict
-#         self.molecule = molecule
-
-#     def prepare(self) -> DataLoader2:
-#         properties = self._download_data()
-#         dp = IterableWrapper(properties).in_memory_cache()
-
-#         # rs = MultiProcessingReadingService(num_workers=1)
-#         dl = DataLoader2(dp)
-#         return dl
-
-#     def _download_data(
-#         self,
-#     ):
-#         raw_path = self.fetch(self.url, self.datasets_dict[self.molecule])
-#         data = np.load(raw_path)
-
-#         numbers = data["z"]
-#         frames = []
-#         for positions, energies, forces in zip(data["R"], data["E"], data["F"]):
-#             frame = mp.Frame()
-#             frame[mpot.Alias.energy] = (
-#                 energies if type(energies) is np.ndarray else np.array([energies])
-#             )
-#             frame[mpot.Alias.forces] = forces
-#             frame[mpot.Alias.Z] = numbers
-#             frame[mpot.Alias.R] = positions
-#             frame.box.set_matrix(np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]]))
-#             frame.box.pbc = np.array([False, False, False])
-#             frames.append(frames)
-
-#         return frames
-
-
-# class MD17(_GDMLDataModule):
-#     atomrefs = {
-#         mpot.Alias.energy: [
-#             0.0,
-#             -313.5150902000774,
-#             0.0,
-#             0.0,
-#             0.0,
-#             0.0,
-#             -23622.587180094913,
-#             -34219.46811826416,
-#             -47069.30768969713,
-#         ]
-#     }
-
-#     datasets_dict = dict(
-#         aspirin="md17_aspirin.npz",
-#         # aspirin_ccsd='aspirin_ccsd.zip',
-#         azobenzene="azobenzene_dft.npz",
-#         benzene="md17_benzene2017.npz",
-#         ethanol="md17_ethanol.npz",
-#         # ethanol_ccsdt='ethanol_ccsd_t.zip',
-#         malonaldehyde="md17_malonaldehyde.npz",
-#         # malonaldehyde_ccsdt='malonaldehyde_ccsd_t.zip',
-#         naphthalene="md17_naphthalene.npz",
-#         paracetamol="paracetamol_dft.npz",
-#         salicylic_acid="md17_salicylic.npz",
-#         toluene="md17_toluene.npz",
-#         # toluene_ccsdt='toluene_ccsd_t.zip',
-#         uracil="md17_uracil.npz",
-#     )
-
-#     def __init__(self, data_dir: Optional[Path | str], molecule: str):
-#         super().__init__(
-#             molecule,
-#             self.datasets_dict,
-#             "http://www.quantum-machine.org/gdml/data/npz/",
-#             data_dir,
-#         )
-
-
-# class MD22(_GDMLDataModule):
-#     atomrefs = {
-#         mpot.Alias.energy: [
-#             0.0,
-#             -313.5150902000774,
-#             0.0,
-#             0.0,
-#             0.0,
-#             0.0,
-#             -23622.587180094913,
-#             -34219.46811826416,
-#             -47069.30768969713,
-#         ]
-#     }
-#     datasets_dict = {
-#         "Ac-Ala3-NHMe": "md22_Ac-Ala3-NHMe.npz",
-#         "DHA": "md22_DHA.npz",
-#         "stachyose": "md22_stachyose.npz",
-#         "AT-AT": "md22_AT-AT.npz",
-#         "AT-AT-CG-CG": "md22_AT-AT-CG-CG.npz",
-#         "buckyball-catcher": "md22_buckyball-catcher.npz",
-#         "double-walled_nanotube": "md22_double-walled_nanotube.npz",
-#     }
-
-#     def __init__(self, data_dir: Optional[Path | str], molecule: str):
-#         super().__init__(
-#             molecule,
-#             self.datasets_dict,
-#             "http://www.quantum-machine.org/gdml/repo/datasets/",
-#             data_dir,
-#         )

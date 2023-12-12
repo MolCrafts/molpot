@@ -92,7 +92,7 @@ class Trainer(BaseTrainer):
         self._pre_train()
         result = {}
         nstep = self.start_step + 1
-        for i, (data, target) in enumerate(self.train_data_loader):
+        for i, _ in enumerate(self.train_data_loader):
             result.update(
                 {
                     "nstep": nstep + i,

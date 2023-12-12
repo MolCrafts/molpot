@@ -12,7 +12,7 @@ from torchdata.datapipes import functional_datapipe
 
 __all__ = ["CollateFrames"]
 
-def _collate(batch: Sequence[mp.Frame]):
+def _collate_frame(batch: Sequence[mp.Frame]):
 
     coll_batch = {}
 
@@ -42,5 +42,5 @@ def _collate(batch: Sequence[mp.Frame]):
 @functional_datapipe("collate_frames")
 class CollateFrames(Collator):
     def __init__(self, datapipe, **kwargs):
-        super().__init__(datapipe, collate_fn=_collate, **kwargs)
+        super().__init__(datapipe, collate_fn=_collate_frame, **kwargs)
 

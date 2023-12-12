@@ -19,7 +19,4 @@ class CalcNBList(IterDataPipe):
     def __iter__(self):
         nblist_fn = TorchNeighborList(cutoff=self.cutoff)
         for d in self.dp:
-            assert isinstance(d, mp.Frame)
-            nblist = nblist_fn(d)
-            d
-            yield d
+            yield nblist_fn(d)

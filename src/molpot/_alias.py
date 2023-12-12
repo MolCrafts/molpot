@@ -11,19 +11,19 @@ __all__ = ["alias"]
 alias = Alias()
 alias.set("idx", "_idx", int, None, "")
 alias.set("Z", "_atomic_numbers", int, None, "nuclear charge")
+alias.set('idx', '_idx', int, None, '')
+alias.set('idx_m', '_idx_m', int, None, 'indices of systems')
+alias.set('idx_i', '_idx_i', int, None, 'indices of center atoms')
+alias.set('idx_j', '_idx_j', int, None, 'indices of neighboring atoms')
+alias.set('idx_i_lr', '_idx_i_lr', int, None, 'indices of center atoms for # long-range')
+alias.set('idx_j_lr', '_idx_j_lr', int, None, 'indices of neighboring atoms for # long-range')
+alias.set('offsets', '_offsets', int, None, 'cell offset vectors')
 
 # alias = Alias('default')
-# alias.set('idx', '_idx', None, '')
-# alias.set('idx_m', '_idx_m', None, 'indices of systems')
-# alias.set('idx_i', '_idx_i', None, 'indices of center atoms')
-# alias.set('idx_j', '_idx_j', None, 'indices of neighboring atoms')
-# alias.set('idx_i_lr', '_idx_i_lr', None, 'indices of center atoms for # long-range')
-# alias.set('idx_j_lr', '_idx_j_lr', None, 'indices of neighboring atoms for # long-range')
-# alias.set('offsets', '_offsets', None, 'cell offset vectors')
 # alias.set('energy', 'energy', None, '')
 
-# kw.set("idx", "_idx", None, "")
-# kw.set("Z", "_atomic_numbers", None, "nuclear charge")
+
+
 # alias.set("cell", "_cell", None, "unit cell")
 # kw.set("strain", "strain", None, "")
 # alias.set("pbc", "_pbc", None, "periodic boundary conditions")

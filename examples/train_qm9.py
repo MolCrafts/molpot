@@ -5,7 +5,7 @@ def load_qm9()->tuple[mpot.DataLoader, mpot.DataLoader]:
 
     qm9_dataset = mpot.QM9(data_dir="data/qm9")
     dp = qm9_dataset.prepare()
-    train, valid = dp.calc_nblist(0.5).shuffle().set_length(1000).random_split(weights={"train": 0.8, "valid": 0.2}, seed=42)
+    train, valid = dp.calc_nblist(5).shuffle().set_length(1000).random_split(weights={"train": 0.8, "valid": 0.2}, seed=42)
     train_dataloader = mpot.create_dataloader(train, nworkers=0)
     valid_dataloader = mpot.create_dataloader(valid, nworkers=0)
     return train_dataloader, valid_dataloader

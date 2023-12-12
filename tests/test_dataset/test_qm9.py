@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from molpot import QM9
+import molpot as mpot
 from pathlib import Path
 
 @pytest.fixture
@@ -13,16 +13,11 @@ def test_qm9_path():
 #     "Run only local, not in CI. Otherwise takes too long and requires downloading the data"
 # )
 def test_qm9(test_qm9_path):
-    pass
-
-if __name__ == "__main__":
     
-    qm9 = QM9('./testdata/test_qm9')
-    loader = qm9.prepare()
-    
-    for i, l in enumerate(loader):
-        print(l)
-        if i == 2:
-            break
-
-    loader.shutdown()
+    qm9_dataset = mpot.QM9(data_dir=test_qm9_path)
+    dp = qm9_dataset.prepare()
+    dp = dp.calc_nblist(5).batch(batch_size=3).collate_frames()
+    dataloader = mpot.create_dataloader(dp, nworkers=0)
+    for d in enumerate(dataloader):
+        print(d)
+        break
