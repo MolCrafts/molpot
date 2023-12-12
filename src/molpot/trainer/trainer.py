@@ -92,14 +92,10 @@ class Trainer(BaseTrainer):
         self._pre_train()
         result = {}
         nstep = self.start_step + 1
-        for i, _ in enumerate(self.train_data_loader):
-            result.update(
-                {
-                    "nstep": nstep + i,
-                    "data": data.to(self.device),
-                    "target": target.to(self.device),
-                }
-            )
+        for i, data in self.train_data_loader:
+            result["nstep"] = nstep + i
+            result["target"] = {"energy": data["energy"]}
+            result["data"] = data
             result = self._pre_iter(result)
             result = self._train(result)
             result = self._train_log(result)

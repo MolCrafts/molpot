@@ -1,6 +1,10 @@
 import torch
 import torch.nn as nn
+from typing import Callable, Union
+import torch.nn.functional as F
+from torch.nn.init import xavier_uniform_
 
+from torch.nn.init import zeros_
 
 import numpy as np
 
@@ -10,8 +14,139 @@ __all__ = [
     "PolynomialBasis",
     "AtomicOnehot",
     "ANNOutput",
+    "Dense"
 ]
 
+
+
+__all__ = ["Dense"]
+
+
+class Dense(nn.Linear):
+    r"""Fully connected linear layer with activation function.
+
+    .. math::
+       y = activation(x W^T + b)
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool = True,
+        activation: Union[Callable, nn.Module] = None,
+        weight_init: Callable = xavier_uniform_,
+        bias_init: Callable = zeros_,
+    ):
+        """
+        Args:
+            in_features: number of input feature :math:`x`.
+            out_features: umber of output features :math:`y`.
+            bias: If False, the layer will not adapt bias :math:`b`.
+            activation: if None, no activation function is used.
+            weight_init: weight initializer from current weight.
+            bias_init: bias initializer from current bias.
+        """
+        self.weight_init = weight_init
+        self.bias_init = bias_init
+        super(Dense, self).__init__(in_features, out_features, bias)
+
+        self.activation = activation
+        if self.activation is None:
+            self.activation = nn.Identity()
+
+    def reset_parameters(self):
+        self.weight_init(self.weight)
+        if self.bias is not None:
+            self.bias_init(self.bias)
+
+    def forward(self, input: torch.Tensor):
+        y = F.linear(input, self.weight, self.bias)
+        y = self.activation(y)
+        return y
+
+def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
+    """ Behler-style cosine cutoff.
+
+        .. math::
+           f(r) = \begin{cases}
+            0.5 \times \left[1 + \cos\left(\frac{\pi r}{r_\text{cutoff}}\right)\right]
+              & r < r_\text{cutoff} \\
+            0 & r \geqslant r_\text{cutoff} \\
+            \end{cases}
+
+        Args:
+            cutoff (float, optional): cutoff radius.
+
+        """
+
+    # Compute values of cutoff function
+    input_cut = 0.5 * (torch.cos(input * math.pi / cutoff) + 1.0)
+    # Remove contributions beyond the cutoff radius
+    input_cut *= (input < cutoff).float()
+    return input_cut
+
+
+class CosineCutoff(nn.Module):
+    r""" Behler-style cosine cutoff module.
+
+    .. math::
+       f(r) = \begin{cases}
+        0.5 \times \left[1 + \cos\left(\frac{\pi r}{r_\text{cutoff}}\right)\right]
+          & r < r_\text{cutoff} \\
+        0 & r \geqslant r_\text{cutoff} \\
+        \end{cases}
+
+    """
+
+    def __init__(self, cutoff: float):
+        """
+        Args:
+            cutoff (float, optional): cutoff radius.
+        """
+        super(CosineCutoff, self).__init__()
+        self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
+
+    def forward(self, input: torch.Tensor):
+        return cosine_cutoff(input, self.cutoff)
+    
+def gaussian_rbf(inputs: torch.Tensor, offsets: torch.Tensor, widths: torch.Tensor):
+    coeff = -0.5 / torch.pow(widths, 2)
+    diff = inputs[..., None] - offsets
+    y = torch.exp(coeff * torch.pow(diff, 2))
+    return y
+
+class GaussianRBF(nn.Module):
+    r"""Gaussian radial basis functions."""
+
+    def __init__(
+        self, n_rbf: int, cutoff: float, start: float = 0.0, trainable: bool = False
+    ):
+        """
+        Args:
+            n_rbf: total number of Gaussian functions, :math:`N_g`.
+            cutoff: center of last Gaussian function, :math:`\mu_{N_g}`
+            start: center of first Gaussian function, :math:`\mu_0`.
+            trainable: If True, widths and offset of Gaussian functions
+                are adjusted during training process.
+        """
+        super(GaussianRBF, self).__init__()
+        self.n_rbf = n_rbf
+
+        # compute offset and width of Gaussian functions
+        offset = torch.linspace(start, cutoff, n_rbf)
+        widths = torch.FloatTensor(
+            torch.abs(offset[1] - offset[0]) * torch.ones_like(offset)
+        )
+        if trainable:
+            self.widths = nn.Parameter(widths)
+            self.offsets = nn.Parameter(offset)
+        else:
+            self.register_buffer("widths", widths)
+            self.register_buffer("offsets", offset)
+
+    def forward(self, inputs: torch.Tensor):
+        return gaussian_rbf(inputs, self.offsets, self.widths)
 
 class AtomicOnehot(nn.Module):
     R"""One-hot embedding layer
