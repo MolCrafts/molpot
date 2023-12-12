@@ -1,19 +1,6 @@
 from functools import partial
-from torchdata.datapipes.iter import IterDataPipe, IterableWrapper
+from torchdata.datapipes.iter import IterDataPipe
 from torchdata.dataloader2 import DataLoader2, MultiProcessingReadingService
-from typing import Optional, Any
-from pathlib import Path
-import tempfile
-import time
-import json
-import logging
-from urllib.request import urlretrieve
-import numpy as np
-import re
-import tarfile
-import molpot as mpot
-from molpot import alias
-import molpy as mp
 
 __all__ = ['DataLoader', 'create_dataloader']
 
@@ -24,7 +11,6 @@ def create_dataloader(datapipe: IterDataPipe, nworkers:int | None=None) -> DataL
 
     if nworkers:
         rs = MultiProcessingReadingService(nworkers)
+        return DataLoader(datapipe, reading_service=rs)
     else:
-        rs = None
-    make_dataloader = partial(DataLoader, reading_service=rs)
-    return make_dataloader(datapipe)
+        return DataLoader(datapipe)

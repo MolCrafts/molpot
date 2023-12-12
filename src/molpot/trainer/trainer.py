@@ -64,7 +64,6 @@ class Trainer(BaseTrainer):
         model: Potential,
         criterion,
         optimizer,
-        metrics,
         train_data_loader,
         lr_scheduler=None,
         valid_data_loader=None,
@@ -81,8 +80,8 @@ class Trainer(BaseTrainer):
         self.train_data_loader = train_data_loader
         self.valid_data_loader = valid_data_loader
 
-        self.metrics = metrics
-        self.metric_fns = {metric: get_metric(metric) for metric in metrics}
+        self.metrics = config["trainer"]["metrics"]
+        self.metric_fns = {metric: get_metric(metric) for metric in self.metrics}
 
         self.lr_scheduler = lr_scheduler
         self.device, self.device_ids = prepare_device(config["trainer"]["device"])
