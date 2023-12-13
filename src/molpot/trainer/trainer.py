@@ -8,7 +8,7 @@ from .metric import get_metric
 from ..potentials import Potential
 import logging
 from .strategy import EarlyStop, PlannedStop
-
+from molpot import alias
 
 class BaseTrainer:
     def __init__(self, model: Potential, config: dict):
@@ -61,7 +61,7 @@ class BaseTrainer:
 class Trainer(BaseTrainer):
     def __init__(
         self,
-        model: Potential,
+        model,
         criterion,
         optimizer,
         train_data_loader,
@@ -74,17 +74,17 @@ class Trainer(BaseTrainer):
         self.criterion = criterion
         self.optimizer = optimizer
 
-        self.save_dir = Path(config["trainer"]["save_dir"])
-        self.resume = config["trainer"].get("resume", None)
+        self.save_dir = Path(config["save_dir"])
+        self.resume = config.get("resume", None)
 
         self.train_data_loader = train_data_loader
         self.valid_data_loader = valid_data_loader
 
-        self.metrics = config["trainer"]["metrics"]
+        self.metrics = config["metrics"]
         self.metric_fns = {metric: get_metric(metric) for metric in self.metrics}
 
         self.lr_scheduler = lr_scheduler
-        self.device, self.device_ids = prepare_device(config["trainer"]["device"])
+        self.device, self.device_ids = prepare_device(config["device"])
 
     def train(self, nsteps: int):
         plannedStop = PlannedStop(nsteps)
@@ -92,9 +92,9 @@ class Trainer(BaseTrainer):
         self._pre_train()
         result = {}
         nstep = self.start_step + 1
-        for i, data in self.train_data_loader:
+        for i, data in enumerate(self.train_data_loader):
             result["nstep"] = nstep + i
-            result["target"] = {"energy": data["energy"]}
+            result["target"] = {alias.energy: data[alias.QM9.energy]}
             result["data"] = data
             result = self._pre_iter(result)
             result = self._train(result)

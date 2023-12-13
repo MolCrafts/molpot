@@ -5,6 +5,7 @@ Note: Had to be moved out of Structure class for TorchScript compatibility
 
 """
 from molpy import Alias
+import numpy as np
 
 __all__ = ["alias"]
     
@@ -18,6 +19,10 @@ alias.set('idx_j', '_idx_j', int, None, 'indices of neighboring atoms')
 alias.set('idx_i_lr', '_idx_i_lr', int, None, 'indices of center atoms for # long-range')
 alias.set('idx_j_lr', '_idx_j_lr', int, None, 'indices of neighboring atoms for # long-range')
 alias.set('offsets', '_offsets', int, None, 'cell offset vectors')
+alias.set('R', "_xyz", np.ndarray, "angstrom", "atomic coordinates")
+alias.set('Rij', '_Rij', np.ndarray, 'angstrom', 'vectors pointing from center atoms to neighboring atoms')
+alias.set('cell', '_cell', np.ndarray, 'angstrom', 'unit cell')
+alias.set('pbc', '_pbc', np.ndarray, None, 'periodic boundary conditions')
 
 # alias = Alias('default')
 # alias.set('energy', 'energy', None, '')

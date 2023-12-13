@@ -13,6 +13,7 @@ import re
 import tarfile
 import molpot as mpot
 import molpy as mp
+from itertools import islice
 
 __all__ = ["DataSet", "DataLoader2", "QM9"]
 
@@ -78,6 +79,7 @@ class QM9(DataSet):
         data_dir: Optional[Path | str] = None,
         in_memory: bool = False,
         remove_uncharacterized: bool = True,
+        test_size: int = 0,
     ):
         super().__init__("QM9", data_dir, in_memory)
         self.remove_uncharacterized = remove_uncharacterized
@@ -87,16 +89,17 @@ class QM9(DataSet):
         mpot.alias.QM9.set("C", "_C", float, "GHz", "rotational_constant_C")
         mpot.alias.QM9.set("mu", "_mu", float, "Debye", "dipole_moment")
         mpot.alias.QM9.set("alpha", "_alpha", float, "a0 a0 a0", "isotropic_polarizability")
-        mpot.alias.QM9.set("homo", "_homo", float, "Ha", "homo")
-        mpot.alias.QM9.set("lumo", "_lumo", float, "Ha", "lump")
-        mpot.alias.QM9.set("gap", "_gap", float, "Ha", "gap")
+        mpot.alias.QM9.set("homo", "_homo", float, "hartree", "homo")
+        mpot.alias.QM9.set("lumo", "_lumo", float, "hartree", "lump")
+        mpot.alias.QM9.set("gap", "_gap", float, "hartree", "gap")
         mpot.alias.QM9.set("r2", "_r2", float, "a0 a0", "electronic_spatial_extent")
-        mpot.alias.QM9.set("zpve", "_zpve", float, "Ha", "zpve")
-        mpot.alias.QM9.set("U0", "_U0", float, "", "_energy_U0")
-        mpot.alias.QM9.set("U", "_U", float, "Ha", "_energy_U")
-        mpot.alias.QM9.set("H", "_H", float, "Ha", "_enthalpy_H")
-        mpot.alias.QM9.set("G", "_G", float, "Ha", "_free_energy")
+        mpot.alias.QM9.set("zpve", "_zpve", float, "hartree", "zpve")
+        mpot.alias.QM9.set("U0", "_U0", float, "hartree", "_energy_U0")
+        mpot.alias.QM9.set("energy", "_U", float, "hartree", "_energy_U")
+        mpot.alias.QM9.set("H", "_H", float, "hartree", "_enthalpy_H")
+        mpot.alias.QM9.set("G", "_G", float, "hartree", "_free_energy")
         mpot.alias.QM9.set("Cv", "_Cv", float, "cal/mol/K", "_heat_capacity")
+        self.test_size = test_size
 
     def prepare(self) -> IterDataPipe:
         if self.in_memory:
@@ -185,8 +188,11 @@ class QM9(DataSet):
             log.info("Done.")
 
         log.info("Parse xyz files...")
+        xyz_files = raw_path.rglob("*.xyz")
+        if self.test_size:
+            xyz_files = islice(xyz_files, self.test_size)
         ordered_files = sorted(
-            raw_path.rglob("*.xyz"),
+            xyz_files,
             key=_sort_qm9,
         )  # sort by index in filename
         return ordered_files

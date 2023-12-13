@@ -9,23 +9,20 @@ import molpy as mp
 
 __all__ = [
     "TorchNeighborList",
-    "NeighborsCounter",
-    "TripleGenerator",
-    "CachedNeighborList",
-    "NeighborListTransform",
-    "PositionWrapper",
-    "BufferNeighborList",
-    "NeighborsFilter",
 ]
 
 import molpot as mpot
 
 
-class NeighborListTransform(Transform):
+class TorchNeighborList(Transform):
     """
-    Base class for neighbor lists.
-    """
+    Environment provider making use of neighbor lists as implemented in TorchAni
 
+    Supports cutoffs and PBCs and can be performed on either CPU or GPU.
+
+    References:
+        https://github.com/aiqm/torchani/blob/master/torchani/aev.py
+    """
     is_preprocessor: bool = True
     is_postprocessor: bool = False
 
@@ -42,44 +39,21 @@ class NeighborListTransform(Transform):
 
     def forward(
         self,
-        inputs: mp.Frame,
-    ) -> mp.Frame:
-        R = inputs.atoms[mpot.alias.R]
-        cell = inputs.box.matrix
-        pbc = inputs.box.pbc
+        inputs: dict,
+    ) -> dict:
+        R = inputs[mpot.alias.R]
+        cell = inputs[mpot.alias.cell]
+        pbc = inputs[mpot.alias.pbc]
 
         idx_i, idx_j, offset = self._build_neighbor_list(R, cell, pbc, self._cutoff)
-        inputs.atoms[mpot.alias.idx_i] = idx_i.detach()
-        inputs.atoms[mpot.alias.idx_j] = idx_j.detach()
-        inputs.atoms[mpot.alias.offsets] = offset
+        inputs[mpot.alias.idx_i] = idx_i.detach()
+        inputs[mpot.alias.idx_j] = idx_j.detach()
+        inputs[mpot.alias.offsets] = offset
+        inputs[mpot.alias.Rij] = R[idx_j] - R[idx_i] + offset
+
         return inputs
 
-    def _build_neighbor_list(
-        self,
-        positions: torch.Tensor,
-        cell: torch.Tensor,
-        pbc: torch.Tensor,
-        cutoff: float,
-    ):
-        """Override with specific neighbor list implementation"""
-        raise NotImplementedError
-
-
-class TorchNeighborList(NeighborListTransform):
-    """
-    Environment provider making use of neighbor lists as implemented in TorchAni
-
-    Supports cutoffs and PBCs and can be performed on either CPU or GPU.
-
-    References:
-        https://github.com/aiqm/torchani/blob/master/torchani/aev.py
-    """
-
     def _build_neighbor_list(self, positions, cell, pbc, cutoff):
-
-        cell = torch.tensor(cell, dtype=torch.float32)
-        pbc = torch.tensor(pbc, dtype=torch.bool)
-
         # Check if shifts are needed for periodic boundary conditions
         if torch.all(pbc == 0):
             shifts = torch.zeros(0, 3, device=cell.device, dtype=torch.long)
