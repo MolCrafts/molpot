@@ -7,7 +7,7 @@ __all__ = ['DataLoader', 'create_dataloader']
 class DataLoader(DataLoader2):
     pass
 
-def create_dataloader(datapipe: IterDataPipe, nworkers:int | None=None) -> DataLoader:
+def create_dataloader(datapipe: IterDataPipe, nworkers:int=0) -> DataLoader:
 
     if nworkers:
         rs = MultiProcessingReadingService(nworkers)

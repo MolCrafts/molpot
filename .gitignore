@@ -1,7 +1,7 @@
 # tmp dataset
 testdata/
 saved/
-
+data/
 # ide
 .vscode/
 

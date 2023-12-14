@@ -23,3 +23,7 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader])->str:
     trainer = mpot.Trainer(model, criterion, optimizer, train_dataloader, valid_data_loader=valid_dataloader, config={"trainer": {"save_dir": "data/qm9", "metrics": [], "device": {"type": "cpu"}}} )
     trainer.train(1e6)
     return "done"
+
+if __name__ == "__main__":
+
+    train_qm9(load_qm9())
