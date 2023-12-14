@@ -6,7 +6,6 @@
 from torchdata.datapipes.iter import IterDataPipe
 from molpot.transforms import TorchNeighborList
 from torchdata.datapipes import functional_datapipe
-import molpy as mp
 
 __all__ = ["CalcNBList"]
 

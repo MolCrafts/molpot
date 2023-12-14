@@ -206,7 +206,7 @@ def environment_periodic():
             dtype=torch.float64,
         ),
         alias.cell: torch.tensor(
-            [[[7.0, 0.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 8.0]]], dtype=torch.float64
+            [[7.0, 0.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 8.0]], dtype=torch.float64
         ),
         alias.pbc: torch.tensor([True, True, True]),
         alias.natoms: torch.tensor([5]),
@@ -399,7 +399,7 @@ def environment_nonperiodic():
             dtype=torch.float64,
         ),
         alias.cell: torch.tensor(
-            [[[7.0, 0.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 8.0]]], dtype=torch.float64
+            [[7.0, 0.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 8.0]], dtype=torch.float64
         ),
         alias.pbc: torch.tensor([False, False, False]),
         alias.natoms: torch.tensor([5]),

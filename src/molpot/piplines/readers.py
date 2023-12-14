@@ -41,32 +41,36 @@ class QM9Reader(IterDataPipe):
         super().__init__()
         self.source_dp = source_dp
 
-    def __iter__(self) -> Iterable[mp.Frame]:
-        
+    def __iter__(self) -> Iterable[dict]:
         for d in self.source_dp:
-            frame = mp.Frame()
+            frame = dict()
             lines = d[1].readlines()
-            frame[alias.natoms] = int(lines[0])
+            frame[alias.natoms] = torch.tensor(int(lines[0]), dtype=torch.int32)
             props_line = lines[1].split()[1:]
-            frame[alias.idx] = int(props_line[0])
-            for prop, p in zip(alias.QM9.alias(), props_line[1:]):
+            frame[alias.idx] = torch.tensor(int(props_line[0]), dtype=torch.int32)
+            for prop, p in zip(alias.QM9.values(), props_line[1:]):
                 if prop in alias:
-                    src_unit = alias.QM9.get_unit(prop)
+                    src_unit = prop.unit
                     dst_unit = alias.get_unit(prop)
-                    frame[prop] = mp.units.convert(float(p), src_unit, dst_unit)
+                    frame[prop.key] = mp.units.convert(float(p), src_unit, dst_unit)
                 else:
-                    frame[prop] = float(p)
+                    frame[prop.key] = torch.tensor(float(p))
 
-            xyz = torch.tensor([
-                [float(i.replace("*^", "E")) for i in line.split()[1:4]]
-                for line in lines[2:-3]
-            ])
+            xyz = torch.tensor(
+                [
+                    [float(i.replace("*^", "E")) for i in line.split()[1:4]]
+                    for line in lines[2:-3]
+                ]
+            )
 
-            frame.atoms[alias.xyz] = mp.units.convert(xyz, "angstrom", alias['xyz'].unit)
+            frame[alias.xyz] = mp.units.convert(xyz, "angstrom", alias["xyz"].unit)
 
-            frame.atoms[alias.Z] = [
+            frame[alias.Z] = torch.tensor([
                 mp.Element.get_atomic_number_by_symbol(line.split()[0])
                 for line in lines[2:-3]
-            ]
+            ], dtype=torch.int32)
+
+            frame[alias.cell] = torch.zeros((3, 3))
+            frame[alias.pbc] = torch.tensor([False, False, False])
 
             yield frame
