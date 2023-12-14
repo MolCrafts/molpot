@@ -3,7 +3,7 @@
 # date: 2023-12-07
 # version: 0.0.1
 
-class BaseStrategy:
+class Strategy:
     
     def __init__(self, name:str):
         self.name = name
@@ -11,7 +11,7 @@ class BaseStrategy:
     def __call__(self) -> bool:
         raise NotImplementedError
     
-class PlannedStop(BaseStrategy):
+class PlannedStop(Strategy):
 
     def __init__(self, nstep:int):
         super().__init__("PlannedStop")

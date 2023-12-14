@@ -9,6 +9,7 @@ from ..potentials import Potential
 import logging
 from .strategy import EarlyStop, PlannedStop
 from molpot import alias
+import numpy as np
 
 class BaseTrainer:
     def __init__(self, model: Potential, config: dict):
@@ -62,6 +63,7 @@ class Trainer(BaseTrainer):
     def __init__(
         self,
         model,
+        readout,
         criterion,
         optimizer,
         train_data_loader,
@@ -73,6 +75,7 @@ class Trainer(BaseTrainer):
 
         self.criterion = criterion
         self.optimizer = optimizer
+        self.readout = readout
 
         self.save_dir = Path(config["save_dir"])
         self.resume = config.get("resume", None)
@@ -102,7 +105,7 @@ class Trainer(BaseTrainer):
             result = self._valid(result)
             result = self._post_iter(result)
 
-            if plannedStop(result["nstep"]) or earlyStop(result):
+            if plannedStop(result["nstep"]) or earlyStop(result['loss']):
                 break
 
         self._post_train(result)
@@ -126,7 +129,8 @@ class Trainer(BaseTrainer):
         data = result["data"]
         target = result["target"]
         output = self.model(data)
-        loss = self.criterion(output, target)
+        output = self.readout(output)
+        loss = self.criterion(output['_pred_energy'], target[alias.energy])
         loss.backward()
         result.update(
             {
@@ -171,7 +175,7 @@ class Trainer(BaseTrainer):
         # TODO: use a log adapter
 
         self.logger.info(
-            f"Step {result['nstep']:06d} | Train Loss {self.train_metrics.result['loss']:.4f} | Valid Loss {self.valid_metrics.result['loss']:.4f} | eps {float(self.model.eps):.4f} | sig {float(self.model.sig):.4f}"
+            f"Step {result['nstep']:06d} | Train Loss {self.train_metrics.result['loss']:.4f} | Valid Loss {self.valid_metrics.result.get('loss', np.nan):.4f}"
         )
         return result
 

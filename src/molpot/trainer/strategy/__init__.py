@@ -1,2 +1,2 @@
-from .base import BaseStrategy, PlannedStop
+from .base import Strategy, PlannedStop
 from .early_stop import EarlyStop
