@@ -55,7 +55,7 @@ class TorchNeighborList(Transform):
 
     def _build_neighbor_list(self, positions, cell, pbc, cutoff):
         # Check if shifts are needed for periodic boundary conditions
-        if torch.all(pbc == 0):
+        if all(pbc == 0):
             shifts = torch.zeros(0, 3, device=cell.device, dtype=torch.long)
         else:
             shifts = self._get_shifts(cell, pbc, cutoff)

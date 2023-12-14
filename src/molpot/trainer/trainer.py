@@ -88,6 +88,7 @@ class Trainer(BaseTrainer):
 
         self.lr_scheduler = lr_scheduler
         self.device, self.device_ids = prepare_device(config["device"])
+        self.target = config["target"]
 
     def train(self, nsteps: int):
         plannedStop = PlannedStop(nsteps)
@@ -97,7 +98,6 @@ class Trainer(BaseTrainer):
         nstep = self.start_step + 1
         for i, data in enumerate(self.train_data_loader):
             result["nstep"] = nstep + i
-            result["target"] = {alias.energy: data[alias.QM9.energy]}
             result["data"] = data
             result = self._pre_iter(result)
             result = self._train(result)
@@ -127,7 +127,6 @@ class Trainer(BaseTrainer):
     def _train(self, result: dict):
         self.model.train()
         data = result["data"]
-        target = result["target"]
         output = self.model(data)
         output = self.readout(output)
         loss = self.criterion(output['_pred_energy'], target[alias.energy])

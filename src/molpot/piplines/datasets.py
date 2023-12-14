@@ -15,10 +15,11 @@ import molpot as mpot
 import molpy as mp
 from itertools import islice
 
-__all__ = ["DataSet", "DataLoader2", "QM9"]
+__all__ = ["DataSet", "DataLoader2", "QM9", "rMD17"]
 
 
 log = logging.getLogger(__name__)
+
 
 class DataSet:
 
@@ -32,21 +33,19 @@ class DataSet:
     """
 
     def __init__(
-        self,
-        name,
-        data_dir: None | Path | str,
-        in_memory: bool = True,
+        self, name, data_dir: None | Path | str, in_memory: bool = True, total: int = 0
     ):
         super().__init__()
         self.name = name
-        if data_dir:
-            self.data_dir = Path(data_dir)
-        else:
-            self.data_dir = Path(tempfile.mkdtemp())
-        if not self.data_dir.exists():
-            self.data_dir.mkdir(parents=True, exist_ok=True)
-
         self.in_memory = in_memory
+        self.total = total
+        if not in_memory:
+            if data_dir:
+                self.data_dir = Path(data_dir)
+            else:
+                self.data_dir = Path(tempfile.mkdtemp())
+            if not self.data_dir.exists():
+                self.data_dir.mkdir(parents=True, exist_ok=True)
 
     def update_meta(self, data: Optional[dict[str, Any]] = None):
         self._data = {
@@ -58,8 +57,10 @@ class DataSet:
             with open(self.data_dir / Path("meta.json"), "w") as f:
                 json.dump(self._data, f)
 
-    def prepare(self) -> IterDataPipe:
-        raise NotImplementedError
+    def _prepare(self, dp) -> IterDataPipe:
+        if self.total:
+            dp.set_length(self.total)
+        return dp
 
     def fetch(self, url, filename, dir: Path | str) -> Path:
         fpath = Path(dir) / Path(filename)
@@ -72,6 +73,20 @@ class DataSet:
             log.info(f"{fpath} already exists.")
         return fpath
 
+    def extract_tar(tar_path, dest_path, member):
+        if dest_path.exists():
+            path = log.info(f"{dest_path} already exists.")
+        else:
+            log.info("Extracting files...")
+            tar = tarfile.open(tar_path)
+            if member == "all":
+                path = tar.extractall(dest_path)
+            else:
+                path = tar.extract(path=dest_path, member=member)
+            tar.close()
+            log.info("Done.")
+            return path
+
 
 class QM9(DataSet):
     def __init__(
@@ -79,16 +94,18 @@ class QM9(DataSet):
         data_dir: Optional[Path | str] = None,
         in_memory: bool = False,
         remove_uncharacterized: bool = True,
-        test_size: int = 0,
+        total: int = 0,
     ):
-        super().__init__("QM9", data_dir, in_memory)
+        super().__init__("QM9", data_dir, in_memory, total)
         self.remove_uncharacterized = remove_uncharacterized
         mpot.alias("QM9")
         mpot.alias.QM9.set("A", "_A", float, "GHz", "rotational_constant_A")
         mpot.alias.QM9.set("B", "_B", float, "GHz", "rotational_constant_B")
         mpot.alias.QM9.set("C", "_C", float, "GHz", "rotational_constant_C")
         mpot.alias.QM9.set("mu", "_mu", float, "Debye", "dipole_moment")
-        mpot.alias.QM9.set("alpha", "_alpha", float, "a0 a0 a0", "isotropic_polarizability")
+        mpot.alias.QM9.set(
+            "alpha", "_alpha", float, "a0 a0 a0", "isotropic_polarizability"
+        )
         mpot.alias.QM9.set("homo", "_homo", float, "hartree", "homo")
         mpot.alias.QM9.set("lumo", "_lumo", float, "hartree", "lump")
         mpot.alias.QM9.set("gap", "_gap", float, "hartree", "gap")
@@ -99,7 +116,7 @@ class QM9(DataSet):
         mpot.alias.QM9.set("H", "_H", float, "hartree", "_enthalpy_H")
         mpot.alias.QM9.set("G", "_G", float, "hartree", "_free_energy")
         mpot.alias.QM9.set("Cv", "_Cv", float, "cal/mol/K", "_heat_capacity")
-        self.test_size = test_size
+
 
     def prepare(self) -> IterDataPipe:
         if self.in_memory:
@@ -118,11 +135,11 @@ class QM9(DataSet):
             exclude_fobj = io.TextIOWrapper(io.BytesIO(exclude_bytes))
             exclude = [int(line.split()[0]) for line in exclude_fobj.readlines()[9:-1]]
             names = [name for name in names if int(name[-10:-4]) not in exclude]
-            dp = IterableWrapper(names).map(
-                lambda x: io.TestIOWrapper(
-                    qm9_tar.extractfile(x)
-                ).readlines()
-            ).read_qm9()
+            dp = (
+                IterableWrapper(names)
+                .map(lambda x: io.TestIOWrapper(qm9_tar.extractfile(x)).readlines())
+                .read_qm9()
+            )
 
         else:
             # atomrefs = self._download_atomrefs()
@@ -135,13 +152,13 @@ class QM9(DataSet):
             irange = np.arange(len(ordered_files), dtype=int)
             if uncharacterized is not None:
                 irange = np.setdiff1d(irange, np.array(uncharacterized, dtype=int) - 1)
-            
+
             dp = (
                 IterableWrapper(map(str, np.array(ordered_files)[irange]))
                 .open_files()
                 .read_qm9()
             )
-        return dp
+        return self._prepare(dp)
 
     def _download_atomrefs(self):
         url = "https://ndownloader.figshare.com/files/3195395"
@@ -180,12 +197,7 @@ class QM9(DataSet):
         raw_path = self.data_dir / Path("gdb9_xyz")
 
         _sort_qm9 = lambda x: (int(re.sub(r"\D", "", str(x))), str(x))
-        if not raw_path.exists():
-            log.info("Extracting files...")
-            tar = tarfile.open(tar_path)
-            tar.extractall(raw_path)
-            tar.close()
-            log.info("Done.")
+        self.extract_tar(tar_path, raw_path, "all")
 
         log.info("Parse xyz files...")
         xyz_files = raw_path.rglob("*.xyz")
@@ -196,3 +208,42 @@ class QM9(DataSet):
             key=_sort_qm9,
         )  # sort by index in filename
         return ordered_files
+
+
+class rMD17(DataSet):
+    def __init__(
+        self,
+        data_dir: Optional[Path | str] = None,
+        total: int = 0,
+        molecule: str = "aspirin",
+    ):
+        super().__init__("rMD17", data_dir, False, total)
+        self.molecule = molecule
+        mpot.alias("rMD17")
+        mpot.alias.rMD17.set("energy", "_rmd17_U", float, "kcal/mol", "_energy_U")
+        mpot.alias.rMD17.set(
+            "forces", "_rmd17_F", float, "kcal/mol/angstrom", "_forces"
+        )
+        mpot.alias.rMD17.set(
+            "R", "_rmd17_R", np.ndarray, "angstrom", "atomic coordinates"
+        )
+        mpot.alias.rMD17.set("Z", "_rmd17_Z", int, None, "atomic numbers in molecule")
+
+    def prepare(self) -> IterDataPipe:
+        fpath = self._download_data()
+        dp = IterableWrapper([fpath]).read_rmd17()
+        return self._prepare(dp)
+
+    def _download_data(
+        self,
+    ):
+        logging.info("Downloading {} data".format(self.molecule))
+        tar_path = self.data_dir / Path("rmd17.tar.gz")
+        url = "https://figshare.com/ndownloader/files/23950376"
+        self.fetch(url, "rmd17.tar.gz", self.data_dir)
+        logging.info("Done.")
+        dest_path = Path(f"rmd17/npz_data/rmd17_{self.molecule}.npz")
+        self.extract_tar(tar_path, f"rmd17/npz_data/rmd17_{self.molecule}.npz")
+        logging.info("Parsing molecule {:s}".format(self.molecule))
+
+        return self.data_dir / dest_path
