@@ -503,7 +503,7 @@ class Inspector:
         row_settings: Iterable[str] | None = None,
         verbose: int | None = None,
         **kwargs: Any,
-    ) -> ModelStatistics:
+    ):
         """
         Summarize the given PyTorch model. Summarized information includes:
             1) Layer names,

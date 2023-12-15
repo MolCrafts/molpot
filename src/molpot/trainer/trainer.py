@@ -93,22 +93,18 @@ class Trainer(BaseTrainer):
     def train(self, nsteps: int):
         plannedStop = PlannedStop(nsteps)
         earlyStop = EarlyStop()
-        self._pre_train()
-        result = {}
-        nstep = self.start_step + 1
-        for i, data in enumerate(self.train_data_loader):
-            result["nstep"] = nstep + i
-            result["data"] = data
-            result = self._pre_iter(result)
-            result = self._train(result)
-            result = self._train_log(result)
-            result = self._valid(result)
-            result = self._post_iter(result)
+        output = self._pre_train()
+        for i, data in enumerate(self.train_data_loader, self.start_step+1):
+            output = self._pre_iter(i, data, output)
+            output = self._train(i, data, output)
+            output = self._valid(i, data, output)
+            output = self._log(i, data, output)
+            output = self._post_iter(i, data, output)
 
-            if plannedStop(result["nstep"]) or earlyStop(result['loss']):
+            if plannedStop(output["nstep"]) or earlyStop(output['loss']):
                 break
 
-        self._post_train(result)
+        self._post_train(output)
 
     def _pre_train(self):
         if self.resume:
@@ -119,31 +115,30 @@ class Trainer(BaseTrainer):
         self.train_metrics = MetricTracker("train")
         self.valid_metrics = MetricTracker("valid")
         self.logger = LogAdapter(self.model.name, self.save_dir)
+        return {}
 
-    def _pre_iter(self, results: dict):
-        self.optimizer.zero_grad()
-        return results
+    def _pre_iter(self, nstep, data, output: dict):
+        return output
 
-    def _train(self, result: dict):
+    def _train(self, nstep, data, output: dict):
         self.model.train()
-        data = result["data"]
-        output = self.model(data)
-        output = self.readout(output)
-        loss = self.criterion(output['_pred_energy'], target[alias.energy])
+        self.optimizer.zero_grad()
+        _output = self.readout(self.model(data))
+        loss = self.criterion(_output[alias.energy], data[alias.energy])
         loss.backward()
-        result.update(
+        output.update(
             {
-                "output": output,
+                "train": _output,
                 "loss": loss,
             }
         )
         self.optimizer.step()
-        return result
+        return output
 
-    def _valid(self, result: dict):
-        nstep = result["nstep"]
+    def _valid(self, nstep, data, output: dict):
+
         if nstep % 100 != 0:
-            return result
+            return output
 
         self.model.eval()
 
@@ -155,9 +150,9 @@ class Trainer(BaseTrainer):
                 self.valid_metrics.update("loss", loss.item())
                 for m, metric_fn in self.metric_fns.items():
                     self.valid_metrics.update(
-                        m, metric_fn(result["output"], result["loss"])
+                        m, metric_fn(output["output"], output["loss"])
                     )
-        return result
+        return output
 
     def _train_log(self, result: dict):
         self.train_metrics.update("loss", result["loss"].item())
