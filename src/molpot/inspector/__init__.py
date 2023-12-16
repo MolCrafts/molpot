@@ -1,6 +1,7 @@
 from .enums import ColumnSettings, Mode, RowSettings, Units, Verbosity
 from .model_statistics import ModelStatistics
 from .inspector import Inspector
+from .dataInspector import DataInspector
 
 __all__ = (
     "Inspector",
@@ -10,6 +11,7 @@ __all__ = (
     "RowSettings",
     "Units",
     "Verbosity",
+    "DataInspector",
 )
 __version__ = "1.8.0"
 

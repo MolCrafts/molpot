@@ -109,5 +109,4 @@ class rMD17Reader(IterDataPipe):
                 frame[alias.pbc] = torch.tensor([False, False, False])
                 yield frame
 
-            tar.close()
             logging.info("Done.")

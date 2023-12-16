@@ -73,19 +73,22 @@ class DataSet:
             log.info(f"{fpath} already exists.")
         return fpath
 
-    def extract_tar(tar_path, dest_path, member):
-        if dest_path.exists():
-            path = log.info(f"{dest_path} already exists.")
+    def extract_tar(self, tar_path, dest_path, member):
+
+        path = dest_path / member
+
+        if path.exists():
+            log.info(f"{dest_path} already exists.")
         else:
             log.info("Extracting files...")
             tar = tarfile.open(tar_path)
             if member == "all":
                 path = tar.extractall(dest_path)
             else:
-                path = tar.extract(path=dest_path, member=member)
+                path = tar.extract(path=dest_path, member=str(member))
             tar.close()
             log.info("Done.")
-            return path
+        return path
 
 
 class QM9(DataSet):
@@ -238,12 +241,12 @@ class rMD17(DataSet):
         self,
     ):
         logging.info("Downloading {} data".format(self.molecule))
+        dest_path = self.data_dir
         tar_path = self.data_dir / Path("rmd17.tar.gz")
         url = "https://figshare.com/ndownloader/files/23950376"
         self.fetch(url, "rmd17.tar.gz", self.data_dir)
         logging.info("Done.")
-        dest_path = Path(f"rmd17/npz_data/rmd17_{self.molecule}.npz")
-        self.extract_tar(tar_path, f"rmd17/npz_data/rmd17_{self.molecule}.npz")
+        path = self.extract_tar(tar_path, dest_path, f"rmd17/npz_data/rmd17_{self.molecule}.npz")
         logging.info("Parsing molecule {:s}".format(self.molecule))
 
-        return self.data_dir / dest_path
+        return path

@@ -3,13 +3,29 @@
 # date: 2023-12-15
 # version: 0.0.1
 
+from collections import defaultdict
+import torch
+
+__all__ = ["DataInspector"]
+
+
 class DataInspector:
 
     def __init__(self, dataloader):
 
         self.dataloader = dataloader
 
-    def inspect(self):
+    def inspect(self, nbatch: int, props: list):
 
-        for batch in self.dataloader:
-            
+        data = defaultdict(list)
+
+        for i, batch in enumerate(self.dataloader):
+            for prop in props:
+                data[prop].append(batch[prop])
+            if i == nbatch:
+                break
+
+        for d in data:
+            data[d] = torch.cat(data[d], dim=0)
+
+        return data
