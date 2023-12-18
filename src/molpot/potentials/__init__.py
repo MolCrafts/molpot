@@ -1,8 +1,8 @@
 from .nnp import *
 from .classical import *
-from .base import Potential
+from .base import NNPotential
 
-def get_potential(config:dict)->Potential:
+def get_potential(config:dict)->NNPotential:
     potential_name = config['type']
     potential_class = globals()[potential_name]
     potential_ins = potential_class(**config['args'])

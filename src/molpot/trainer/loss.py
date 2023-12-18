@@ -4,18 +4,19 @@
 # version: 0.0.1
 
 from torch import nn
-import molpot as mpot
 
-class MSELoss(nn.Module):
+__all__ = ["MultiMSELoss"]
 
-    def __init__(self, e_weight:int=1, f_weight:int=1, s_weight:int=1):
+class MultiMSELoss(nn.Module):
+
+    def __init__(self, weights, targets):
         super().__init__()
-        self.e_weight = e_weight
-        self.f_weight = f_weight
-        self.s_weight = s_weight
+        self.weights = weights
+        self.loss_kernel = nn.MSELoss()
+        self.targets = targets
 
-    def forward(self, input, target):
-        te = target[mpot.energy]
-        tf = target[mpot.forces]
-        ts = target[mpot.stress]
-        ie = input[mpot.energy]
+    def forward(self, output, data):
+        loss = 0
+        for weight, key in zip(self.weights, self.target):
+            loss += weight * self.loss_kernel(output[key], data[key])
+        return loss

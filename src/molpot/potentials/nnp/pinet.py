@@ -3,7 +3,7 @@
 # date: 2023-10-12
 # version: 0.0.1
 
-from ..base import Potential
+from ..base import NNPotential
 import torch
 from torch import nn
 from .layers import PolynomialBasis, GaussianBasis, CutoffFunc
@@ -166,7 +166,7 @@ class ResUpdate(nn.Module):
         return old + new
 
 
-class PiNet(Potential):
+class PiNet(NNPotential):
     """This class implements the Keras Model for the PiNet network."""
 
     def __init__(

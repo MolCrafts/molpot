@@ -12,4 +12,4 @@ class DataInspector:
     def inspect(self):
 
         for batch in self.dataloader:
-            
+            pass

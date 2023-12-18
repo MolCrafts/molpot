@@ -5,14 +5,14 @@ import torch
 from molpot.trainer.utils import prepare_device
 from .metric.tracker import MetricTracker
 from .metric import get_metric
-from ..potentials import Potential
+from ..potentials import NNPotential
 import logging
 from .strategy import EarlyStop, PlannedStop
 from molpot import alias
 import numpy as np
 
 class BaseTrainer:
-    def __init__(self, model: Potential, config: dict):
+    def __init__(self, model: NNPotential, config: dict):
         self.model = model
         self.config = config
 
@@ -63,7 +63,6 @@ class Trainer(BaseTrainer):
     def __init__(
         self,
         model,
-        readout,
         criterion,
         optimizer,
         train_data_loader,
@@ -75,7 +74,6 @@ class Trainer(BaseTrainer):
 
         self.criterion = criterion
         self.optimizer = optimizer
-        self.readout = readout
 
         self.save_dir = Path(config["save_dir"])
         self.resume = config.get("resume", None)
@@ -123,8 +121,8 @@ class Trainer(BaseTrainer):
     def _train(self, nstep, data, output: dict):
         self.model.train()
         self.optimizer.zero_grad()
-        _output = self.readout(self.model(data))
-        loss = self.criterion(_output[alias.energy], data[alias.energy])
+        _output = self.model(data)
+        loss = self.criterion(_output, data)
         loss.backward()
         output.update(
             {

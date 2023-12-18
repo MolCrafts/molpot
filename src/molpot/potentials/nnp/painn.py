@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from .layers import Dense
 from .ops import scatter_add
 import molpot as mpot
-from ..base import Potential
+from ..base import NNPotential
 
 __all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
 
@@ -127,7 +127,7 @@ class PaiNNMixing(nn.Module):
         return q, mu
 
 
-class PaiNN(Potential):
+class PaiNN(NNPotential):
     """PaiNN - polarizable interaction neural network
     """
 
