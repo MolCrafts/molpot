@@ -24,8 +24,4 @@ class DataInspector:
                 data[prop].append(batch[prop])
             if i == nbatch:
                 break
-
-        for d in data:
-            data[d] = torch.cat(data[d], dim=0)
-
         return data
