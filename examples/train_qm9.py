@@ -18,10 +18,10 @@ def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
         .random_split(weights={"train": 0.8, "valid": 0.2}, seed=42)
     )
     train_dataloader = mpot.create_dataloader(
-        train.batch(batch_size=4).collate_data(), nworkers=0
+        train.batch(batch_size=4)
     )
     valid_dataloader = mpot.create_dataloader(
-        valid.batch(batch_size=16).collate_data(), nworkers=0
+        valid.batch(batch_size=16)
     )
     return train_dataloader, valid_dataloader
 
@@ -32,20 +32,23 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     n_atom_basis = 128
     model = NNPotential("PaiNN")
     arch = mpot.PaiNN(n_atom_basis, 3, GaussianRBF(20, 5), CosineCutoff(5))
-    readout = Atomwise(n_in=n_atom_basis, output_key="_pred_energy")
+    readout = Atomwise(n_in=n_atom_basis, output_key=alias.ti)
     model.append(arch)
     model.append(readout)
-    # TODO: _pred_energy -> alias
-    # e.g. alias.scalar
-    criterion = mpot.MultiMSELoss([1], targets=[("_pred_energy", alias.QM9.U)])
+    criterion = mpot.MultiMSELoss([1], targets=[(alias.ti, alias.QM9.U)])
     optimizer = torch.optim.Adam(model.parameters())
+
+    stagnation = mpot.strategy.Stagnation(alias.energy)
+    train_acc = mpot.metric.Accuracy(alias.ti, alias.QM9.U)
 
     trainer = mpot.Trainer(
         model,
         criterion,
         optimizer,
         train_dataloader,
-        valid_data_loader=valid_dataloader,
+        valid_dataloader,
+        strategies=[stagnation],
+        metrics=[train_acc],
         config={
             "save_dir": "data/qm9",
             "metrics": [],

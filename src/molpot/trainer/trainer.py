@@ -1,6 +1,8 @@
 from pathlib import Path
 from molpot.trainer.logger.logger import LogAdapter
 import torch
+from molpot.trainer.strategy.base import StrategyManager
+from molpot.trainer.strategy.early_stop import StepCounter
 
 from molpot.trainer.utils import prepare_device
 from .metric.tracker import MetricTracker
@@ -66,8 +68,9 @@ class Trainer(BaseTrainer):
         criterion,
         optimizer,
         train_data_loader,
-        lr_scheduler=None,
         valid_data_loader=None,
+        lr_scheduler=None,
+        strategies=[],
         config={},
     ):
         super().__init__(model, config)
@@ -87,9 +90,11 @@ class Trainer(BaseTrainer):
         self.lr_scheduler = lr_scheduler
         self.device, self.device_ids = prepare_device(config["device"])
 
+        self.strategies = StrategyManager(strategies)
+
     def train(self, nsteps: int):
-        plannedStop = PlannedStop(nsteps)
-        earlyStop = EarlyStop()
+        stepCounter = StepCounter(nsteps)
+        self.strategies.append(stepCounter)
         output = self._pre_train()
         for i, data in enumerate(self.train_data_loader, self.start_step+1):
             output = self._pre_iter(i, data, output)
@@ -98,7 +103,7 @@ class Trainer(BaseTrainer):
             output = self._log(i, data, output)
             output = self._post_iter(i, data, output)
 
-            if plannedStop(output["nstep"]) or earlyStop(output['loss']):
+            if self.strategies(i, output, data):
                 break
 
         self._post_train(output)
@@ -109,8 +114,8 @@ class Trainer(BaseTrainer):
         else:
             self.start_step = 0
 
-        self.train_metrics = MetricTracker("train")
-        self.valid_metrics = MetricTracker("valid")
+        self.train_metrics = MetricTracker("train", self.train_metrics)
+        self.valid_metrics = MetricTracker("valid", self.train_metrics)
         self.logger = LogAdapter(self.model.name, self.save_dir)
         return {}
 

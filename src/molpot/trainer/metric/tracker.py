@@ -8,9 +8,14 @@ from collections import defaultdict
 __all__ = ["MetricTracker"]
 
 class MetricTracker:
-    def __init__(self, name:str):
+    def __init__(self, name:str, metrics:list):
         self.name = name
+        self.metrics = []
+        self.metrics.extend(metrics)
         self.reset()
+
+    def __call__(self, step:int, output:dict, data:dict):
+        for 
 
     def reset(self):
         self._total = defaultdict(float)

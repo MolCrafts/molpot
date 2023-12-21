@@ -9,6 +9,8 @@ class DataLoader(DataLoader2):
 
 def create_dataloader(datapipe: IterDataPipe, nworkers:int=0) -> DataLoader:
 
+    datapipe = datapipe.collate_data()
+
     if nworkers:
         rs = MultiProcessingReadingService(nworkers)
         return DataLoader(datapipe, reading_service=rs)

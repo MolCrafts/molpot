@@ -14,11 +14,15 @@ class Strategy:
     
 class StrategyManager:
     
-    def __init__(self):
+    def __init__(self, strategies:list=[]):
         self.strategies = []
+        self.strategies.extend(strategies)
     
-    def add(self, strategy:Strategy):
+    def append(self, strategy:Strategy):
         self.strategies.append(strategy)
+
+    def extend(self, strategies:list):
+        self.strategies.extend(strategies)
     
     def __call__(self, step:int) -> bool:
         for strategy in self.strategies:

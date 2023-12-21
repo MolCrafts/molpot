@@ -24,6 +24,10 @@ alias.set('Rij', '_Rij', np.ndarray, 'angstrom', 'vectors pointing from center a
 alias.set('cell', '_cell', np.ndarray, 'angstrom', 'unit cell')
 alias.set('pbc', '_pbc', np.ndarray, None, 'periodic boundary conditions')
 
+alias.set('ti', '_ti', int, None, 'rank 0 tensor')
+alias.set('tij', '_tij', int, None, 'rank 1 tensor')
+alias.set('tijk', '_tijk', int, None, 'rank 2 tensor')
+
 # alias = Alias('default')
 # alias.set('energy', 'energy', None, '')
 
