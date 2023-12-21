@@ -4,20 +4,24 @@
 # version: 0.0.1
 
 class Strategy:
-    
-    def __init__(self, name:str):
-        self.name = name
 
     def __call__(self) -> bool:
         raise NotImplementedError
     
-class PlannedStop(Strategy):
-
-    def __init__(self, nstep:int):
-        super().__init__("PlannedStop")
-        self.nstep = nstep
-
+    @property
+    def name(self):
+        return self.__class__.__name__
+    
+class StrategyManager:
+    
+    def __init__(self):
+        self.strategies = []
+    
+    def add(self, strategy:Strategy):
+        self.strategies.append(strategy)
+    
     def __call__(self, step:int) -> bool:
-        if step >= self.nstep:
-            return True
+        for strategy in self.strategies:
+            if strategy(step):
+                return True
         return False

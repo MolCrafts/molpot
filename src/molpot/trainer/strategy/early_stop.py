@@ -6,7 +6,7 @@
 from .base import Strategy
 import numpy as np
 
-class EarlyStop(Strategy):
+class Stagnation(Strategy):
 
     def __init__(self, patience=5, min_delta=0):
 
@@ -18,11 +18,24 @@ class EarlyStop(Strategy):
     def __call__(self, val_loss) -> bool:
 
         if self.counter < self.patience:
-            if val_loss - self.best_loss > self.min_delta:
+            delta = val_loss - self.best_loss
+            if delta > self.min_delta:
                 self.counter +=1
             else:
                 self.counter = 0
-                self.best_loss = val_loss
+                self.best_loss = min(val_loss, self.best_loss)
             return False
         else:
             return True
+
+
+class StepCounter(Strategy):
+
+    def __init__(self, nstep:int):
+        super().__init__()
+        self.nstep = nstep
+
+    def __call__(self, step:int) -> bool:
+        if step >= self.nstep:
+            return True
+        return False

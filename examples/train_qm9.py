@@ -7,6 +7,7 @@ from molpot.potentials.nnp.readout import Atomwise
 
 from molpot import alias
 
+
 def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
     qm9_dataset = mpot.QM9(data_dir="data/qm9", total=100)
     dp = qm9_dataset.prepare()
@@ -31,7 +32,7 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     n_atom_basis = 128
     model = NNPotential("PaiNN")
     arch = mpot.PaiNN(n_atom_basis, 3, GaussianRBF(20, 5), CosineCutoff(5))
-    readout = Atomwise(n_in=n_atom_basis, output_key='_pred_energy')
+    readout = Atomwise(n_in=n_atom_basis, output_key="_pred_energy")
     model.append(arch)
     model.append(readout)
     # TODO: _pred_energy -> alias
@@ -54,7 +55,9 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     trainer.train(1e6)
     return "done"
 
+
 if __name__ == "__main__":
     import logging
+
     logging.basicConfig(level=logging.INFO)
     train_qm9(load_qm9())
