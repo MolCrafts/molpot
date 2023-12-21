@@ -17,6 +17,6 @@ class MultiMSELoss(nn.Module):
 
     def forward(self, output, data):
         loss = 0
-        for weight, key in zip(self.weights, self.target):
-            loss += weight * self.loss_kernel(output[key], data[key])
+        for weight, (k1, k2) in zip(self.weights, self.targets):
+            loss += weight * self.loss_kernel(output[k1], data[k2])
         return loss

@@ -127,7 +127,7 @@ class PaiNNMixing(nn.Module):
         return q, mu
 
 
-class PaiNN(NNPotential):
+class PaiNN(nn.Module):
     """PaiNN - polarizable interaction neural network
     """
 
@@ -157,7 +157,7 @@ class PaiNN(NNPotential):
                 filter-generating networks.
             epsilon: stability constant added in norm to prevent numerical instabilities
         """
-        super(PaiNN, self).__init__("PaiNN")
+        super().__init__()
 
         self.n_atom_basis = n_atom_basis
         self.n_interactions = n_interactions

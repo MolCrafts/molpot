@@ -75,10 +75,9 @@ class DataSet:
 
     def extract_tar(self, tar_path, dest_path, member):
 
-        path = dest_path / member
-
-        if path.exists():
+        if dest_path.exists():
             log.info(f"{dest_path} already exists.")
+            path = dest_path
         else:
             log.info("Extracting files...")
             tar = tarfile.open(tar_path)
@@ -115,11 +114,10 @@ class QM9(DataSet):
         mpot.alias.QM9.set("r2", "_r2", float, "a0 a0", "electronic_spatial_extent")
         mpot.alias.QM9.set("zpve", "_zpve", float, "hartree", "zpve")
         mpot.alias.QM9.set("U0", "_U0", float, "hartree", "_energy_U0")
-        mpot.alias.QM9.set("energy", "_U", float, "hartree", "_energy_U")
+        mpot.alias.QM9.set("U", "_U", float, "hartree", "_energy_U")
         mpot.alias.QM9.set("H", "_H", float, "hartree", "_enthalpy_H")
         mpot.alias.QM9.set("G", "_G", float, "hartree", "_free_energy")
         mpot.alias.QM9.set("Cv", "_Cv", float, "cal/mol/K", "_heat_capacity")
-
 
     def prepare(self) -> IterDataPipe:
         if self.in_memory:
@@ -197,15 +195,15 @@ class QM9(DataSet):
     def _download_data(self):
         url = "https://ndownloader.figshare.com/files/3195389"
         tar_path = self.fetch(url, "gdb9.tar.gz", self.data_dir)
-        raw_path = self.data_dir / Path("gdb9_xyz")
+        dest_path = self.data_dir / Path("xyz")
 
         _sort_qm9 = lambda x: (int(re.sub(r"\D", "", str(x))), str(x))
-        self.extract_tar(tar_path, raw_path, "all")
+        self.extract_tar(tar_path, dest_path, "all")
 
         log.info("Parse xyz files...")
-        xyz_files = raw_path.rglob("*.xyz")
-        if self.test_size:
-            xyz_files = islice(xyz_files, self.test_size)
+        xyz_files = dest_path.rglob("*.xyz")
+        if self.total:
+            xyz_files = islice(xyz_files, self.total)
         ordered_files = sorted(
             xyz_files,
             key=_sort_qm9,
@@ -241,7 +239,7 @@ class rMD17(DataSet):
         self,
     ):
         logging.info("Downloading {} data".format(self.molecule))
-        dest_path = self.data_dir
+        dest_path = self.data_dir / 'npz_data'
         tar_path = self.data_dir / Path("rmd17.tar.gz")
         url = "https://figshare.com/ndownloader/files/23950376"
         self.fetch(url, "rmd17.tar.gz", self.data_dir)

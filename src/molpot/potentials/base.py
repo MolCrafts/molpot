@@ -6,13 +6,13 @@ class NNPotential(nn.Module):
     def __init__(self, name):
         super().__init__()
         self._name = name
-        self._modules = nn.Sequential()
+        self._layers = nn.Sequential()
 
     def append(self, module: nn.Module):
-        self._modules.append(module)
+        self._layers.append(module)
 
     def forward(self, inputs):
-        raise NotImplementedError
+        return self._layers(inputs)
     
     def cite(self)->str:
         raise NotImplementedError

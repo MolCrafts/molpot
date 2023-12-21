@@ -86,7 +86,6 @@ class Trainer(BaseTrainer):
 
         self.lr_scheduler = lr_scheduler
         self.device, self.device_ids = prepare_device(config["device"])
-        self.target = config["target"]
 
     def train(self, nsteps: int):
         plannedStop = PlannedStop(nsteps)
@@ -152,34 +151,34 @@ class Trainer(BaseTrainer):
                     )
         return output
 
-    def _train_log(self, result: dict):
-        self.train_metrics.update("loss", result["loss"].item())
+    def _log(self, nstep, data, output: dict):
+        self.train_metrics.update("loss", output["loss"].item())
         for m, metric_fn in self.metric_fns.items():
-            self.train_metrics.update(m, metric_fn(result["output"], result["loss"]))
-        return result
+            self.train_metrics.update(m, metric_fn(output["output"], output["loss"]))
+        return output
 
-    def _post_iter(self, result: dict):
+    def _post_iter(self, nstep, data, output: dict):
         
-        if result["nstep"] % 100 == 0:
+        if output["nstep"] % 100 == 0:
             self.lr_scheduler.step()
 
         # print status
         # TODO: use a log adapter
 
         self.logger.info(
-            f"Step {result['nstep']:06d} | Train Loss {self.train_metrics.result['loss']:.4f} | Valid Loss {self.valid_metrics.result.get('loss', np.nan):.4f}"
+            f"Step {output['nstep']:06d} | Train Loss {self.train_metrics.output['loss']:.4f} | Valid Loss {self.valid_metrics.output.get('loss', np.nan):.4f}"
         )
-        return result
+        return output
 
-    def _post_train(self, result: dict):
+    def _post_train(self, nstep, data, output: dict):
         # self._save_checkpoint(self.start_step, save_best=True)
-        return result
+        return output
 
 
 class OfflineALTrainer(Trainer):
     
-    def _post_iter(self, result: dict):
-        return super()._post_iter(result)
+    def _post_iter(self, nstep, data, output: dict):
+        return super()._post_iter(output)
 
 class OnlineALTrainer(Trainer):
     pass
