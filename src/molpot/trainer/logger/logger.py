@@ -31,11 +31,17 @@ DEFAULT_CONFIG = {
 
 class LogAdapter:
     def __init__(
-        self, name: str, save_dir, config=DEFAULT_CONFIG, default_level=logging.INFO
+        self, name: str, save_dir, config=DEFAULT_CONFIG, default_level=logging.INFO, keys=[]
     ):
         self.logger = logging.getLogger(name)
+        self.save_dir = save_dir
         logging.config.dictConfig(config)
         logging.basicConfig(level=default_level)
+        self.keys = keys
+
+    def log(self, nstep, output, data):
+        msg = f"  ".join([f"{key}" for key in self.keys])
+        self.logger.info(msg)
 
     def info(self, msg):
         self.logger.info(msg)

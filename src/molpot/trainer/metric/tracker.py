@@ -12,21 +12,16 @@ class MetricTracker:
         self.name = name
         self.metrics = []
         self.metrics.extend(metrics)
-        self.reset()
-
-    def __call__(self, step:int, output:dict, data:dict):
-        for 
-
-    def reset(self):
         self._total = defaultdict(float)
         self._counts = defaultdict(float)
         self._average = defaultdict(float)
 
-    def update(self, key, value, n=1):
-
-        self._total[key] += value * n
-        self._counts[key] += n
-        self._average[key] = self._total[key] / self._counts[key]
+    def __call__(self, step:int, output:dict, data:dict):
+        for metric in self.metrics:
+            value = metric(step, output, data)
+            self._total[metric.name] += value * 1
+            self._counts[metric.name] += 1
+            self._average[metric.name] = self._total[metric.name] / self._counts[metric.name]
 
     @property
     def result(self):
