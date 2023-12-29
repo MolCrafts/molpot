@@ -5,6 +5,7 @@
 
 from .base import Strategy
 import numpy as np
+import logging
 
 __all__ = ["Stagnation", "StepCounter"]
 
@@ -28,6 +29,7 @@ class Stagnation(Strategy):
                 self.best_loss = min(val_loss, self.best_loss)
             return False
         else:
+            logging.info(f"Reach the max patience {self.patience}")
             return True
 
 
@@ -39,5 +41,6 @@ class StepCounter(Strategy):
 
     def __call__(self, step:int, *args, **kwargs) -> bool:
         if step >= self.nstep:
+            logging.info(f"Reach the max step {self.nstep}")
             return True
         return False

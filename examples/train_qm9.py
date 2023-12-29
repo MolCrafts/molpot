@@ -9,20 +9,16 @@ from molpot import alias
 
 
 def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    qm9_dataset = mpot.QM9(data_dir="data/qm9", total=100)
+    qm9_dataset = mpot.QM9(data_dir="data/qm9")
     dp = qm9_dataset.prepare()
     train, valid = (
         dp.calc_nblist(5)
         .shuffle()
         .set_length(1000)
-        .random_split(weights={"train": 0.8, "valid": 0.2}, seed=42)
+        .random_split(weights={"train": 0.8, "valid": 0.2}, seed=0)
     )
-    train_dataloader = mpot.create_dataloader(
-        train.batch(batch_size=4)
-    )
-    valid_dataloader = mpot.create_dataloader(
-        valid.batch(batch_size=16)
-    )
+    train_dataloader = mpot.create_dataloader(train.batch(batch_size=64))
+    valid_dataloader = mpot.create_dataloader(valid.batch(batch_size=1))
     return train_dataloader, valid_dataloader
 
 
@@ -39,11 +35,19 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
 
     stagnation = mpot.strategy.Stagnation(alias.ti)
 
-    # train_acc = mpot.metric.Accuracy(alias.ti, alias.QM9.U)
+    mae = mpot.metric.MAE("energy_mae", alias.ti, alias.QM9.U)
 
-    logger = mpot.logger.LogAdapter(
-        "train_qm9", "data/qm9",
-        keys=['loss', alias.ti],
+    train_logger = mpot.logger.LogAdapter(
+        "train_qm9",
+        keys=["loss", "energy_mae"],
+        # save_dir="data/qm9",
+    )
+
+    valid_logger = mpot.logger.LogAdapter(
+        "valid_qm9",
+        keys=["loss", "energy_mae"],
+        # save_dir="data/qm9",
+        is_echo=False,
     )
 
     trainer = mpot.Trainer(
@@ -54,15 +58,18 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         train_dataloader,
         valid_dataloader,
         strategies=[stagnation],
-        metrics=[],
-        logger=logger,
+        metrics=[mae],
+        logger={
+            "train": [train_logger],
+            "valid": [valid_logger],
+        },
         config={
             "save_dir": "data/qm9",
-            "metrics": [],
             "device": {"type": "cpu"},
-            'n_train_log': 1,
-            'n_valiad_log': 1,
-            'n_valid': 10
+            "n_train_log": 10,
+            # 'n_valiad_log': 10,
+            "n_valid": 10,
+            "n_lr_step": 100,
         },
     )
     trainer.train(1e6)

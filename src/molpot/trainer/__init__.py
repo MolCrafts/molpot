@@ -1,4 +1,4 @@
-from .metric.metrics import *
+from .metric import *
 from .trainer import *
 from .optimizers import *
 from .loss import *

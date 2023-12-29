@@ -94,9 +94,11 @@ class Trainer(BaseTrainer):
 
         self.metrics = metrics
 
-        self.logger = logger
+        self.train_loggers = logger['train']
+        self.valid_loggers = logger['valid']
 
     def train(self, nsteps: int):
+        nsteps = int(nsteps)
         stepCounter = StepCounter(nsteps)
         self.strategies.append(stepCounter)
         output = self._pre_train()
@@ -142,11 +144,14 @@ class Trainer(BaseTrainer):
 
         self.model.eval()
 
-        # with torch.no_grad():
-        #     for data in self.valid_data_loader:
-        #         data, target = data.to(self.device), target.to(self.device)
-        #         output = self.model(data)
-        #         output = self.criterion(output, target)
+        with torch.no_grad():
+            for data in self.valid_data_loader:
+                _output = self.model(data)
+                _output = self.criterion(_output, data)
+
+        for logger in self.valid_loggers:
+            logger(nstep, output, data)
+
         return output
 
     def _post_iter(self, nstep: int, output: dict, data: dict):
@@ -155,10 +160,8 @@ class Trainer(BaseTrainer):
         )
 
         if nstep % self.config["n_train_log"] == 0:
-            self.logger.log(nstep, output, data)
-
-        # if nstep % self.config["n_valiad_log"] == 0:
-        #     self.logger.log(nstep, output, data)
+            for logger in self.train_loggers:
+                logger(nstep, output, data)
 
         if nstep % 100 == 0:
             self.lr_scheduler.step()

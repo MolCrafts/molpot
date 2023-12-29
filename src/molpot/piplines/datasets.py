@@ -33,12 +33,11 @@ class DataSet:
     """
 
     def __init__(
-        self, name, data_dir: None | Path | str, in_memory: bool = True, total: int = 0
+        self, name, data_dir: None | Path | str, in_memory: bool = True
     ):
         super().__init__()
         self.name = name
         self.in_memory = in_memory
-        self.total = total
         if not in_memory:
             if data_dir:
                 self.data_dir = Path(data_dir)
@@ -58,8 +57,6 @@ class DataSet:
                 json.dump(self._data, f)
 
     def _prepare(self, dp) -> IterDataPipe:
-        if self.total:
-            dp.set_length(self.total)
         return dp
 
     def fetch(self, url, filename, dir: Path | str) -> Path:
@@ -96,9 +93,10 @@ class QM9(DataSet):
         data_dir: Optional[Path | str] = None,
         in_memory: bool = False,
         remove_uncharacterized: bool = True,
-        total: int = 0,
+        total: int = 0
     ):
-        super().__init__("QM9", data_dir, in_memory, total)
+        super().__init__("QM9", data_dir, in_memory)
+        self.total = total
         self.remove_uncharacterized = remove_uncharacterized
         mpot.alias("QM9")
         mpot.alias.QM9.set("A", "_A", float, "GHz", "rotational_constant_A")

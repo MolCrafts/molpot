@@ -1,5 +1,6 @@
 import logging
 import logging.config
+from pathlib import Path
 
 __all__ = ["LogAdapter"]
 
@@ -13,39 +14,49 @@ DEFAULT_CONFIG = {
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "level": "DEBUG",
+            "level": "INFO",
             "formatter": "simple",
             "stream": "ext://sys.stdout",
         },
-        "info_file_handler": {
-            "class": "logging.handlers.RotatingFileHandler",
+        "file": {
+            "class": "logging.FileHandler",
             "level": "INFO",
-            "formatter": "datetime",
+            "formatter": "simple",
             "filename": "info.log",
-            "maxBytes": 10485760,
-            "backupCount": 20,
-            "encoding": "utf8",
         },
     },
-    "root": {"level": "INFO", "handlers": ["console", "info_file_handler"]},
+    "root": {"level": "INFO", "handlers": ["console", "file"]},
 }
 
 
 class LogAdapter:
     def __init__(
-        self, name: str, save_dir, config=DEFAULT_CONFIG, default_level=logging.INFO, keys=[]
+        self, name: str, keys=[], format="%(message)s", is_echo=True, save_dir=None
     ):
         self.logger = logging.getLogger(name)
-        self.save_dir = save_dir
-        logging.config.dictConfig(config)
-        logging.basicConfig(level=default_level)
+        self.logger.setLevel(logging.INFO)
+        self.logger.propagate = False
+        if save_dir:
+            self.save_dir = Path(save_dir)
+            if not self.save_dir.exists():
+                self.save_dir.mkdir(parents=True)
+            fileHandler = logging.handlers.RotatingFileHandler(self.save_dir / f"{name}.log")
+            fileHandler.setFormatter(logging.Formatter(format))
+            self.logger.addHandler(fileHandler)
+
+        else:
+            self.save_dir = None
+
+        if is_echo:
+            consoleHandler = logging.StreamHandler()
+            consoleHandler.setFormatter(logging.Formatter(format))
+            self.logger.addHandler(consoleHandler)
+            row = [f"{key:<10}" for key in keys]
+            msg = f"{'nstep':<10}" + f" ".join(row)
+            self.logger.info(msg)
         self.keys = keys
 
-        self.info(f"  ".join(self.keys))
-
-    def log(self, nstep, output, data):
-        msg = f"  ".join([f"{output[key]}" for key in self.keys])
-        self.logger.info(msg)
-
-    def info(self, msg):
+    def __call__(self, nstep, output, data):
+        row = [str(nstep)] + [f"{float(output[key]):<10.2f}" for key in self.keys]
+        msg = f" ".join(row)
         self.logger.info(msg)

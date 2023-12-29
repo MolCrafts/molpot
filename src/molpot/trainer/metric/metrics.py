@@ -1,6 +1,6 @@
 import torch
 
-__all__ = ["Accuracy", "TopKAccuracy"]
+__all__ = ["Accuracy", "TopKAccuracy", "MAE"]
 
 class Metric:
     
@@ -11,8 +11,8 @@ class Metric:
         raise NotImplementedError
 
 class Accuracy(Metric):
-    def __init__(self, result_key, target_key):
-        super().__init__("accuracy")
+    def __init__(self, name:str, result_key, target_key):
+        super().__init__(name)
         self.result_key = result_key
         self.target_key = target_key
 
@@ -28,8 +28,8 @@ class Accuracy(Metric):
         return correct / len(target)
     
 class TopKAccuracy(Metric):
-    def __init__(self, result_key, target_key, k=3):
-        super().__init__("top_k_acc")
+    def __init__(self, name:str, result_key, target_key, k=3):
+        super().__init__(name)
         self.result_key = result_key
         self.target_key = target_key
         self.k = k
@@ -45,3 +45,18 @@ class TopKAccuracy(Metric):
             for i in range(self.k):
                 correct += torch.sum(pred[:, i] == target).item()
         return correct / len(target)
+    
+class MAE(Metric):
+    def __init__(self, name:str, result_key, target_key, reduction="mean"):
+        super().__init__(name)
+        self.result_key = result_key
+        self.target_key = target_key
+        self.kernel = torch.nn.L1Loss(reduction=reduction)
+
+    def __call__(self, step, output, data):
+            
+            result = output[self.result_key]
+            target = data[self.target_key]
+            with torch.no_grad():
+                mae = self.kernel(result, target)
+                return mae
