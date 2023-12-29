@@ -1,21 +1,11 @@
 import torch
 import torch.nn as nn
 
-class NNPotential(nn.Module):
+class NNPotential(nn.Sequential):
 
-    def __init__(self, name):
-        super().__init__()
+    def __init__(self, name, *args):
+        super().__init__(*args)
         self._name = name
-        self._layers = nn.Sequential()
-
-    def append(self, module: nn.Module):
-        self._layers.append(module)
-
-    def forward(self, inputs):
-        return self._layers(inputs)
-    
-    def __call__(self, inputs):
-        return self.forward(inputs)
     
     def cite(self)->str:
         raise NotImplementedError

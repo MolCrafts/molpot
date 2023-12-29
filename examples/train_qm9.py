@@ -30,11 +30,9 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     train_dataloader, valid_dataloader = load_qm9
 
     n_atom_basis = 128
-    model = NNPotential("PaiNN")
     arch = mpot.PaiNN(n_atom_basis, 3, GaussianRBF(20, 5), CosineCutoff(5))
     readout = Atomwise(n_in=n_atom_basis, output_key=alias.ti)
-    model.append(arch)
-    model.append(readout)
+    model = NNPotential("PaiNN", arch, readout)
     criterion = mpot.MultiMSELoss([1], targets=[(alias.ti, alias.QM9.U)])
     optimizer = torch.optim.Adam(model.parameters())
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.99)
@@ -62,8 +60,9 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
             "save_dir": "data/qm9",
             "metrics": [],
             "device": {"type": "cpu"},
-            'n_train_log': 10,
-            'n_valiad_log': 10,
+            'n_train_log': 1,
+            'n_valiad_log': 1,
+            'n_valid': 10
         },
     )
     trainer.train(1e6)

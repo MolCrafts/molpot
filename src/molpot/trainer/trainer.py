@@ -8,6 +8,7 @@ import logging
 from molpot import alias
 import numpy as np
 
+
 class BaseTrainer:
     def __init__(self, model: NNPotential, config: dict):
         self.model = model
@@ -99,7 +100,7 @@ class Trainer(BaseTrainer):
         stepCounter = StepCounter(nsteps)
         self.strategies.append(stepCounter)
         output = self._pre_train()
-        for i, data in enumerate(self.train_data_loader, self.start_step+1):
+        for i, data in enumerate(self.train_data_loader, self.start_step + 1):
             output = self._pre_iter(i, output, data)
             output = self._train(i, output, data)
             output = self._valid(i, output, data)
@@ -108,6 +109,8 @@ class Trainer(BaseTrainer):
             if self.strategies(i, output, data):
                 break
 
+        if i < nsteps:
+            logging.warning(f"Training stopped at step {i} due to early stopping.")
         self._post_train(i, output, data)
 
     def _pre_train(self):
@@ -118,63 +121,59 @@ class Trainer(BaseTrainer):
 
         return {}
 
-    def _pre_iter(self, nstep:int, output:dict, data:dict):
-
+    def _pre_iter(self, nstep: int, output: dict, data: dict):
         return output
 
-    def _train(self, nstep:int, output:dict, data:dict):
+    def _train(self, nstep: int, output: dict, data: dict):
         self.model.train()
         self.optimizer.zero_grad()
         _output = self.model(data)
         loss = self.criterion(_output, data)
         loss.backward()
-        _output['loss'] = loss
         self.optimizer.step()
+        _output["loss"] = loss
         output.update(_output)
         # self.trainMetrics(nstep, data, output)
         return output
 
-    def _valid(self, nstep:int, output:dict, data:dict):
-
-        if nstep % 100 != 0:
+    def _valid(self, nstep: int, output: dict, data: dict):
+        if nstep % self.config['n_valid'] != 0:
             return output
 
         self.model.eval()
 
-        with torch.no_grad():
-            for i, (data, target) in enumerate(self.valid_data_loader):
-                data, target = data.to(self.device), target.to(self.device)
-                output = self.model(data)
-                output = self.criterion(output, target)
-                self.validMetrics(nstep, data, output)
+        # with torch.no_grad():
+        #     for data in self.valid_data_loader:
+        #         data, target = data.to(self.device), target.to(self.device)
+        #         output = self.model(data)
+        #         output = self.criterion(output, target)
         return output
 
+    def _post_iter(self, nstep: int, output: dict, data: dict):
+        output.update(
+            {metric.name: metric(nstep, output, data) for metric in self.metrics}
+        )
 
-
-    def _post_iter(self, nstep:int, output:dict, data:dict):
-
-        output.update({metric.name: metric(nstep, output, data) for metric in self.metrics})
-
-        if nstep % self.config['n_train_log'] == 0:
+        if nstep % self.config["n_train_log"] == 0:
             self.logger.log(nstep, output, data)
 
-        if nstep % self.config['n_valiad_log'] == 0:
-            self.logger.log(nstep, output, data)
-        
+        # if nstep % self.config["n_valiad_log"] == 0:
+        #     self.logger.log(nstep, output, data)
+
         if nstep % 100 == 0:
             self.lr_scheduler.step()
 
         return output
 
-    def _post_train(self, nstep:int, output:dict, data:dict):
+    def _post_train(self, nstep: int, output: dict, data: dict):
         # self._save_checkpoint(self.start_step, save_best=True)
         return output
 
 
 class OfflineALTrainer(Trainer):
-    
-    def _post_iter(self, nstep:int, output:dict, data:dict):
+    def _post_iter(self, nstep: int, output: dict, data: dict):
         return super()._post_iter(output)
+
 
 class OnlineALTrainer(Trainer):
     pass
