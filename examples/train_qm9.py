@@ -39,13 +39,13 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     optimizer = torch.optim.Adam(model.parameters())
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.99)
 
-    stagnation = mpot.strategy.Stagnation(alias.energy)
+    stagnation = mpot.strategy.Stagnation(alias.ti)
 
-    train_acc = mpot.metric.Accuracy(alias.ti, alias.QM9.U)
+    # train_acc = mpot.metric.Accuracy(alias.ti, alias.QM9.U)
 
-    logger = mpot.trainer.logger.LogAdapter(
+    logger = mpot.logger.LogAdapter(
         "train_qm9", "data/qm9",
-        keys=['loss', 'acc'],
+        keys=['loss', alias.ti],
     )
 
     trainer = mpot.Trainer(
@@ -56,12 +56,14 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         train_dataloader,
         valid_dataloader,
         strategies=[stagnation],
-        metrics=[train_acc],
+        metrics=[],
         logger=logger,
         config={
             "save_dir": "data/qm9",
             "metrics": [],
             "device": {"type": "cpu"},
+            'n_train_log': 10,
+            'n_valiad_log': 10,
         },
     )
     trainer.train(1e6)

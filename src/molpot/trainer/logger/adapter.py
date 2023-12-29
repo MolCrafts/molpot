@@ -1,6 +1,8 @@
 import logging
 import logging.config
 
+__all__ = ["LogAdapter"]
+
 DEFAULT_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -39,8 +41,10 @@ class LogAdapter:
         logging.basicConfig(level=default_level)
         self.keys = keys
 
+        self.info(f"  ".join(self.keys))
+
     def log(self, nstep, output, data):
-        msg = f"  ".join([f"{key}" for key in self.keys])
+        msg = f"  ".join([f"{output[key]}" for key in self.keys])
         self.logger.info(msg)
 
     def info(self, msg):

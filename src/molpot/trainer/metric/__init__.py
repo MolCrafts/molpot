@@ -1,5 +1,2 @@
-from .metric import *
+from .metrics import *
 from .tracker import *
-
-def get_metric(name):
-    return globals()[name]

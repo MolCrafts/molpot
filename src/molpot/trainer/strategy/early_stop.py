@@ -18,7 +18,7 @@ class Stagnation(Strategy):
         self.best_loss = np.inf
 
     def __call__(self, step:int, output, data) -> bool:
-        val_loss = output[self.key]
+        val_loss = output[self.key].mean()
         if self.counter < self.patience:
             delta = val_loss - self.best_loss
             if delta > self.min_delta:

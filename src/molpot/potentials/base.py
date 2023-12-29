@@ -14,6 +14,9 @@ class NNPotential(nn.Module):
     def forward(self, inputs):
         return self._layers(inputs)
     
+    def __call__(self, inputs):
+        return self.forward(inputs)
+    
     def cite(self)->str:
         raise NotImplementedError
     

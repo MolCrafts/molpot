@@ -3,6 +3,8 @@
 # date: 2023-12-07
 # version: 0.0.1
 
+__all__ = ["Strategy", "StrategyManager"]
+
 class Strategy:
 
     def __call__(self) -> bool:
@@ -24,8 +26,8 @@ class StrategyManager:
     def extend(self, strategies:list):
         self.strategies.extend(strategies)
     
-    def __call__(self, step:int) -> bool:
+    def __call__(self, nstep:int, output, data) -> bool:
         for strategy in self.strategies:
-            if strategy(step):
+            if strategy(nstep, output, data):
                 return True
         return False

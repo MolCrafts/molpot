@@ -52,7 +52,7 @@ class QM9Reader(IterDataPipe):
             frame[alias.natoms] = torch.tensor(int(lines[0]), dtype=torch.int32)
             props_line = lines[1].split()[1:]
             frame[alias.idx] = torch.tensor(int(props_line[0]), dtype=torch.int32)
-            for prop, p in zip(alias.QM9.values(), props_line[1:]):
+            for prop, p in zip(alias.QM9.items(), props_line[1:]):
                 if prop in alias:
                     src_unit = prop.unit
                     dst_unit = alias.get_unit(prop)

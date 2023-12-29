@@ -3,8 +3,6 @@ import torch
 from molpot.trainer.strategy.base import StrategyManager
 from molpot.trainer.strategy.early_stop import StepCounter
 from molpot.trainer.utils import prepare_device
-from .metric.tracker import MetricTracker
-from .metric import get_metric
 from ..potentials import NNPotential
 import logging
 from molpot import alias
@@ -110,7 +108,7 @@ class Trainer(BaseTrainer):
             if self.strategies(i, output, data):
                 break
 
-        self._post_train(output)
+        self._post_train(i, output, data)
 
     def _pre_train(self):
         if self.resume:
@@ -122,22 +120,17 @@ class Trainer(BaseTrainer):
 
     def _pre_iter(self, nstep:int, output:dict, data:dict):
 
-        output.update({metric.name: metric(nstep, output, data) for metric in self.metrics})
-
-        if nstep % self.config['n_train_log'] == 0:
-            self.logger.log(nstep, output, data)
-
-        if nstep % self.config['n_valiad_log'] == 0:
-            self.logger.log(nstep, output, data)
+        return output
 
     def _train(self, nstep:int, output:dict, data:dict):
         self.model.train()
         self.optimizer.zero_grad()
         _output = self.model(data)
-        output.update(_output)
-        loss = self.criterion(output, data)
+        loss = self.criterion(_output, data)
         loss.backward()
+        _output['loss'] = loss
         self.optimizer.step()
+        output.update(_output)
         # self.trainMetrics(nstep, data, output)
         return output
 
@@ -159,6 +152,14 @@ class Trainer(BaseTrainer):
 
 
     def _post_iter(self, nstep:int, output:dict, data:dict):
+
+        output.update({metric.name: metric(nstep, output, data) for metric in self.metrics})
+
+        if nstep % self.config['n_train_log'] == 0:
+            self.logger.log(nstep, output, data)
+
+        if nstep % self.config['n_valiad_log'] == 0:
+            self.logger.log(nstep, output, data)
         
         if nstep % 100 == 0:
             self.lr_scheduler.step()
@@ -166,7 +167,6 @@ class Trainer(BaseTrainer):
         return output
 
     def _post_train(self, nstep:int, output:dict, data:dict):
-        self.lr_scheduler.step()
         # self._save_checkpoint(self.start_step, save_best=True)
         return output
 
