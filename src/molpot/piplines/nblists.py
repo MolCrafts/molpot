@@ -19,3 +19,6 @@ class CalcNBList(IterDataPipe):
         nblist_fn = TorchNeighborList(cutoff=self.cutoff)
         for d in self.dp:
             yield nblist_fn(d)
+
+    def __len__(self):
+        return len(self.dp)

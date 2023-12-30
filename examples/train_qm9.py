@@ -9,16 +9,14 @@ from molpot import alias
 
 
 def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    qm9_dataset = mpot.QM9(data_dir="data/qm9")
+    qm9_dataset = mpot.QM9(data_dir="data/qm9", total=1000)
     dp = qm9_dataset.prepare()
     train, valid = (
         dp.calc_nblist(5)
-        .shuffle()
-        .set_length(1000)
-        .random_split(weights={"train": 0.8, "valid": 0.2}, seed=0)
+        .random_split(weights={"train": 0.8, "valid": 0.2}, seed=42)
     )
-    train_dataloader = mpot.create_dataloader(train.batch(batch_size=64))
-    valid_dataloader = mpot.create_dataloader(valid.batch(batch_size=1))
+    train_dataloader = mpot.create_dataloader(train.batch(32))
+    valid_dataloader = mpot.create_dataloader(valid.batch(1))
     return train_dataloader, valid_dataloader
 
 
@@ -30,10 +28,10 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     readout = Atomwise(n_in=n_atom_basis, output_key=alias.ti)
     model = NNPotential("PaiNN", arch, readout)
     criterion = mpot.MultiMSELoss([1], targets=[(alias.ti, alias.QM9.U)])
-    optimizer = torch.optim.Adam(model.parameters())
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.99)
 
-    stagnation = mpot.strategy.Stagnation(alias.ti)
+    stagnation = mpot.strategy.Stagnation('loss', patience=torch.inf)
 
     mae = mpot.metric.MAE("energy_mae", alias.ti, alias.QM9.U)
 
@@ -66,7 +64,7 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         config={
             "save_dir": "data/qm9",
             "device": {"type": "cpu"},
-            "n_train_log": 10,
+            "n_train_log": 1000,
             # 'n_valiad_log': 10,
             "n_valid": 10,
             "n_lr_step": 100,
@@ -77,7 +75,4 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
 
 
 if __name__ == "__main__":
-    import logging
-
-    logging.basicConfig(level=logging.INFO)
     train_qm9(load_qm9())

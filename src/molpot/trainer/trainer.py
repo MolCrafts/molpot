@@ -98,22 +98,49 @@ class Trainer(BaseTrainer):
         self.valid_loggers = logger['valid']
 
     def train(self, nsteps: int):
-        nsteps = int(nsteps)
+        output = self._pre_train()
         stepCounter = StepCounter(nsteps)
         self.strategies.append(stepCounter)
-        output = self._pre_train()
-        for i, data in enumerate(self.train_data_loader, self.start_step + 1):
-            output = self._pre_iter(i, output, data)
-            output = self._train(i, output, data)
-            output = self._valid(i, output, data)
-            output = self._post_iter(i, output, data)
+        nstep = 0
+        while True:
+            self.model.train()
+            for data in self.train_data_loader:
+                self.optimizer.zero_grad()
+                _output = self.model(data)
+                loss = self.criterion(_output, data)
+                loss.backward()
+                self.optimizer.step()
+                _output["loss"] = loss
+                output.update(_output)
 
-            if self.strategies(i, output, data):
-                break
+                output.update(
+                    {metric.name: metric(nstep, output, data) for metric in self.metrics}
+                )
 
-        if i < nsteps:
-            logging.warning(f"Training stopped at step {i} due to early stopping.")
-        self._post_train(i, output, data)
+                if nstep % self.config["n_train_log"] == 0:
+                    for logger in self.train_loggers:
+                        logger(nstep, output, data)
+
+                if nstep % 100 == 0:
+                    self.lr_scheduler.step()
+
+                if self.strategies(nstep, output, data):
+                    if nstep < nsteps:
+                        logging.warning(f"Training stopped at step {nstep} due to early stopping.")
+                    self._post_train(nstep, output, data)
+                    return
+
+                nstep += 1
+
+            self.model.eval()
+            with torch.no_grad():
+                for data in self.valid_data_loader:
+                    _output = self.model(data)
+                    _output = self.criterion(_output, data)
+
+            for logger in self.valid_loggers:
+                logger(nstep, output, data)
+
 
     def _pre_train(self):
         if self.resume:
@@ -123,50 +150,6 @@ class Trainer(BaseTrainer):
 
         return {}
 
-    def _pre_iter(self, nstep: int, output: dict, data: dict):
-        return output
-
-    def _train(self, nstep: int, output: dict, data: dict):
-        self.model.train()
-        self.optimizer.zero_grad()
-        _output = self.model(data)
-        loss = self.criterion(_output, data)
-        loss.backward()
-        self.optimizer.step()
-        _output["loss"] = loss
-        output.update(_output)
-        # self.trainMetrics(nstep, data, output)
-        return output
-
-    def _valid(self, nstep: int, output: dict, data: dict):
-        if nstep % self.config['n_valid'] != 0:
-            return output
-
-        self.model.eval()
-
-        with torch.no_grad():
-            for data in self.valid_data_loader:
-                _output = self.model(data)
-                _output = self.criterion(_output, data)
-
-        for logger in self.valid_loggers:
-            logger(nstep, output, data)
-
-        return output
-
-    def _post_iter(self, nstep: int, output: dict, data: dict):
-        output.update(
-            {metric.name: metric(nstep, output, data) for metric in self.metrics}
-        )
-
-        if nstep % self.config["n_train_log"] == 0:
-            for logger in self.train_loggers:
-                logger(nstep, output, data)
-
-        if nstep % 100 == 0:
-            self.lr_scheduler.step()
-
-        return output
 
     def _post_train(self, nstep: int, output: dict, data: dict):
         # self._save_checkpoint(self.start_step, save_best=True)
