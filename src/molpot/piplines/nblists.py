@@ -11,14 +11,15 @@ __all__ = ["CalcNBList"]
 
 @functional_datapipe("calc_nblist")
 class CalcNBList(IterDataPipe):
+
     def __init__(self, source_dp: IterDataPipe, cutoff: float):
         self.dp = source_dp
         self.cutoff = cutoff
+        self.kernel = TorchNeighborList(cutoff)
 
     def __iter__(self):
-        nblist_fn = TorchNeighborList(cutoff=self.cutoff)
         for d in self.dp:
-            yield nblist_fn(d)
+            yield self.kernel(d)
 
     def __len__(self):
         return len(self.dp)

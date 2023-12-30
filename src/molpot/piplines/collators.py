@@ -10,7 +10,7 @@ import torch
 import molpot as mpot
 from torchdata.datapipes import functional_datapipe
 
-__all__ = ["CollateFrames"]
+__all__ = ["CollateFrames", "CollateData"]
 
 def _collate_frame(batch: Sequence[mp.Frame]):
 
@@ -44,7 +44,10 @@ class CollateFrames(Collator):
     def __init__(self, datapipe, **kwargs):
         super().__init__(datapipe, collate_fn=_collate_frame, **kwargs)
 
-def _collate_dict(batch: Sequence[dict]):
+def _collate_dict(batch: dict | Sequence[dict]):
+
+    if isinstance(batch, dict):
+        batch = [batch]
 
     coll_batch = {}
 

@@ -4,6 +4,7 @@ from .dataloaders import *
 from torchdata.datapipes.iter import *
 from .collators import *
 from .nblists import *
+from .process import *
 
 
 def get_data_loader(config: dict) -> DataLoader2:
