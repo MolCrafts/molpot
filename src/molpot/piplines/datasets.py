@@ -39,6 +39,7 @@ class DataSet:
         self.name = name
         self.in_memory = in_memory
         self.total = total
+        self.logger = logging.getLogger(self.name)
         if not in_memory:
             if data_dir:
                 self.data_dir = Path(data_dir)
@@ -148,14 +149,14 @@ class QM9(DataSet):
                 uncharacterized = self._download_uncharacterized()
             else:
                 uncharacterized = None
-            ordered_files = self._download_data()
+            filepaths = self._download_data()
 
-            irange = np.arange(len(ordered_files), dtype=int)
-            if uncharacterized is not None:
-                irange = np.setdiff1d(irange, np.array(uncharacterized, dtype=int) - 1)
+            # irange = np.arange(len(ordered_files), dtype=int)
+            # if uncharacterized is not None:
+            #     irange = np.setdiff1d(irange, np.array(uncharacterized, dtype=int) - 1)
 
             dp = (
-                IterableWrapper(map(str, np.array(ordered_files)[irange]))
+                IterableWrapper(list(filepaths))
                 .open_files()
                 .read_qm9()
             )
@@ -197,19 +198,13 @@ class QM9(DataSet):
         tar_path = self.fetch(url, "gdb9.tar.gz", self.data_dir)
         dest_path = self.data_dir / Path("xyz")
 
-        _sort_qm9 = lambda x: (int(re.sub(r"\D", "", str(x))), str(x))
+        # _sort_qm9 = lambda x: (int(re.sub(r"\D", "", str(x))), str(x))
         self.extract_tar(tar_path, dest_path, "all")
 
         log.info("Parse xyz files...")
         xyz_files = dest_path.rglob("*.xyz")
-        if self.total:
-            xyz_files = islice(xyz_files, self.total)
-        ordered_files = sorted(
-            xyz_files,
-            key=_sort_qm9,
-        )  # sort by index in filename
-        return ordered_files
-
+        xyz_files = list(map(str, xyz_files))
+        return xyz_files
 
 class rMD17(DataSet):
     def __init__(

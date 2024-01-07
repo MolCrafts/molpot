@@ -12,10 +12,11 @@ def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
     qm9_dataset = mpot.QM9(data_dir="data/qm9", total=1000)
     dp = qm9_dataset.prepare()
     train, valid = (
-        dp.calc_nblist(5)
+        dp.atomic_dress(alias.Z, alias.QM9.U)
+        .calc_nblist(5)
         .random_split(weights={"train": 0.8, "valid": 0.2}, seed=42)
     )
-    train_dataloader = mpot.create_dataloader(train.batch(32))
+    train_dataloader = mpot.create_dataloader(train.batch(64))
     valid_dataloader = mpot.create_dataloader(valid.batch(1))
     return train_dataloader, valid_dataloader
 
