@@ -33,7 +33,7 @@ class DataSet:
     """
 
     def __init__(
-        self, name, data_dir: None | Path | str, in_memory: bool = True, total: int = 0
+        self, name, data_dir: None | Path | str, in_memory: bool = True, total: Optional[None] = None, batch_size: int = 1
     ):
         super().__init__()
         self.name = name
@@ -61,7 +61,7 @@ class DataSet:
     def _prepare(self, dp) -> IterDataPipe:
         if self.total:
             dp = dp.header(self.total).set_length(self.total)
-        return dp
+        return dp.batch(self.batch_size)
 
     def fetch(self, url, filename, dir: Path | str) -> Path:
         fpath = Path(dir) / Path(filename)
@@ -142,6 +142,7 @@ class QM9(DataSet):
                 .map(lambda x: io.TestIOWrapper(qm9_tar.extractfile(x)).readlines())
                 .read_qm9()
             )
+            return self._prepare(dp)
 
         else:
             # atomrefs = self._download_atomrefs()

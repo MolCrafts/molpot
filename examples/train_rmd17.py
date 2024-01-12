@@ -6,14 +6,14 @@ from molpot.potentials.nnp.layers import CosineCutoff, GaussianRBF
 from molpot.potentials.nnp.readout import Atomwise
 
 from molpot import alias
+from tests.conftest import batch_size
 
 def load_rmd17() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    rmd17_dataset = mpot.rMD17(data_dir="data/rmd17", total=100)
+    rmd17_dataset = mpot.rMD17(data_dir="data/rmd17", total=100, batch_size=32)
     dp = rmd17_dataset.prepare()
     train, valid = (
         dp.calc_nblist(5)
         .shuffle()
-        .set_length(1000)
         .random_split(weights={"train": 0.8, "valid": 0.2}, seed=42)
     )
     train_dataloader = mpot.create_dataloader(

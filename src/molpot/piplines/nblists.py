@@ -19,7 +19,7 @@ class CalcNBList(IterDataPipe):
 
     def __iter__(self):
         for d in self.dp:
-            yield self.kernel(d)
+            yield [self.kernel(dd) for dd in d]
 
     def __len__(self):
         return len(self.dp)
