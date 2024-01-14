@@ -56,9 +56,10 @@ class QM9Reader(IterDataPipe):
                 if prop in alias:
                     src_unit = prop.unit
                     dst_unit = alias.get_unit(prop)
-                    frame[prop.key] = mp.units.convert(float(p), src_unit, dst_unit)
+                    frame[prop.key] = (mp.units.convert(float(p), src_unit, dst_unit))
                 else:
                     frame[prop.key] = torch.tensor(float(p))
+                frame[prop.key] = torch.atleast_1d(frame[prop.key])
 
             xyz = torch.tensor(
                 [

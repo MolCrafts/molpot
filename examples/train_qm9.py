@@ -16,7 +16,7 @@ def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
     train, valid = (
         dp.atomic_dress([1, 6, 7, 8, 9], alias.Z, alias.QM9.U)
         .calc_nblist(5)
-        .random_split(weights={"train": 0.8, "valid": 0.2}, seed=42)
+        .random_split(weights= {"train": 0.8, "valid": 0.2}, seed=42)
     )
     train_dataloader = mpot.create_dataloader(train)
     valid_dataloader = mpot.create_dataloader(valid)
@@ -60,12 +60,13 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         },
         config={
             "save_dir": "data/qm9",
-            "device": {"type": "cpu"},
+            "device": {"type": "gpu", 'n_gpu_use': 1},
             "report_rate": 1000,
             "valid_rate": 1000,
             "modify_lr_rate": 100,
         },
     )
+    trainer.jit()
     trainer.train(1e6)
     return "done"
 

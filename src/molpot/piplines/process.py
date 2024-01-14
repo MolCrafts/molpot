@@ -56,23 +56,25 @@ class AtomicDressing(IterDataPipe):
             for sample in batch:
                 atom_type = sample[self.key]
                 target = sample[self.prop]
-                unique_type, indices, count = atom_type.unique(return_counts=True, return_inverse=True)
-                aligned_count = torch.zeros_like(self.types_list, dtype=torch.float32)
-                comparison = torch.eq(self.types_list.unsqueeze(1), unique_type)
-                aligned_count[[index.item() for index in torch.nonzero(comparison)[:, 1]]] += count
-                x.append(aligned_count)
+                count = torch.eq(
+                    self.types_list.unsqueeze(1),
+                    atom_type
+                ).sum(dim=1)
+                x.append(count)
                 y.append(target)
             
             x_tensor = torch.stack(tuple(x))
+            x_tensor = torch.cat((x_tensor, torch.zeros((x_tensor.shape[0], 1))), dim=1)
             y_tensor = torch.stack(tuple(y)).reshape(-1, 1)
             xTx = torch.matmul(x_tensor.T, x_tensor)
             xTx_inv = torch.linalg.pinv(xTx)
-            xTx_invx = torch.matmul(xTx_inv, x_tensor.T)
-            w = torch.matmul(xTx_invx, y_tensor)
+            xTx_invxT = torch.matmul(xTx_inv, x_tensor.T)
+            w = torch.matmul(xTx_invxT, y_tensor)
+            predict = x_tensor @ w
+            # error = torch.sum((y_tensor - predict)**2)
+            for i, sample in enumerate(batch):
+                sample[self.prop] -= predict[i]
 
-            for i, e in enumerate(unique_type):
-                self.dress[str(e)](w[i])
-                # print(f"{e} current: {w[i]}; mean: {self.dress[str(e)].mean}; std: {self.dress[str(e)].stddev}")
             yield batch
     
     def __len__(self):

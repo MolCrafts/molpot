@@ -6,6 +6,8 @@ def prepare_device(config:dict):
     """
     if config["type"] == "cpu":
         n_gpu_use = 0
+    elif config["type"] == "gpu":
+        n_gpu_use = config["n_gpu_use"]
     n_gpu = torch.cuda.device_count()
     if n_gpu_use > 0 and n_gpu == 0:
         print(

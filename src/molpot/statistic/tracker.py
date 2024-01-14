@@ -6,7 +6,10 @@ number = TypeVar('number', int, float)
 class Tracker:
 
     def __init__(self):
-        self.reset()
+        self._mean = 0
+        self._stddev = 0
+        self._count = 0
+        self._M2 = 0
 
     def __call__(self, new: number | np.ndarray | torch.Tensor):
 
@@ -19,12 +22,6 @@ class Tracker:
         delta2 = new - self._mean
         self._M2 += np.sum(delta * delta2)
 
-    def reset(self):
-        self._mean = 0
-        self._stddev = 0
-        self._count = 0
-        self._M2 = 0
-
     @property
     def mean(self):
         return self._mean
@@ -35,4 +32,4 @@ class Tracker:
     
     @property
     def stddev(self):
-        return (self._M2 / self._count) ** 0.5
+        return self.variance ** 0.5

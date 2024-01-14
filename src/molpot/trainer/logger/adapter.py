@@ -6,6 +6,8 @@ class LogAdapter:
     def __init__(self, metrics, handlers):
         self.metrics = metrics
         self.handlers = handlers
+
+    def init(self):
         for handler in self.handlers:
             handler.init(self.metrics)
 

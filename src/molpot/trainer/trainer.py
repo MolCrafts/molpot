@@ -8,6 +8,7 @@ from ..potentials import NNPotential
 import logging
 from molpot import alias
 import numpy as np
+import warnings
 
 
 class BaseTrainer:
@@ -97,6 +98,10 @@ class Trainer(BaseTrainer):
         self.log_config = logger
         self.logger = LogAdapter(self.log_config["metrics"], self.log_config["handlers"])
 
+    def jit(self):
+        self.model = torch.compile(self.model)
+        
+
     def train(self, nsteps: int):
         output = self._pre_train()
         stepCounter = StepCounter(nsteps)
@@ -147,7 +152,7 @@ class Trainer(BaseTrainer):
             self._resume_checkpoint(self.resume)
         else:
             self.start_step = 0
-
+        self.logger.init()
         return {}
 
 
