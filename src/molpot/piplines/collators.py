@@ -44,10 +44,7 @@ class CollateFrames(Collator):
     def __init__(self, datapipe, **kwargs):
         super().__init__(datapipe, collate_fn=_collate_frame, **kwargs)
 
-def _collate_dict(batch: dict | Sequence[dict]):
-
-    if isinstance(batch, dict):
-        batch = [batch]
+def _collate_dict(batch: Sequence[dict]):
 
     coll_batch = {}
 

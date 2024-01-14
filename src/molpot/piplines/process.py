@@ -3,7 +3,7 @@
 # date: 2023-12-30
 # version: 0.0.1
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import TypeVar
 from torchdata.datapipes.iter import IterDataPipe
 from torchdata.datapipes import functional_datapipe
@@ -61,7 +61,7 @@ class Normalizer(IterDataPipe):
             for k in self.keys:
                 self._data[k](d[k])
             d[k] = (d[k] - self._data[k].mean) / self._data[k].stddev
-            
+             
             yield d
 
     def __len__(self):
@@ -69,31 +69,46 @@ class Normalizer(IterDataPipe):
     
 @functional_datapipe("atomic_dress")
 class AtomicDressing(IterDataPipe):
+    """
+    http://mlwiki.org/index.php/Normal_Equation
 
-    def __init__(self, source_dp: IterDataPipe, atom_type: str, props: str):
+    Args:
+        IterDataPipe (_type_): _description_
+    """
+    def __init__(self, source_dp: IterDataPipe, types_list: list[int], key, prop, buffer:int|None = None):
         self.dp = source_dp
-        self.atom_type = atom_type
-        self.props = props
+        self.types_list = torch.tensor(types_list)
         self.dress = defaultdict(Statistic)
+        self.key = key
+        self.prop = prop
+        self.buffer = buffer
 
     def __iter__(self):
-        for d in self.dp:
 
-            atom_type = d[self.atom_type]
-            y = d[self.props]
-            unique_type, indices, x = atom_type.unique(return_counts=True, return_inverse=True)
-            x_tensor = np.atleast_2d(np.array(x))
-            y_tensor = np.atleast_2d(np.array(y))
-            theta = np.dot(np.dot(np.linalg.pinv(np.dot(x_tensor.T, x_tensor)), x_tensor.T), y_tensor)
-            dress = {e: float(theta[i]) for i, e in enumerate(unique_type)}
-            # error = np.dot(x_tensor, theta) - y_tensor
-            ave_dress = []
-            for e, dre in dress.items():
-                self.dress[str(e)](dre)
-                ave_dress.append(self.dress[str(e)].mean)
-            print(f"error: {torch.dot(x.double(), torch.tensor(ave_dress)) - y.double()}")
-            d[self.props] -= torch.sum(torch.tensor(ave_dress)[indices])
-            yield d
+        x = deque(maxlen=self.buffer)
+        y = deque(maxlen=self.buffer)
+        for batch in self.dp:
+            for sample in batch:
+                atom_type = sample[self.key]
+                target = sample[self.prop]
+                unique_type, indices, count = atom_type.unique(return_counts=True, return_inverse=True)
+                aligned_count = torch.zeros_like(self.types_list, dtype=torch.float32)
+                comparison = torch.eq(self.types_list.unsqueeze(1), unique_type)
+                aligned_count[[index.item() for index in torch.nonzero(comparison)[:, 1]]] += count
+                x.append(aligned_count)
+                y.append(target)
+            
+            x_tensor = torch.stack(tuple(x))
+            y_tensor = torch.stack(tuple(y)).reshape(-1, 1)
+            xTx = torch.matmul(x_tensor.T, x_tensor)
+            xTx_inv = torch.linalg.pinv(xTx)
+            xTx_invx = torch.matmul(xTx_inv, x_tensor.T)
+            w = torch.matmul(xTx_invx, y_tensor)
+
+            for i, e in enumerate(unique_type):
+                self.dress[str(e)](w[i])
+                # print(f"{e} current: {w[i]}; mean: {self.dress[str(e)].mean}; std: {self.dress[str(e)].stddev}")
+            yield batch
     
     def __len__(self):
         return len(self.dp)
