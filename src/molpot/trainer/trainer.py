@@ -1,5 +1,6 @@
 from pathlib import Path
 import torch
+from molpot.trainer.logger.adapter import LogAdapter
 from molpot.trainer.strategy.base import StrategyManager
 from molpot.trainer.strategy.early_stop import StepCounter
 from molpot.trainer.utils import prepare_device
@@ -93,16 +94,17 @@ class Trainer(BaseTrainer):
         # self.validMetrics = MetricTracker("valid", self.metrics)
 
         self.metrics = metrics
-
-        self.train_loggers = logger['train']
-        self.valid_loggers = logger['valid']
+        self.log_config = logger
+        self.logger = LogAdapter(self.log_config["metrics"], self.log_config["handlers"])
 
     def train(self, nsteps: int):
         output = self._pre_train()
         stepCounter = StepCounter(nsteps)
         self.strategies.append(stepCounter)
         nstep = 0
+        nepoch = 0
         while True:
+            # Training
             self.model.train()
             for data in self.train_data_loader:
                 self.optimizer.zero_grad()
@@ -110,37 +112,35 @@ class Trainer(BaseTrainer):
                 loss = self.criterion(_output, data)
                 loss.backward()
                 self.optimizer.step()
-                _output["loss"] = loss
+                _output[alias.loss] = loss
+                _output[alias.step] = nstep
+                _output[alias.epoch] = nepoch
                 output.update(_output)
 
-                output.update(
-                    {metric.name: metric(nstep, output, data) for metric in self.metrics}
-                )
+                if nstep % self.config["report_rate"] == 0:
+                    self.logger(nstep, output, data)
 
-                if nstep % self.config["n_train_log"] == 0:
-                    for logger in self.train_loggers:
-                        logger(nstep, output, data)
-
-                if nstep % 100 == 0:
+                if nstep % self.config['modify_lr_rate'] == 0:
                     self.lr_scheduler.step()
 
                 if self.strategies(nstep, output, data):
                     if nstep < nsteps:
                         logging.warning(f"Training stopped at step {nstep} due to early stopping.")
                     self._post_train(nstep, output, data)
-                    return
+                    return output
 
+                if nstep % self.config["valid_rate"] == 0:
+                    # Validation
+                    self.model.eval()
+                    with torch.no_grad():
+                        for data in self.valid_data_loader:
+                            _output = self.model(data)
+                            _output = self.criterion(_output, data)
+                        
                 nstep += 1
 
-            self.model.eval()
-            with torch.no_grad():
-                for data in self.valid_data_loader:
-                    _output = self.model(data)
-                    _output = self.criterion(_output, data)
-
-            for logger in self.valid_loggers:
-                logger(nstep, output, data)
-
+            
+            nepoch += 1
 
     def _pre_train(self):
         if self.resume:

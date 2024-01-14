@@ -28,6 +28,10 @@ alias.set('ti', '_ti', int, None, 'rank 0 tensor')
 alias.set('tij', '_tij', int, None, 'rank 1 tensor')
 alias.set('tijk', '_tijk', int, None, 'rank 2 tensor')
 
+alias.set('loss', '_loss', float, None, 'loss')
+alias.set('step', '_step', int, None, 'step')
+alias.set('epoch', '_epoch', int, None, 'epoch')
+
 # alias = Alias('default')
 # alias.set('energy', 'energy', None, '')
 

@@ -40,6 +40,7 @@ class DataSet:
         self.in_memory = in_memory
         self.total = total
         self.logger = logging.getLogger(self.name)
+        self.batch_size = batch_size
         if not in_memory:
             if data_dir:
                 self.data_dir = Path(data_dir)
@@ -98,8 +99,9 @@ class QM9(DataSet):
         in_memory: bool = False,
         remove_uncharacterized: bool = True,
         total: int = 0,
+        batch_size: int = 1,
     ):
-        super().__init__("QM9", data_dir, in_memory, total)
+        super().__init__("QM9", data_dir, in_memory, total, batch_size)
         self.remove_uncharacterized = remove_uncharacterized
         mpot.alias("QM9")
         mpot.alias.QM9.set("A", "_A", float, "GHz", "rotational_constant_A")
