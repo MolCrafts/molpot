@@ -50,9 +50,12 @@ class AtomicDressing(IterDataPipe):
 
     def __iter__(self):
 
-        x = deque(maxlen=self.buffer)
-        y = deque(maxlen=self.buffer)
+        # x = deque(maxlen=self.buffer)
+        # y = deque(maxlen=self.buffer)
+
         for batch in self.dp:
+            x = []
+            y = []
             for sample in batch:
                 atom_type = sample[self.key]
                 target = sample[self.prop]
@@ -66,6 +69,7 @@ class AtomicDressing(IterDataPipe):
             x_tensor = torch.stack(tuple(x))
             x_tensor = torch.cat((x_tensor, torch.zeros((x_tensor.shape[0], 1))), dim=1)
             y_tensor = torch.stack(tuple(y)).reshape(-1, 1)
+            # print(x_tensor.shape, y_tensor.shape)
             xTx = torch.matmul(x_tensor.T, x_tensor)
             xTx_inv = torch.linalg.pinv(xTx)
             xTx_invxT = torch.matmul(xTx_inv, x_tensor.T)
@@ -73,9 +77,10 @@ class AtomicDressing(IterDataPipe):
             predict = x_tensor @ w
             # error = torch.sum((y_tensor - predict)**2)
             for i, sample in enumerate(batch):
+                # print(f"label: {sample[self.prop].item():.2f}, predict: {predict[i][0].item():.2f}, error: {((sample[self.prop] - predict[i][0])**2).item():.2f}")
                 sample[self.prop] -= predict[i]
 
-            yield batch
+        yield batch
     
     def __len__(self):
         return len(self.dp)

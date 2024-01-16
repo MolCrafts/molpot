@@ -60,7 +60,7 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         },
         config={
             "save_dir": "data/qm9",
-            "device": {"type": "gpu", 'n_gpu_use': 1},
+            "device": {"type": "cpu"},
             "report_rate": 1000,
             "valid_rate": 1000,
             "modify_lr_rate": 100,

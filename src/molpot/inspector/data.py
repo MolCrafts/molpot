@@ -16,29 +16,23 @@ class DataInspector:
 
         self.dataloader = dataloader
 
-    def inspect(self, props: list, nbatch:int = 0):
+    def inspect(self, prop: str, nbatch:int = 0):
 
-        data = defaultdict(list)
+        data = []
 
         for i, batch in enumerate(self.dataloader, 1):
-            for prop in props:
-                data[prop].extend(batch[prop])
+            for sample in batch:
+                data.append(sample[prop])
             if i == nbatch:
                 break
-        return data
+        return torch.stack(data)
     
-    def distribute(self, props: list, nbatch:int = 0):
+    def distribute(self, prop: str, nbatch:int = 0):
         import matplotlib.pyplot as plt
-        data = self.inspect(props, nbatch)
-        nprops = len(props)
-
-        fig, axs = plt.subplots(nprops, 1, figsize=(6*nprops, 6))
-        if isinstance(axs, plt.Axes):
-            axs = [axs]
-        for i, prop in enumerate(props):
-            d = np.array(data[prop])
-            axs[i].hist(d, bins=100)
-            axs[i].set_title(prop)
-            axs[i].annotate(f"total: {len(d)}\nmean: {np.mean(d):.3f}\nstd: {np.std(d):.3f}", xy=(0.7, 0.7), xycoords="axes fraction")
+        data = self.inspect(prop, nbatch)
+        d = data.detach().cpu().numpy()
+        plt.hist(d, bins=100)
+        plt.title(prop)
+        plt.annotate(f"total: {len(d)}\nmean: {np.mean(d):.3f}\nstd: {np.std(d):.3f}", xy=(0.7, 0.7), xycoords="axes fraction")
 
         plt.show()

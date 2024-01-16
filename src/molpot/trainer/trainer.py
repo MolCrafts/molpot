@@ -100,7 +100,6 @@ class Trainer(BaseTrainer):
 
     def jit(self):
         self.model = torch.compile(self.model)
-        
 
     def train(self, nsteps: int):
         output = self._pre_train()
