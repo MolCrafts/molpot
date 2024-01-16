@@ -140,9 +140,9 @@ class Trainer(BaseTrainer):
                         for data in self.valid_data_loader:
                             _output = self.model(data)
                             _output = self.criterion(_output, data)
+                    self.model.train()
                         
                 nstep += 1
-
             
             nepoch += 1
 

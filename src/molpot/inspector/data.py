@@ -20,12 +20,11 @@ class DataInspector:
 
         data = []
 
-        for i, batch in enumerate(self.dataloader, 1):
-            for sample in batch:
-                data.append(sample[prop])
+        for i, sample in enumerate(self.dataloader, 1):
+            data.append(sample[prop])
             if i == nbatch:
                 break
-        return torch.stack(data)
+        return torch.stack(data).flatten()
     
     def distribute(self, prop: str, nbatch:int = 0):
         import matplotlib.pyplot as plt

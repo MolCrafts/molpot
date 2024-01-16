@@ -80,7 +80,7 @@ class AtomicDressing(IterDataPipe):
                 # print(f"label: {sample[self.prop].item():.2f}, predict: {predict[i][0].item():.2f}, error: {((sample[self.prop] - predict[i][0])**2).item():.2f}")
                 sample[self.prop] -= predict[i]
 
-        yield batch
+            yield batch
     
     def __len__(self):
         return len(self.dp)
