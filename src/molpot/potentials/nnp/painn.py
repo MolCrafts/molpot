@@ -6,7 +6,6 @@ import torch.nn.functional as F
 from .layers import Dense
 from .ops import scatter_add
 import molpot as mpot
-from ..base import NNPotential
 
 __all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
 

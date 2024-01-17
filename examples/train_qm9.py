@@ -10,7 +10,7 @@ from molpot import alias
 
 
 def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    qm9_dataset = mpot.QM9(data_dir="data/qm9", total=1000, batch_size=32)
+    qm9_dataset = mpot.QM9(data_dir="data/qm9", total=1000, batch_size=64)
     dp = qm9_dataset.prepare()
     train, valid = (
         dp.atomic_dress([1, 6, 7, 8, 9], alias.Z, alias.QM9.U)
@@ -25,12 +25,12 @@ def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
 def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     train_dataloader, valid_dataloader = load_qm9
 
-    n_atom_basis = 128
+    n_atom_basis = 30
     arch = mpot.PaiNN(n_atom_basis, 3, GaussianRBF(20, 5), CosineCutoff(5))
     readout = Atomwise(n_in=n_atom_basis, output_key=alias.ti)
     model = NNPotential("PaiNN", arch, readout)
     criterion = mpot.MultiMSELoss([1], targets=[(alias.ti, alias.QM9.U)])
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-7)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.99)
 
     stagnation = mpot.strategy.Stagnation(alias.loss, patience=torch.inf)
