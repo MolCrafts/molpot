@@ -1,4 +1,4 @@
-# author: Roy Kid
+ # author: Roy Kid
 # contact: lijichen365@126.com
 # date: 2023-12-15
 # version: 0.0.1
@@ -24,7 +24,7 @@ class DataInspector:
             data.append(sample[prop])
             if i == nbatch:
                 break
-        return torch.stack(data).flatten()
+        return torch.cat(data).flatten()
     
     def distribute(self, prop: str, nbatch:int = 0):
         import matplotlib.pyplot as plt
@@ -32,6 +32,6 @@ class DataInspector:
         d = data.detach().cpu().numpy()
         plt.hist(d, bins=100)
         plt.title(prop)
-        plt.annotate(f"total: {len(d)}\nmean: {np.mean(d):.3f}\nstd: {np.std(d):.3f}", xy=(0.7, 0.7), xycoords="axes fraction")
+        plt.annotate(f"total: {len(d)}\nmean: {torch.mean(d):.3f}\nstd: {torch.std(d):.3f}", xy=(0.7, 0.7), xycoords="axes fraction")
 
         plt.show()
