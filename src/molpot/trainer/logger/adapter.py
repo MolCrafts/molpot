@@ -1,6 +1,7 @@
 import logging
 import logging.config
 from pathlib import Path
+import torch
 
 class LogAdapter:
     def __init__(self, metrics, handlers):
@@ -27,5 +28,13 @@ class ConsoleHandler:
         print(f" | ".join([f"{key:<10s}" for key in metrics.keys()]))
 
     def __call__(self, results):
-        msg = f" | ".join(f"{metric:<10.4f}" for metric in results.values())
+        formatted_result = []
+        for result in results.values():
+            if isinstance(result, float):
+                formatted_result.append(f"{result:<10.4f}")
+            elif isinstance(result, torch.Tensor):
+                formatted_result.append(f"{result.item():<10.4f}")
+            else:
+                formatted_result.append(f"{str(result):<10s}")
+        msg = f" | ".join(formatted_result)
         print(msg)
