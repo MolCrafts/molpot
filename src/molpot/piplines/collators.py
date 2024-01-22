@@ -9,7 +9,7 @@ import molpy as mp
 import torch
 import molpot as mpot
 from torchdata.datapipes import functional_datapipe
-from molpot import alias
+from molpot import alias, device
 
 __all__ = ["CollateFrames", "CollateData"]
 
@@ -51,20 +51,20 @@ def _collate_dict(batch: Sequence[dict]):
     to_be_offset_keys = [alias.idx_i, alias.idx_j]
     coll_batch = {}
     for k in props_keys:
-        coll_batch[k] = torch.cat([torch.atleast_1d(frame[k]) for frame in batch], 0)
+        coll_batch[k] = torch.cat([torch.atleast_1d(frame[k]) for frame in batch], 0).to(device)
 
     seg_m = torch.cumsum(coll_batch[mpot.alias.natoms], dim=0)
     seg_m = torch.cat(
-        [torch.zeros((1,), dtype=seg_m.dtype), seg_m], dim=0
+        [torch.zeros((1,), dtype=seg_m.dtype, device=device), seg_m], dim=0
     )  # prepend 0 to seg_m
     idx_m = torch.repeat_interleave(
-        torch.arange(len(batch)), repeats=coll_batch[mpot.alias.natoms], dim=0
+        torch.arange(len(batch), device=device), repeats=coll_batch[mpot.alias.natoms], dim=0
     )
     coll_batch[mpot.alias.idx_m] = idx_m
     for key in to_be_offset_keys:
         coll_batch[key] = torch.cat(
             [d[key] + off for d, off in zip(batch, seg_m)], dim=0
-        )
+        ).to(device)
 
     return coll_batch
 

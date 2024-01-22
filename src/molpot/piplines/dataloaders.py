@@ -1,6 +1,6 @@
 from functools import partial
 from torchdata.datapipes.iter import IterDataPipe
-from torchdata.dataloader2 import DataLoader2, MultiProcessingReadingService
+from torchdata.dataloader2 import DataLoader2, MultiProcessingReadingService, InProcessReadingService
 
 __all__ = ['DataLoader', 'create_dataloader']
 
@@ -15,4 +15,4 @@ def create_dataloader(datapipe: IterDataPipe, nworkers:int=0) -> DataLoader:
         rs = MultiProcessingReadingService(nworkers)
         return DataLoader(datapipe, reading_service=rs)
     else:
-        return DataLoader(datapipe)
+        return DataLoader(datapipe, reading_service=InProcessReadingService())

@@ -49,7 +49,7 @@ class Dense(nn.Linear):
         """
         self.weight_init = weight_init
         self.bias_init = bias_init
-        super(Dense, self).__init__(in_features, out_features, bias)
+        super(Dense, self).__init__(in_features, out_features, bias, device="cuda")
 
         self.activation = activation
         if self.activation is None:
@@ -64,27 +64,6 @@ class Dense(nn.Linear):
         y = F.linear(input, self.weight, self.bias)
         y = self.activation(y)
         return y
-
-def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
-    """ Behler-style cosine cutoff.
-
-        .. math::
-           f(r) = \begin{cases}
-            0.5 \times \left[1 + \cos\left(\frac{\pi r}{r_\text{cutoff}}\right)\right]
-              & r < r_\text{cutoff} \\
-            0 & r \geqslant r_\text{cutoff} \\
-            \end{cases}
-
-        Args:
-            cutoff (float, optional): cutoff radius.
-
-        """
-
-    # Compute values of cutoff function
-    input_cut = 0.5 * (torch.cos(input * torch.pi / cutoff) + 1.0)
-    # Remove contributions beyond the cutoff radius
-    input_cut *= (input < cutoff).float()
-    return input_cut
 
 
 class CosineCutoff(nn.Module):
@@ -105,16 +84,15 @@ class CosineCutoff(nn.Module):
             cutoff (float, optional): cutoff radius.
         """
         super(CosineCutoff, self).__init__()
-        self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
+        self.register_buffer("cutoff", torch.tensor([cutoff], device="cuda"))
 
     def forward(self, input: torch.Tensor):
-        return cosine_cutoff(input, self.cutoff)
-    
-def gaussian_rbf(inputs: torch.Tensor, offsets: torch.Tensor, widths: torch.Tensor):
-    coeff = -0.5 / torch.pow(widths, 2)
-    diff = inputs[..., None] - offsets
-    y = torch.exp(coeff * torch.pow(diff, 2))
-    return y
+        # Compute values of cutoff function
+        input_cut = 0.5 * (torch.cos(input * torch.pi / self.cutoff) + 1.0)
+        # Remove contributions beyond the cutoff radius
+        input_cut *= (input < self.cutoff).float()
+        return input_cut
+
 
 class GaussianRBF(nn.Module):
     r"""Gaussian radial basis functions."""
@@ -135,9 +113,10 @@ class GaussianRBF(nn.Module):
 
         # compute offset and width of Gaussian functions
         offset = torch.linspace(start, cutoff, n_rbf)
-        widths = torch.FloatTensor(
-            torch.abs(offset[1] - offset[0]) * torch.ones_like(offset)
-        )
+        widths = torch.abs(offset[1] - offset[0]) * torch.ones_like(offset)
+        offset = offset.to("cuda")
+        widths = widths.to("cuda")
+
         if trainable:
             self.widths = nn.Parameter(widths)
             self.offsets = nn.Parameter(offset)
@@ -146,7 +125,10 @@ class GaussianRBF(nn.Module):
             self.register_buffer("offsets", offset)
 
     def forward(self, inputs: torch.Tensor):
-        return gaussian_rbf(inputs, self.offsets, self.widths)
+        coeff = -0.5 / torch.pow(self.widths, 2)
+        diff = inputs[..., None] - self.offsets
+        y = torch.exp(coeff * torch.pow(diff, 2))
+        return y
 
 class AtomicOnehot(nn.Module):
     R"""One-hot embedding layer

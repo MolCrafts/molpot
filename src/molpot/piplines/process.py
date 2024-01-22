@@ -9,6 +9,7 @@ from torchdata.datapipes import functional_datapipe
 import torch
 import numpy as np
 from molpot.statistic.tracker import Tracker
+from molpot import device
 
 __all__ = ["Normalizer"]
 
@@ -42,17 +43,16 @@ class AtomicDressing(IterDataPipe):
     """
     def __init__(self, source_dp: IterDataPipe, types_list: list[int], key, prop, buffer:int|None = None):
         self.dp = source_dp
-        self.types_list = torch.tensor(types_list)
-        self.dress = defaultdict(Tracker)
         self.key = key
         self.prop = prop
         self.buffer = buffer
+        self.types_list = torch.tensor(types_list).to(device)
 
     def __iter__(self):
 
         # x = deque(maxlen=self.buffer)
         # y = deque(maxlen=self.buffer)
-
+        # dress = defaultdict(Tracker)
         for batch in self.dp:
             x = []
             y = []
@@ -66,9 +66,10 @@ class AtomicDressing(IterDataPipe):
                 x.append(count)
                 y.append(target)
             
-            x_tensor = torch.stack(tuple(x))
-            x_tensor = torch.cat((x_tensor, torch.zeros((x_tensor.shape[0], 1))), dim=1)
-            y_tensor = torch.stack(tuple(y)).reshape(-1, 1)
+            x_tensor = torch.stack(tuple(x)).to(device)
+            weight = torch.zeros((x_tensor.shape[0], 1), device=device)
+            x_tensor = torch.cat((x_tensor, weight), dim=1).to(device)
+            y_tensor = torch.stack(tuple(y)).reshape(-1, 1).to(device)
             # print(x_tensor.shape, y_tensor.shape)
             xTx = torch.matmul(x_tensor.T, x_tensor)
             xTx_inv = torch.linalg.pinv(xTx)

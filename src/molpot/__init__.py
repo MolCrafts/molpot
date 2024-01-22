@@ -1,3 +1,4 @@
+from ._device import device
 from ._alias import alias
 from .utils import units
 from .piplines import *

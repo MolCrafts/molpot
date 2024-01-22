@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 from typing import TypeVar
 number = TypeVar('number', int, float)
@@ -11,16 +10,16 @@ class Tracker:
         self._count = 0
         self._M2 = 0
 
-    def __call__(self, new: number | np.ndarray | torch.Tensor):
+    def __call__(self, new: number | torch.Tensor):
 
-        new = np.atleast_1d(new)
+        new = torch.atleast_1d(new)
         n = len(new)
 
         self._count += n
         delta = new - self._mean
-        self._mean += np.sum(delta / self._count)
+        self._mean += torch.sum(delta / self._count)
         delta2 = new - self._mean
-        self._M2 += np.sum(delta * delta2)
+        self._M2 += torch.sum(delta * delta2)
 
     @property
     def mean(self):
