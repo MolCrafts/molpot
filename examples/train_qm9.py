@@ -8,10 +8,9 @@ from molpot.potentials.nnp.readout import Atomwise
 from molpot.trainer.metric.metrics import Identity, MAE
 from molpot.trainer.logger.adapter import ConsoleHandler
 from molpot import alias, device
-from molpot.inspector.profiler import Profiler
 
 def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    qm9_dataset = mpot.QM9(data_dir="data/qm9", total=1000, batch_size=64)
+    qm9_dataset = mpot.QM9(data_dir="data/qm9", batch_size=64)
     dp = qm9_dataset.prepare()
     train, valid = (
         dp# .atomic_dress([1, 6, 7, 8, 9], alias.Z, alias.QM9.U)
@@ -64,10 +63,7 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
             "modify_lr_rate": 100,
         },
     )
-    # trainer.train(1000)
-    model = model.to(device)
-    prof = Profiler(model, train_dataloader)
-    prof.profile()
+    trainer.train(10)
 
     return "done"
 

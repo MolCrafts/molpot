@@ -4,7 +4,7 @@ import molpot as mpot
 import molpy as mp
 from typing import Iterable
 from torchdata.datapipes.iter import IterDataPipe
-from molpot import alias, device
+from molpot import alias, Config
 import torch
 import logging
 import numpy as np
@@ -59,13 +59,13 @@ class QM9Reader(IterDataPipe):
                     value = mp.units.convert(float(p), src_unit, dst_unit)
                 else:
                     value = torch.tensor(float(p))
-                frame[prop.key] = torch.atleast_1d(value).to(device)
+                frame[prop.key] = torch.atleast_1d(value).to(Config.device)
 
             xyz = torch.tensor(
                 [
                     [float(i.replace("*^", "E")) for i in line.split()[1:4]]
                     for line in lines[2:-3]
-                ], device=device
+                ], device=Config.device
             )
 
             frame[alias.xyz] = mp.units.convert(xyz, "angstrom", alias["xyz"].unit)
@@ -76,11 +76,11 @@ class QM9Reader(IterDataPipe):
                     for line in lines[2:-3]
                 ],
                 dtype=torch.int32,
-                device=device,
+                device=Config.device,
             )
 
-            frame[alias.cell] = torch.zeros((3, 3), device=device)
-            frame[alias.pbc] = torch.tensor([False, False, False], device=device)
+            frame[alias.cell] = torch.zeros((3, 3), device=Config.device)
+            frame[alias.pbc] = torch.tensor([False, False, False], device=Config.device)
 
             yield frame
 

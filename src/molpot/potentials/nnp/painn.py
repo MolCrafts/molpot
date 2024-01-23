@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from .layers import Dense
 from .ops import scatter_add
 import molpot as mpot
-from molpot import device
+from molpot import Config
 
 __all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
 
@@ -165,7 +165,7 @@ class PaiNN(nn.Module):
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = radial_basis
 
-        self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0).to(device)
+        self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0).to(Config.device)
 
         self.share_filters = shared_filters
 
