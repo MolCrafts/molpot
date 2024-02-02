@@ -19,3 +19,6 @@ class Potential(nn.Module):
     def __init__(self, name, *args, **kwargs):
         super().__init__()
         self._name = name
+
+class Potentials(nn.Sequential):
+    pass
