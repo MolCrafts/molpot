@@ -6,6 +6,7 @@
 from torchdata.datapipes.iter import IterDataPipe
 from molpot.transforms import TorchNeighborList
 from torchdata.datapipes import functional_datapipe
+from molpot import alias, Config
 
 __all__ = ["CalcNBList"]
 
@@ -15,7 +16,7 @@ class CalcNBList(IterDataPipe):
     def __init__(self, source_dp: IterDataPipe, cutoff: float):
         self.dp = source_dp
         self.cutoff = cutoff
-        self.kernel = TorchNeighborList(cutoff)
+        self.kernel = TorchNeighborList(cutoff).to(Config.device)
 
     def __iter__(self):
         for d in self.dp:

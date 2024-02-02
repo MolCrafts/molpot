@@ -1,3 +1,4 @@
+from ._config import Config
 from ._alias import alias
 from .utils import units
 from .piplines import *

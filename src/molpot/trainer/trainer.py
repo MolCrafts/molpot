@@ -99,7 +99,8 @@ class Trainer(BaseTrainer):
         self.logger = LogAdapter(self.log_config["metrics"], self.log_config["handlers"])
 
     def jit(self):
-        self.model = torch.compile(self.model)
+        model = self.model.to(self.device)
+        self.model = torch.compile(model)
 
     def train(self, nsteps: int):
         output = self._pre_train()

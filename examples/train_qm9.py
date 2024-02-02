@@ -1,19 +1,19 @@
 import molpot as mpot
 import torch
+import molpot
 
 from molpot.potentials.base import NNPotential
 from molpot.potentials.nnp.layers import CosineCutoff, GaussianRBF
 from molpot.potentials.nnp.readout import Atomwise
 from molpot.trainer.metric.metrics import Identity, MAE
 from molpot.trainer.logger.adapter import ConsoleHandler
-from molpot import alias
-
+from molpot import alias, device
 
 def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    qm9_dataset = mpot.QM9(data_dir="data/qm9", total=1000, batch_size=64)
+    qm9_dataset = mpot.QM9(data_dir="data/qm9", batch_size=64)
     dp = qm9_dataset.prepare()
     train, valid = (
-        dp.atomic_dress([1, 6, 7, 8, 9], alias.Z, alias.QM9.U)
+        dp# .atomic_dress([1, 6, 7, 8, 9], alias.Z, alias.QM9.U)
         .calc_nblist(5)
         .random_split(weights={"train": 0.8, "valid": 0.2}, seed=42)
     )
@@ -25,8 +25,8 @@ def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
 def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     train_dataloader, valid_dataloader = load_qm9
 
-    n_atom_basis = 30
-    arch = mpot.PiNet(n_atom_basis, 3, GaussianRBF(20, 5), CosineCutoff(5))
+    n_atom_basis = 128
+    arch = mpot.PaiNN(n_atom_basis, 3, GaussianRBF(20, 5), CosineCutoff(5))
     readout = Atomwise(n_in=n_atom_basis, output_key=alias.ti)
     model = NNPotential("PaiNN", arch, readout)
     criterion = mpot.MultiMSELoss([1], targets=[(alias.ti, alias.QM9.U)])
@@ -57,14 +57,14 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         },
         config={
             "save_dir": "data/qm9",
-            "device": {"type": "cpu"},
+            "device": {"type": "gpu", 'n_gpu_use': 1},
             "report_rate": 10,
             "valid_rate": 1000,
             "modify_lr_rate": 100,
         },
     )
-    # trainer.jit()
-    trainer.train(10000)
+    trainer.train(10)
+
     return "done"
 
 

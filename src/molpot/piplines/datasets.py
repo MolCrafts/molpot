@@ -147,7 +147,7 @@ class QM9(DataSet):
             return self._prepare(dp)
 
         else:
-            # atomrefs = self._download_atomrefs()
+            atomrefs = self._download_atomrefs()
             if self.remove_uncharacterized:
                 uncharacterized = self._download_uncharacterized()
             else:

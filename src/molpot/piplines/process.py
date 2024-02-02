@@ -4,11 +4,13 @@
 # version: 0.0.1
 
 from collections import defaultdict, deque
+from typing import Sequence
 from torchdata.datapipes.iter import IterDataPipe
 from torchdata.datapipes import functional_datapipe
 import torch
 import numpy as np
 from molpot.statistic.tracker import Tracker
+from molpot import Config
 
 __all__ = ["Normalizer"]
 
@@ -40,22 +42,21 @@ class AtomicDressing(IterDataPipe):
     Args:
         IterDataPipe (_type_): _description_
     """
-    def __init__(self, source_dp: IterDataPipe, types_list: list[int], key, prop, buffer:int|None = None):
+    def __init__(self, source_dp: IterDataPipe, types_list: list[int], key, prop, buffer:int|None = None, ref: Sequence[float] | None = None, modify: bool = False):
         self.dp = source_dp
-        self.types_list = torch.tensor(types_list)
-        self.dress = defaultdict(Tracker)
         self.key = key
         self.prop = prop
         self.buffer = buffer
+        self.types_list = torch.tensor(types_list).to(Config.device)
+        self.ref = torch.tensor(ref).to(Config.device) if ref else None
+        self.modify = modify
 
     def __iter__(self):
 
-        # x = deque(maxlen=self.buffer)
-        # y = deque(maxlen=self.buffer)
+        x = deque(maxlen=self.buffer)
+        y = deque(maxlen=self.buffer)
 
         for batch in self.dp:
-            x = []
-            y = []
             for sample in batch:
                 atom_type = sample[self.key]
                 target = sample[self.prop]
@@ -63,22 +64,29 @@ class AtomicDressing(IterDataPipe):
                     self.types_list.unsqueeze(1),
                     atom_type
                 ).sum(dim=1)
+                
                 x.append(count)
                 y.append(target)
-            
-            x_tensor = torch.stack(tuple(x))
-            x_tensor = torch.cat((x_tensor, torch.zeros((x_tensor.shape[0], 1))), dim=1)
-            y_tensor = torch.stack(tuple(y)).reshape(-1, 1)
-            # print(x_tensor.shape, y_tensor.shape)
-            xTx = torch.matmul(x_tensor.T, x_tensor)
-            xTx_inv = torch.linalg.pinv(xTx)
-            xTx_invxT = torch.matmul(xTx_inv, x_tensor.T)
-            w = torch.matmul(xTx_invxT, y_tensor)
-            predict = x_tensor @ w
-            # error = torch.sum((y_tensor - predict)**2)
-            for i, sample in enumerate(batch):
-                # print(f"label: {sample[self.prop].item():.2f}, predict: {predict[i][0].item():.2f}, error: {((sample[self.prop] - predict[i][0])**2).item():.2f}")
-                sample[self.prop] -= predict[i]
+                
+            x_tensor = torch.stack(tuple(x)).to(Config.device)
+            if self.ref:  # ref -> w
+                predict = x_tensor @ self.ref
+            else:
+                weight = torch.zeros((x_tensor.shape[0], 1), device=Config.device)
+                x_tensor = torch.cat((x_tensor, weight), dim=1).to(Config.device)
+                y_tensor = torch.stack(tuple(y)).reshape(-1, 1).to(Config.device)
+                xTx = torch.matmul(x_tensor.T, x_tensor)
+                xTx_inv = torch.linalg.pinv(xTx)
+                xTx_invxT = torch.matmul(xTx_inv, x_tensor.T)
+                w = torch.matmul(xTx_invxT, y_tensor)
+                predict = x_tensor @ w
+                # residue = torch.sum((y_tensor - predict)**2)
+            if self.modify:
+                for i, sample in enumerate(batch):
+                    sample[self.prop] -= predict[i]
+            else:
+                for i, sample in enumerate(batch):
+                    sample['_atomic_dress'] = w
 
             yield batch
     
