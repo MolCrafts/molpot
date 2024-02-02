@@ -26,7 +26,7 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     train_dataloader, valid_dataloader = load_qm9
 
     n_atom_basis = 30
-    arch = mpot.PaiNN(n_atom_basis, 3, GaussianRBF(20, 5), CosineCutoff(5))
+    arch = mpot.PiNet(n_atom_basis, 3, GaussianRBF(20, 5), CosineCutoff(5))
     readout = Atomwise(n_in=n_atom_basis, output_key=alias.ti)
     model = NNPotential("PaiNN", arch, readout)
     criterion = mpot.MultiMSELoss([1], targets=[(alias.ti, alias.QM9.U)])

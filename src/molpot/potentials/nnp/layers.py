@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Callable, Union
+from typing import Callable, Union, Sequence
 import torch.nn.functional as F
 from torch.nn.init import xavier_uniform_
 
@@ -65,26 +65,71 @@ class Dense(nn.Linear):
         y = self.activation(y)
         return y
 
-def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
-    """ Behler-style cosine cutoff.
+def build_mlp(
+    n_in: int,
+    n_out: int,
+    n_hidden: Union[int, Sequence[int]] | None = None,
+    n_layers: int = 2,
+    activation: Callable = F.silu,
+    last_bias: bool = True,
+    last_zero_init: bool = False,
+) -> nn.Module:
+    """
+    Build multiple layer fully connected perceptron neural network.
 
-        .. math::
-           f(r) = \begin{cases}
-            0.5 \times \left[1 + \cos\left(\frac{\pi r}{r_\text{cutoff}}\right)\right]
-              & r < r_\text{cutoff} \\
-            0 & r \geqslant r_\text{cutoff} \\
-            \end{cases}
+    Args:
+        n_in: number of input nodes.
+        n_out: number of output nodes.
+        n_hidden: number hidden layer nodes.
+            If an integer, same number of node is used for all hidden layers resulting
+            in a rectangular network.
+            If None, the number of neurons is divided by two after each layer starting
+            n_in resulting in a pyramidal network.
+        n_layers: number of layers.
+        activation: activation function. All hidden layers would
+            the same activation function except the output layer that does not apply
+            any activation function.
+    """
+    # get list of number of nodes in input, hidden & output layers
+    if n_hidden is None:
+        c_neurons = n_in
+        n_neurons = []
+        for i in range(n_layers):
+            n_neurons.append(c_neurons)
+            c_neurons = max(n_out, c_neurons // 2)
+        n_neurons.append(n_out)
+    else:
+        # get list of number of nodes hidden layers
+        if type(n_hidden) is int:
+            n_hidden = [n_hidden] * (n_layers - 1)
+        else:
+            n_hidden = list(n_hidden)
+        n_neurons = [n_in] + n_hidden + [n_out]
 
-        Args:
-            cutoff (float, optional): cutoff radius.
+    # assign a Dense layer (with activation function) to each hidden layer
+    layers = [
+        Dense(n_neurons[i], n_neurons[i + 1], activation=activation)
+        for i in range(n_layers - 1)
+    ]
+    # assign a Dense layer (without activation function) to the output layer
 
-        """
-
-    # Compute values of cutoff function
-    input_cut = 0.5 * (torch.cos(input * torch.pi / cutoff) + 1.0)
-    # Remove contributions beyond the cutoff radius
-    input_cut *= (input < cutoff).float()
-    return input_cut
+    if last_zero_init:
+        layers.append(
+            Dense(
+                n_neurons[-2],
+                n_neurons[-1],
+                activation=None,
+                weight_init=torch.nn.init.zeros_,
+                bias=last_bias,
+            )
+        )
+    else:
+        layers.append(
+            Dense(n_neurons[-2], n_neurons[-1], activation=None, bias=last_bias)
+        )
+    # put all layers together to make the network
+    out_net = nn.Sequential(*layers)
+    return out_net
 
 
 class CosineCutoff(nn.Module):
@@ -105,16 +150,15 @@ class CosineCutoff(nn.Module):
             cutoff (float, optional): cutoff radius.
         """
         super(CosineCutoff, self).__init__()
-        self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
+        self.register_buffer("cutoff", torch.tensor([cutoff]))
 
     def forward(self, input: torch.Tensor):
-        return cosine_cutoff(input, self.cutoff)
-    
-def gaussian_rbf(inputs: torch.Tensor, offsets: torch.Tensor, widths: torch.Tensor):
-    coeff = -0.5 / torch.pow(widths, 2)
-    diff = inputs[..., None] - offsets
-    y = torch.exp(coeff * torch.pow(diff, 2))
-    return y
+        # Compute values of cutoff function
+        input_cut = 0.5 * (torch.cos(input * torch.pi / self.cutoff) + 1.0)
+        # Remove contributions beyond the cutoff radius
+        input_cut *= (input < self.cutoff).float()
+        return input_cut
+
 
 class GaussianRBF(nn.Module):
     r"""Gaussian radial basis functions."""
@@ -135,7 +179,7 @@ class GaussianRBF(nn.Module):
 
         # compute offset and width of Gaussian functions
         offset = torch.linspace(start, cutoff, n_rbf)
-        widths = torch.FloatTensor(
+        widths = torch.tensor(
             torch.abs(offset[1] - offset[0]) * torch.ones_like(offset)
         )
         if trainable:
@@ -146,7 +190,10 @@ class GaussianRBF(nn.Module):
             self.register_buffer("offsets", offset)
 
     def forward(self, inputs: torch.Tensor):
-        return gaussian_rbf(inputs, self.offsets, self.widths)
+        coeff = -0.5 / torch.pow(self.widths, 2)
+        diff = inputs[..., None] - self.offsets
+        y = torch.exp(coeff * torch.pow(diff, 2))
+        return y
 
 class AtomicOnehot(nn.Module):
     R"""One-hot embedding layer
@@ -221,98 +268,6 @@ class ANNOutput(nn.Module):
         output = torch.squeeze(output, axis=1)
 
         return output
-
-
-class CutoffFunc(nn.Module):
-    R"""Cutoff function layer
-
-    The following types of cutoff function are implemented (all functions are
-    defined within $r_{ij}<r_{c}$ and decay to zero at $r_{c}$):
-
-    - $f^1(r_{ij}) = 0.5 (\mathrm{cos}(\pi r_{ij}/r_{c})+1)$
-    - $f^2(r_{ij}) = \mathrm{tanh}^3(1- r_{ij}/r_{c})/\mathrm{tanh}^3(1)$
-    - $hip(r_{ij}) = \mathrm{cos}^2(\pi r_{ij}/2r_{c})$
-
-    """
-
-    def __init__(self, rc=5.0, cutoff_type="f1"):
-        """
-        Args:
-            rc (float): cutoff radius
-            cutoff_type (string): name of the cutoff function
-        """
-        super(CutoffFunc, self).__init__()
-        self.cutoff_type = cutoff_type
-        self.rc = rc
-        f1 = lambda x: 0.5 * (torch.cos(np.pi * x / rc) + 1)
-        f2 = lambda x: (torch.tanh(1 - x / rc) / np.tanh(1)) ** 3
-        hip = lambda x: torch.cos(np.pi * x / rc / 2) ** 2
-        self.cutoff_fn = {"f1": f1, "f2": f2, "hip": hip}[cutoff_type]
-
-    def forward(self, dist):
-        """
-        Args:
-            dist (tensor): distance tensor with arbitrary shape
-
-        Returns:
-            fc (tensor): cutoff function with the same shape as the input
-        """
-        return self.cutoff_fn(dist)
-
-
-class GaussianBasis(nn.Module):
-    R"""Gaussian Basis Layer
-
-    Builds the Gaussian basis function:
-
-    $$
-    e_{ijb} = e^{-\eta_b (r_{ij}-r_{b})^2}
-    $$
-
-
-    Both the Gaussian centers $r_{b}$ and width $\eta_{b}$ can be arrays that
-    specifies the parameter for each basis function. When $\eta$ is given as a
-    single float, the same value is assigned to every basis. When center is not
-    given, `n_basis` and `rc` are used to generat a linearly spaced set of
-    basis.
-
-    """
-
-    def __init__(self, center=None, gamma=None, rc=None, n_basis=None):
-        """
-        Args:
-            center (float or array): Gaussian centers
-            gamma (float or array): inverse Gaussian width
-            rc (float): cutoff radius
-            n_basis (int): number of basis function
-
-        """
-        super(GaussianBasis, self).__init__()
-        if center is None:
-            self.center = np.linspace(0, rc, n_basis)
-        else:
-            self.center = np.array(center)
-        self.gamma = np.broadcast_to(gamma, self.center.shape)
-
-    def forward(self, dist, fc=None):
-        """
-        Args:
-           dist (tensor): distance tensor with shape (n_pairs)
-           fc (tensor, optional): when supplied, apply a cutoff function to the basis
-
-        Returns:
-            basis (tensor): basis functions with shape (n_pairs, n_basis)
-        """
-        basis = torch.stack(
-            [
-                torch.exp(-gamma * (dist - center) ** 2)
-                for (center, gamma) in zip(self.center, self.gamma)
-            ],
-            axis=1,
-        )
-        if fc is not None:
-            basis = torch.einsum("pb,p->pb", basis, fc)  # p-> pair; b-> basis
-        return basis
 
 
 class PolynomialBasis(nn.Module):

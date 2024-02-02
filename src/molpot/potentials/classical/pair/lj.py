@@ -3,15 +3,16 @@
 # date: 2023-09-26
 # version: 0.0.1
 
-from ...base import Potential
+from .base import PairBase
 from torch import nn
 
-class LJ126(Potential):
+class LJ126(PairBase):
 
-    def __init__(self, eps, sig):
-        super().__init__("LJ126")
-        self.eps = nn.Parameter(eps)
-        self.sig = nn.Parameter(sig)
+    def __init__(self, ntypes:int, cutoff:int):
+        super().__init__("LJ126", ntypes)
+
+        self.init_params('eps', (ntypes, ntypes))
+        self.init_params('sig', (ntypes, ntypes))
 
     def forward(self, r_ij):
         return 4 * self.eps * ((self.sig / r_ij)**12 - (self.sig / r_ij)**6)

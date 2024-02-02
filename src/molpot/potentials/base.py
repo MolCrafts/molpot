@@ -14,5 +14,8 @@ class NNPotential(nn.Sequential):
     def name(self)->str:
         return self._name
 
-class Architechture(nn.Module):
-    pass
+class Potential(nn.Module):
+    
+    def __init__(self, name, *args, **kwargs):
+        super().__init__()
+        self._name = name

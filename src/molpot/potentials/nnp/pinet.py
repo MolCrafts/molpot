@@ -3,48 +3,26 @@
 # date: 2023-10-12
 # version: 0.0.1
 
+from .readout import Atomwise
 from ..base import NNPotential
 import torch
 from torch import nn
-from .layers import PolynomialBasis, GaussianBasis, CutoffFunc
-from .layers import ANNOutput
+from .layers import build_mlp
 import molpot as mpot
-
-__all__ = [
-    "PiNet",
-]
-
-
-class FFLayer(nn.Module):
-    def __init__(
-        self,
-        in_feature: int,
-        out_features: list = [64, 64],
-        activation: nn.Module = nn.ReLU(),
-        bias=True,
-    ):
-        super().__init__()
-        in_features = [in_feature] + out_features[:-1]
-        modules = []
-        for i, o in zip(in_features, out_features):
-            modules.append(nn.Linear(i, o, bias=bias))
-            modules.append(activation)
-        self.dense_layers = nn.Sequential(*modules)
-
-    def forward(self, x):
-        return self.dense_layers(x)
+from molpot import alias
+from typing import Optional, Callable
+import torch.nn.functional as F
 
 
 class PILayer(nn.Module):
-    def __init__(self, in_feature: int, out_features=[64], n_basis=4):
+    def __init__(self, in_features: int, out_features:int, n_hidden, n_layers, n_basis=4):
         super(PILayer, self).__init__()
 
-        self.out_features = out_features
-        out_nodes = out_features.copy()
-        out_nodes[-1] *= n_basis
         self.n_basis = n_basis
-
-        self.ff_layer = FFLayer(in_feature * 2, out_nodes, activation=nn.Identity(), bias=False)
+        self.in_features = in_features
+        self.out_features = out_features * n_basis
+        
+        self.ff_layer = build_mlp(in_features, out_features, n_hidden, n_layers, activation=nn.Identity(), last_bias=False)
 
     def forward(self, prop, idx_i, idx_j, basis):
         prop_i = prop[idx_i]
@@ -58,64 +36,35 @@ class PILayer(nn.Module):
 
 
 class PIXLayer(nn.Module):
-    def __init__(self, weighted: bool, shape, **kwargs):
-        """
-        Args:
-            style (str): style of the layer, should be one of 'painn', 'newton', 'general'
-        """
+    def __init__(self):
         super(PIXLayer, self).__init__()
-        self.weighted = weighted
-        if weighted:
-            self.wi = nn.Parameter(torch.zeros(shape[1][-1]))
-            self.wj = nn.Parameter(torch.zeros(shape[1][-1]))
 
-    def forword(self, px, ind_2):
-        """
-        PILayer take a list of three tensors as input:
+    def forword(self, px, idx_i, idx_j):
+        px_i = px[idx_i]
+        px_j = px[idx_j]
 
-        - ind_2: [sparse indices](layers.md#sparse-indices) of pairs with shape `(n_pairs, 2)`
-        - prop: property tensor with shape `(n_atoms, n_prop)`
-
-        Args:
-            tensors (list of tensors): list of `[ind_2, prop, basis]` tensors
-
-        Returns:
-            inter (tensor): interaction tensor with shape `(n_pairs, n_nodes[-1])`
-        """
-        ind_i = ind_2[:, 0]
-        ind_j = ind_2[:, 1]
-        px_i = px[ind_i]
-        px_j = px[ind_j]
-
-        if self.weighted:
-            return self.wi * px_i + self.wj * px_j
-        else:
-            return px_i - px_j
+        return px_i - px_j
 
 
 class DotLayer(nn.Module):
-    def __init__(self, weighted: bool, shape, **kwargs):
+    def __init__(self):
         """
         Args:
             style (str): style of the layer, should be one of 'painn', 'newton', 'general'
         """
         super(DotLayer, self).__init__()
-        self.weighted = weighted
-        if weighted:
-            self.wi = nn.Parameter(torch.zeros(shape[-1]))
-            self.wj = nn.Parameter(torch.zeros(shape[-1]))
 
     def forword(self, tensor):
         if self.weighted:
             return torch.einsum("ixr,ixr->ir", self.wi * tensor, self.wj * tensor)
+        return torch.einsum("ixr,ixr->ir", tensor, tensor)
 
 
 class ScaleLayer(nn.Module):
     def __init__(self):
         super(ScaleLayer, self).__init__()
 
-    def forward(self, tensor):
-        px, p1 = tensor
+    def forward(self, px, p1):
         return px * p1[:, None, :]
 
 
@@ -130,31 +79,58 @@ class IPLayer(nn.Module):
 
 
 class OutLayer(nn.Module):
-    def __init__(self, in_features: int, out_features):
+    def __init__(self, in_features: int, out_features:int, n_hidden, n_layers):
         super(OutLayer, self).__init__()
-        self.ff_layer = FFLayer(in_features, out_features[:-1])
-        self.out_layer = nn.Linear(out_features[-2], out_features[-1], bias=False)
+        self.ff_layer = build_mlp(in_features, out_features, n_hidden, n_layers)
 
-    def forward(self, p1, prev_output):
+    def forward(self, p1, p3, prev_output):
         p1 = self.ff_layer(p1)
-        output = self.out_layer(p1) + prev_output
+        output = p1 + prev_output
         return output
 
 
-class PiNetGCBlock(nn.Module):
-    def __init__(self, pp_nodes, pi_nodes, ii_nodes, activation=nn.ReLU()):
+class GCBlock(nn.Module):
+    def __init__(self, pp_nodes, pi_nodes, ii_nodes, n_basis, activation=nn.ReLU()):
         super().__init__()
-        self.pp_layer = FFLayer(pp_nodes[0], pp_nodes[1:])
-        self.pi_layer = PILayer(pi_nodes[0], pi_nodes[1:])
-        self.ii_layer = FFLayer(ii_nodes[0], ii_nodes[1:])
-        self.ip_layer = IPLayer()
+        if pp_nodes:
+            self.pp1_layer = build_mlp(pp_nodes[0], pp_nodes[-1], n_hidden=pp_nodes[1:-1], n_layers=len(pp_nodes), activation=activation)
+        else:
+            self.pp1_layer = nn.Identity()
+        self.pi1_layer = PILayer(pi_nodes[0], pi_nodes[-1], pi_nodes[1:-1], len(pi_nodes), n_basis)
+        self.ii1_layer = build_mlp(ii_nodes[0], ii_nodes[-1], ii_nodes[1:-1], len(ii_nodes), activation=activation)
+        self.ip1_layer = IPLayer()
 
-    def forword(self, prop, basis, diff, ind_2):
-        prop = self.pp_layer(prop)
-        inter = self.pi_layer(prop, ind_2, basis)
-        inter = self.ii_layer(inter)
-        prop = self.ip_layer(ind_2, prop, inter)
-        return prop
+        if pp_nodes:
+            self.pp3_layer = build_mlp(pp_nodes[0], pp_nodes[-1], n_hidden=pp_nodes[1:-1], n_layers=len(pp_nodes), activation=activation)
+        else:
+            self.pp3_layer = nn.Identity()
+        self.pi3_layer = PIXLayer()
+        self.ii3_layer = build_mlp(ii_nodes[0], ii_nodes[-1], ii_nodes[1:-1], len(ii_nodes), activation=activation)
+        self.ip3_layer = IPLayer()
+
+        self.dot_layer = DotLayer()
+        self.scale1_layer = ScaleLayer()
+        self.scale2_layer = ScaleLayer()
+        self.scale3_layer = ScaleLayer()
+
+    def forward(self, p1, p3, idx_i, idx_j, diff, basis):
+
+        p1 = self.pp1_layer(p1)
+        i1 = self.pi1_layer(p1, idx_i, idx_j, basis)
+        i1 = self.ii1_layer(i1)
+        i1_1, i1_2, i1_3 = torch.split(i1, 3, dim=-1)
+        p1 = self.ip1_layer(idx_i, p1, i1_1)
+        
+        p3 = self.pp3_layer(p3)
+        i3 = self.pi3_layer(p3, idx_i, idx_j)
+        i3 = self.scale1_layer(i3)
+        scaled_diff = self.scale2_layer(diff)
+        i3 = i3 + scaled_diff
+        p3 = self.ip3_layer(idx_i, p3, i3)
+        next_p1 = p1 + self.dot_layer(p1)
+        next_p3 = self.scale3_layer(p3, p1)
+
+        return next_p1, next_p3
 
 
 class ResUpdate(nn.Module):
@@ -171,19 +147,18 @@ class PiNet(NNPotential):
 
     def __init__(
         self,
-        rc=5.0,
-        cutoff_type="f1",
-        basis_type="polynomial",
-        n_basis=4,
-        gamma=3.0,
-        center=None,
+        n_atom_basis: int,
+        depth: int,
+        radial_basis: nn.Module,
+        cutoff_fn: Optional[Callable] = None,
+        activation: Optional[Callable] = F.silu,
+        max_z: int = 100,
         pp_nodes=[16, 16],
         pi_nodes=[16, 16],
         ii_nodes=[16, 16],
         out_nodes=[16, 16],
         out_pool=False,
         act="tanh",
-        depth=4,
     ):
         """
         Args:
@@ -206,25 +181,27 @@ class PiNet(NNPotential):
         if act == "tanh":
             act = nn.Tanh()
         self.depth = depth
-        self.alias = mpot.alias("PiNet")
-        self.alias.set("p1", "_pinet_p1", torch.Tensor, None, "invariant property")
-        self.cutoff = CutoffFunc(rc, cutoff_type)
-        if basis_type == "polynomial":
-            self.basis_fn = PolynomialBasis(n_basis)
-        elif basis_type == "gaussian":
-            self.basis_fn = GaussianBasis(center, gamma, rc, n_basis)
-
-        self.res_update = nn.Sequential(*[ResUpdate() for _ in range(depth)])
-        gc_blocks = [PiNetGCBlock([], pi_nodes, ii_nodes, activation=act)]
+        self.alias = mpot.alias("pinet")
+        self.alias.pinet.set('p1', "_pinet_p1", torch.Tensor, None, "invariant property")
+        self.alias.pinet.set('p3', '_pinet_p3', torch.Tensor, None, "rank1 equivalent property")
+        self.alias.pinet.set('p5', '_pinet_p5', torch.Tensor, None, "rank2 equivalent property")
+        self.cutoff_fn = cutoff_fn
+        self.radial_basis_fn = radial_basis
+        self.n_basis = radial_basis.n_rbf
+        self.n_atom_basis = n_atom_basis
+        self.embbding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
+        self.res_update1 = nn.Sequential(*[ResUpdate() for _ in range(depth)])
+        self.res_update3 = nn.Sequential(*[ResUpdate() for _ in range(depth)])
+        gc_blocks = [GCBlock([], pi_nodes, ii_nodes, self.n_basis, activation=activation)]
         gc_blocks += [
-            PiNetGCBlock(pp_nodes, pi_nodes, ii_nodes, activation=act)
+            GCBlock(pp_nodes, pi_nodes, ii_nodes, self.n_basis, activation=activation)
             for _ in range(depth - 1)
         ]
         self.gc_blocks = nn.Sequential(*gc_blocks)
-        self.out_layers = [OutLayer(1, out_nodes) for _ in range(depth)]
-        self.ann_output = ANNOutput(out_pool)
+        self.out_layers = [OutLayer(1, out_nodes[-1], out_nodes[:-1], len(out_nodes)+1) for _ in range(depth)]
+        self.ann_output = Atomwise(out_pool)
 
-    def forward(self, tensors):
+    def forward(self, tensors:dict):
         """PiNet takes batches atomic data as input, the following keys are
         required in the input dictionary of tensors:
 
@@ -247,21 +224,21 @@ class PiNet(NNPotential):
         Returns:
             output (tensor): output tensor with shape `[n_atoms, out_nodes]`
         """
-
-        fc = self.cutoff(tensors["dist"])
-        basis = self.basis_fn(tensors["dist"], fc=fc)
-        output = 0.0
+        r_ij = tensors[alias.Rij]
+        d_ij = torch.norm(r_ij, dim=1, keepdim=True)
+        dir_ij = r_ij / d_ij
+        fc = self.cutoff_fn(tensors[alias.Rij])
+        basis = self.radial_basis_fn(dir_ij) * fc[..., None]
+        if alias.pinet.p1 not in tensors:
+            tensors[alias.pinet.p1] = self.embbding(tensors[alias.Z])[:, None]
+        if alias.pinet.p3 not in tensors:
+            tensors[alias.pinet.p3] = torch.zeros([tensors[alias.idx_m].shape[0], 3, self.n_atom_basis])
         for i in range(self.depth):
-            p1 = self.gc_blocks[i](
-                {
-                    self.alias.ind_2: tensors["ind_2"],
-                    self.alias.p1: tensors["p1"],
-                    self.alias.diff: tensors["diff"],
-                    self.alias.basis: basis,
-                }
+            p1, p3 = self.gc_blocks[i](tensors[alias.pinet.p1], tensors[alias.pinet.p3], 
+                tensors[alias.idx_i], tensors[alias.idx_j], d_ij, basis
             )
-            output = self.out_layers[i](p1, output)
-            tensors["p1"] = self.res_update[i](tensors["p1"], p1)
+            tensors = self.out_layers[i](tensors['idx_m'], p1, p3)
+            tensors["p1"] = self.res_update1[i](tensors["p1"], p1)
+            tensors["p3"] = self.res_update1[i](tensors["p3"], p1)
 
-        output = self.ann_output([tensors["ind_1"], output])
-        return output
+        return tensors
