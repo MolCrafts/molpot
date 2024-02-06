@@ -2,12 +2,13 @@ import molpot as mpot
 import molpy as mp
 import torch
 import molexp as me
+from molpot.piplines.dataloaders import DataLoader
 
 from molpot.trainer.metric.metrics import Identity, MAE
 from molpot.trainer.logger.adapter import ConsoleHandler
 from molpot import alias
 
-def gen_lj():
+def gen_lj()->None:
 
     script = me.Script('lj.in')
     script.content = f"""
@@ -16,10 +17,12 @@ def gen_lj():
         atom_style atomic
         pair_style lj/cut 2.5
         boundary p p p
-        region simulation_box block -20 20 -20 20 -20 20
+        region simulation_box block 0 10 0 10 0 10
         create_box 1 simulation_box
-        create_atoms 1 random 1500 341341 simulation_box
+        create_atoms 1 random 100 341341 simulation_box
         # create_atoms 2 random 100 127569 simulation_box
+        variable step equal step
+        variable etotal equal etotal
         mass 1 1
         # mass 2 1
         pair_coeff 1 1 1.0 1.0
@@ -34,22 +37,24 @@ def gen_lj():
         timestep 0.005
         run 10000
     """
-    script.write()
 
-    me.run("lmp -in lj.in")
-    return
+    engine = me.LAMMPSEngine('lmp')
+    engine.add_script(script)
+    engine.run('mpirun -np 4 lmp -in lj.in', cwd='tmp')
+    return None
 
 
-def load_lj():
+def load_lj(gen_lj)->tuple:
 
-    traj = mp.Trajectory()
-    log = mp.loadtxt("lj.log")
-    traj.join_frames(log['etotal'])
+    traj = mp.io.load_trajectory('tmp/lj.lammpstrj')
+    log = mp.io.loadtxt("tmp/lj.log")
+    traj.join({alias.energy: log[:, 1]})
 
-    lj_dataset = mpot.DataSet.from_traj(traj)
+    lj_dataset = mpot.dataset.Trajectory(traj, total=10)
     dp = lj_dataset.prepare()
     train, valid = (
-        dp.calc_nblist(5)
+        dp.calc_nblist(2.5)
+        .collate_data()
         .random_split(weights={"train": 0.8, "valid": 0.2}, seed=42)
     )
 
@@ -57,18 +62,18 @@ def load_lj():
     valid_dataloader = mpot.create_dataloader(valid)
     return train_dataloader, valid_dataloader
 
-def train_lj(load_lj) -> str:
+def train_lj(load_lj: tuple[DataLoader, DataLoader]) -> str:
 
     train_dataloader, valid_dataloader = load_lj
-    lj_pot = mpot.classical.LJ126(5)
-    pot = mpot.Potentials("LJ", lj_pot)
-    criterion = mpot.MultiMSELoss([1], targets=[(alias.ti, alias.)])
+    lj_pot = mpot.classical.pair.LJ126(1, 2.5)
+    pot = mpot.Potentials(lj_pot)
+    criterion = mpot.MultiMSELoss([1], targets=[(alias.ti, alias.energy)])
     optimizer = torch.optim.Adam(pot.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.99)
 
     stagnation = mpot.strategy.Stagnation(alias.loss, patience=torch.inf)
 
-    mae = mpot.metric.MAE("energy_mae", alias.ti, alias.QM9.U)
+    mae = mpot.metric.MAE("energy_mae", alias.ti, alias.energy)
     trainer = mpot.Trainer(
         pot,
         criterion,
@@ -83,7 +88,7 @@ def train_lj(load_lj) -> str:
                 "step": Identity(alias.step),
                 "epoch": Identity(alias.epoch),
                 "loss": Identity(alias.loss),
-                "energy_mae": MAE(alias.ti, alias.QM9.U),
+                "energy_mae": MAE(alias.ti, alias.energy),
             },
             "handlers": [ConsoleHandler()],
         },
@@ -97,7 +102,8 @@ def train_lj(load_lj) -> str:
     )
     # trainer.jit()
     trainer.train(10000)
+    print("done")
     return "done"
 
 if __name__ == "__main__":
-    train_lj(load_lj())
+    train_lj(load_lj(gen_lj()))

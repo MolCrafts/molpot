@@ -1,4 +1,4 @@
-from molpot.piplines.datasets import rMD17
+from molpot.piplines.dataset import rMD17
 from torchdata.datapipes import functional_datapipe
 import molpot as mpot
 import molpy as mp

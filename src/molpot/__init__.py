@@ -7,3 +7,4 @@ from .app import *
 from .potentials import *
 from .trainer import *
 from .inspector import *
+from .piplines import dataset

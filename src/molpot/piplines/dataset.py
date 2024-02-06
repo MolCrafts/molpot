@@ -9,11 +9,12 @@ import json
 import logging
 from urllib.request import urlretrieve
 import numpy as np
-import re
+import torch
 import tarfile
 import molpot as mpot
 import molpy as mp
 from itertools import islice
+import molpy as mp
 
 __all__ = ["DataSet", "DataLoader2", "QM9", "rMD17"]
 
@@ -246,3 +247,19 @@ class rMD17(DataSet):
         logging.info("Parsing molecule {:s}".format(self.molecule))
 
         return path
+
+class Trajectory(DataSet):
+
+    def __init__(self, trajectory:mp.io.TrajLoader, total: int = 0, batch_size: int = 1):
+        super().__init__("Trajectory", None, True, total, batch_size)
+        self.trajectory = trajectory
+
+    def prepare(self) -> IterDataPipe:
+        # Since ctypes objects containing pointers cannot be pickled
+        # pre-load instead of lazy loading
+        frames = [frame.as_dict() for frame in islice(self.trajectory, self.total)]
+        frames = [{k: torch.tensor(v) for k, v in frame.items()} for frame in frames]
+        dp = IterableWrapper(frames)
+        self.trajectory.close()
+        del self.trajectory
+        return self._prepare(dp)

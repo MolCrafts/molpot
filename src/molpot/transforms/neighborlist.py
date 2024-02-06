@@ -45,11 +45,12 @@ class TorchNeighborList(Transform):
         cell = inputs[mpot.alias.cell]
         pbc = inputs[mpot.alias.pbc]
 
-        idx_i, idx_j, offset = self._build_neighbor_list(R, cell, pbc, self._cutoff)
+        idx_i, idx_j, offset, distance = self._build_neighbor_list(R, cell, pbc, self._cutoff)
         inputs[mpot.alias.idx_i] = idx_i.detach()
         inputs[mpot.alias.idx_j] = idx_j.detach()
         inputs[mpot.alias.offsets] = offset
         inputs[mpot.alias.Rij] = R[idx_j] - R[idx_i] + offset
+        inputs[mpot.alias.dist] = distance
 
         return inputs
 
@@ -59,7 +60,7 @@ class TorchNeighborList(Transform):
             shifts = torch.zeros(0, 3, device=cell.device, dtype=torch.long)
         else:
             shifts = self._get_shifts(cell, pbc, cutoff)
-        idx_i, idx_j, offset = self._get_neighbor_pairs(positions, cell, shifts, cutoff)
+        idx_i, idx_j, offset, distance = self._get_neighbor_pairs(positions, cell, shifts, cutoff)
 
         # Create bidirectional id arrays, similar to what the ASE neighbor_list returns
         bi_idx_i = torch.cat((idx_i, idx_j), dim=0)
@@ -74,7 +75,7 @@ class TorchNeighborList(Transform):
         offset = bi_offset[sorted_idx]
         offset = torch.mm(offset.to(cell.dtype), cell)
 
-        return idx_i, idx_j, offset
+        return idx_i, idx_j, offset, distance
 
     def _get_neighbor_pairs(self, positions, cell, shifts, cutoff):
         """Compute pairs of atoms that are neighbors
@@ -114,7 +115,8 @@ class TorchNeighborList(Transform):
 
         # 5) Compute distances, and find all pairs within cutoff
         distances = torch.norm(Rij_all, dim=1)
-        in_cutoff = torch.nonzero(distances < cutoff, as_tuple=False)
+        cutoff_mask = distances < cutoff
+        in_cutoff = torch.nonzero(cutoff_mask, as_tuple=False)
 
         # 6) Reduce tensors to relevant components
         pair_index = in_cutoff.squeeze()  # potential bug if in_cutoff.shape == (1, 1)
@@ -122,7 +124,7 @@ class TorchNeighborList(Transform):
         atom_index_j = pj_all[pair_index]
         offsets = shifts_all[pair_index]
 
-        return atom_index_i, atom_index_j, offsets
+        return atom_index_i, atom_index_j, offsets, distances[cutoff_mask]
 
     def _get_shifts(self, cell, pbc, cutoff):
         """Compute the shifts of unit cell along the given cell vectors to make it

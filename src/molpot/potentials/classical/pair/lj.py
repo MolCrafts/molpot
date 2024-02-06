@@ -5,6 +5,7 @@
 
 from .base import PairBase
 from torch import nn
+from molpot import alias
 
 class LJ126(PairBase):
 
@@ -14,5 +15,9 @@ class LJ126(PairBase):
         self.init_params('eps', (ntypes, ntypes))
         self.init_params('sig', (ntypes, ntypes))
 
-    def forward(self, r_ij):
-        return 4 * self.eps * ((self.sig / r_ij)**12 - (self.sig / r_ij)**6)
+    def forward(self, tensor):
+        r_ij = tensor[alias.dist]
+
+        energy = 4 * self.eps * ((self.sig / r_ij)**12 - (self.sig / r_ij)**6)
+        tensor[alias.ti] = energy.sum(-1)
+        return tensor
