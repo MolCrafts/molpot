@@ -3,26 +3,17 @@ import torch.nn as nn
 from typing import Callable, Union, Sequence
 import torch.nn.functional as F
 from torch.nn.init import xavier_uniform_
-
 from torch.nn.init import zeros_
 
-__all__ = [
-    "CutoffFunc",
-    "GaussianBasis",
-    "PolynomialBasis",
-    "AtomicOnehot",
-    "ANNOutput",
-    "Dense"
-]
+from molpot import Config
+
 
 def build_mlp(
-    n_in: int,
-    n_out: int,
-    n_hidden: Union[int, Sequence[int]] | None = None,
-    n_layers: int = 2,
-    activation: Callable = F.silu,
+    n_neurons: Union[int, Sequence[int]],
+    activation: Union[Callable, nn.Module] | None = None,
     last_bias: bool = True,
     last_zero_init: bool = False,
+    **kwargs
 ) -> nn.Module:
     """
     Build multiple layer fully connected perceptron neural network.
@@ -41,28 +32,15 @@ def build_mlp(
             any activation function.
     """
     # get list of number of nodes in input, hidden & output layers
-    if n_hidden is None:
-        c_neurons = n_in
-        n_neurons = []
-        for i in range(n_layers):
-            n_neurons.append(c_neurons)
-            c_neurons = max(n_out, c_neurons // 2)
-        n_neurons.append(n_out)
-    else:
-        # get list of number of nodes hidden layers
-        if type(n_hidden) is int:
-            n_hidden = [n_hidden] * (n_layers - 1)
-        else:
-            n_hidden = list(n_hidden)
-        n_neurons = [n_in] + n_hidden + [n_out]
+
+    n_layers = len(n_neurons)
 
     # assign a Dense layer (with activation function) to each hidden layer
     layers = [
-        Dense(n_neurons[i], n_neurons[i + 1], activation=activation)
-        for i in range(n_layers - 1)
+        Dense(n_neurons[i], n_neurons[i + 1], activation=activation, **kwargs)
+        for i in range(n_layers - 2)
     ]
     # assign a Dense layer (without activation function) to the output layer
-
     if last_zero_init:
         layers.append(
             Dense(
@@ -70,7 +48,7 @@ def build_mlp(
                 n_neurons[-1],
                 activation=None,
                 weight_init=torch.nn.init.zeros_,
-                bias=last_bias,
+                **kwargs
             )
         )
     else:
@@ -80,8 +58,6 @@ def build_mlp(
     # put all layers together to make the network
     out_net = nn.Sequential(*layers)
     return out_net
-
-__all__ = ["Dense"]
 
 
 class Dense(nn.Linear):
@@ -111,7 +87,7 @@ class Dense(nn.Linear):
         """
         self.weight_init = weight_init
         self.bias_init = bias_init
-        super(Dense, self).__init__(in_features, out_features, bias, device="cuda")
+        super().__init__(in_features, out_features, bias, device=Config.device)
 
         self.activation = activation
         if self.activation is None:
@@ -191,6 +167,7 @@ class GaussianRBF(nn.Module):
         diff = inputs[..., None] - self.offsets
         y = torch.exp(coeff * torch.pow(diff, 2))
         return y
+
 
 class AtomicOnehot(nn.Module):
     R"""One-hot embedding layer

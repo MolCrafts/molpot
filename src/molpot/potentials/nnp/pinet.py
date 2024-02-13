@@ -10,19 +10,17 @@ from torch import nn
 from .layers import build_mlp
 import molpot as mpot
 from molpot import alias
-from typing import Optional, Callable
+from typing import Optional, Callable, Sequence
 import torch.nn.functional as F
 
 
 class PILayer(nn.Module):
-    def __init__(self, in_features: int, out_features:int, n_hidden, n_layers, n_basis=4):
-        super(PILayer, self).__init__()
-
+    def __init__(self, n_channel:int, n_hidden:Sequence[int], n_basis:int, **kwargs):
+        super().__init__()
         self.n_basis = n_basis
-        self.in_features = in_features
-        self.out_features = out_features * n_basis
+        self.n_neurons = [n_channel*2, *n_hidden, n_hidden[-1]*n_basis]
         
-        self.ff_layer = build_mlp(in_features, out_features, n_hidden, n_layers, activation=nn.Identity(), last_bias=False)
+        self.ff_layer = build_mlp(self.n_neurons, activation=None, last_bias=False, **kwargs)
 
     def forward(self, prop, idx_i, idx_j, basis):
         prop_i = prop[idx_i]
@@ -30,8 +28,8 @@ class PILayer(nn.Module):
 
         inter = torch.cat([prop_i, prop_j], axis=-1)
         inter = self.ff_layer(inter)
-        inter = inter.reshape((-1, self.out_features[-1], self.n_basis))
-        inter = torch.einsum("pcb,pb->pc", inter, basis)
+        inter = inter.reshape([*inter.shape[:-1], self.n_neurons[-2], self.n_basis])
+        inter = torch.einsum("ijkl,il->ijk", inter, basis)
         return inter
 
 
@@ -39,11 +37,11 @@ class PIXLayer(nn.Module):
     def __init__(self):
         super(PIXLayer, self).__init__()
 
-    def forword(self, px, idx_i, idx_j):
+    def forward(self, px, idx_i, idx_j):
         px_i = px[idx_i]
         px_j = px[idx_j]
 
-        return px_i - px_j
+        return px_j
 
 
 class DotLayer(nn.Module):

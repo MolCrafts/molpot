@@ -8,7 +8,6 @@ from typing import Sequence
 from torchdata.datapipes.iter import IterDataPipe
 from torchdata.datapipes import functional_datapipe
 import torch
-import numpy as np
 from molpot.statistic.tracker import Tracker
 from molpot import Config
 
@@ -70,7 +69,7 @@ class AtomicDressing(IterDataPipe):
                 
             x_tensor = torch.stack(tuple(x)).to(Config.device)
             if self.ref:  # ref -> w
-                predict = x_tensor @ self.ref
+                predict = x_tensor @ self.ref 
             else:
                 weight = torch.zeros((x_tensor.shape[0], 1), device=Config.device)
                 x_tensor = torch.cat((x_tensor, weight), dim=1).to(Config.device)

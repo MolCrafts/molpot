@@ -6,11 +6,11 @@ from molpot.potentials.base import NNPotential
 from molpot.potentials.nnp.layers import CosineCutoff, GaussianRBF
 from molpot.potentials.nnp.readout import Atomwise
 from molpot.trainer.metric.metrics import Identity, MAE
-from molpot.trainer.logger.adapter import ConsoleHandler
-from molpot import alias, device
+from molpot.trainer.logger.adapter import ConsoleHandler, TensorBoardHandler
+from molpot import alias
 
 def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    qm9_dataset = mpot.QM9(data_dir="data/qm9", batch_size=64)
+    qm9_dataset = mpot.QM9(data_dir="data/qm9", batch_size=64, total=1000)
     dp = qm9_dataset.prepare()
     train, valid = (
         dp# .atomic_dress([1, 6, 7, 8, 9], alias.Z, alias.QM9.U)
@@ -38,6 +38,7 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     mae = mpot.metric.MAE("energy_mae", alias.ti, alias.QM9.U)
 
     trainer = mpot.Trainer(
+        "painn-qm9",
         model,
         criterion,
         optimizer,
@@ -48,22 +49,25 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         metrics=[mae],
         logger={
             "metrics": {
-                "step": Identity(alias.step),
-                "epoch": Identity(alias.epoch),
+                "speed": Identity("speed"),
                 "loss": Identity(alias.loss),
                 "energy_mae": MAE(alias.ti, alias.QM9.U),
             },
-            "handlers": [ConsoleHandler()],
+            "handlers": [ConsoleHandler(), TensorBoardHandler()],
+            "save_dir": "./logs/qm9"
         },
         config={
             "save_dir": "data/qm9",
             "device": {"type": "gpu", 'n_gpu_use': 1},
-            "report_rate": 10,
+            "report_rate": 100,
             "valid_rate": 1000,
             "modify_lr_rate": 100,
+            "checkpoint_rate": 1000,
         },
     )
-    trainer.train(10)
+
+    trainer.jit()
+    trainer.train(1000000)
 
     return "done"
 

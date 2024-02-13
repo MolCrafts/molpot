@@ -3,6 +3,8 @@ import torch
 class Config:
 
     device: torch.device = torch.device("cpu")
+    stype: torch.dtype = torch.int32
+    ftype: torch.dtype = torch.float32 
 
     @classmethod
     def set_device(cls, device_type:str):
