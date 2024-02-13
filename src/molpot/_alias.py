@@ -9,9 +9,9 @@ import numpy as np
 
 __all__ = ["alias"]
 
-alias.set('T1', '_T1', int, None, 'rank 0 tensor')
-alias.set('T2', '_T2', int, None, 'rank 1 tensor')
-alias.set('T3', '_T3', int, None, 'rank 2 tensor')
+alias.set('T0', '_T0', int, None, 'rank 0 tensor')
+alias.set('T1', '_T1', int, None, 'rank 1 tensor')
+alias.set('T2', '_T2', int, None, 'rank 2 tensor')
 
 alias.set('loss', '_loss', float, None, 'loss')
 alias.set('step', '_step', int, None, 'step')

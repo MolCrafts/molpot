@@ -3,15 +3,17 @@ import torch.nn as nn
 from typing import Callable, Union, Sequence
 import torch.nn.functional as F
 from torch.nn.init import xavier_uniform_
-
 from torch.nn.init import zeros_
+
 from molpot import Config
 
+
 def build_mlp(
-    n_neurons: Sequence[int],
-    activation: Callable = F.silu,
+    n_neurons: Union[int, Sequence[int]],
+    activation: Union[Callable, nn.Module] | None = None,
     last_bias: bool = True,
     last_zero_init: bool = False,
+    **kwargs
 ) -> nn.Module:
     """
     Build multiple layer fully connected perceptron neural network.
@@ -31,13 +33,14 @@ def build_mlp(
     """
     # get list of number of nodes in input, hidden & output layers
 
+    n_layers = len(n_neurons)
+
     # assign a Dense layer (with activation function) to each hidden layer
     layers = [
-        Dense(n_neurons[i], n_neurons[i + 1], activation=activation, bias=False)
-        for i in range(len(n_neurons)-2)
+        Dense(n_neurons[i], n_neurons[i + 1], activation=activation, **kwargs)
+        for i in range(n_layers - 2)
     ]
     # assign a Dense layer (without activation function) to the output layer
-
     if last_zero_init:
         layers.append(
             Dense(
@@ -45,7 +48,7 @@ def build_mlp(
                 n_neurons[-1],
                 activation=None,
                 weight_init=torch.nn.init.zeros_,
-                bias=last_bias,
+                **kwargs
             )
         )
     else:
@@ -53,8 +56,6 @@ def build_mlp(
     # put all layers together to make the network
     out_net = nn.Sequential(*layers)
     return out_net
-
-__all__ = ["Dense"]
 
 
 class Dense(nn.Linear):
@@ -164,6 +165,7 @@ class GaussianRBF(nn.Module):
         diff = inputs[..., None] - self.offsets
         y = torch.exp(coeff * torch.pow(diff, 2))
         return y
+
 
 class AtomicOnehot(nn.Module):
     R"""One-hot embedding layer

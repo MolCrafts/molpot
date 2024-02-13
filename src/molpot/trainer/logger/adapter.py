@@ -4,31 +4,33 @@ from pathlib import Path
 import torch
 
 class LogAdapter:
-    def __init__(self, metrics, handlers):
+    def __init__(self, name, metrics, handlers, log_dir):
+        self.name = name
         self.metrics = metrics
         self.handlers = handlers
+        self.log_dir = log_dir
 
     def init(self):
         for handler in self.handlers:
-            handler.init(self.metrics)
+            handler.init(self.name, self.metrics, self.log_dir)
 
-    def eval_metrics(self, nstep, output, data):
-        return {header: metric(nstep, output, data) for header, metric in self.metrics.items()}
+    def eval_metrics(self, output, data):
+        return {header: metric(output, data) for header, metric in self.metrics.items()}
 
-    def __call__(self, nstep, output, data):
-        result = self.eval_metrics(nstep, output, data)
+    def __call__(self, nstep, nepoch, output, data):
+        result = self.eval_metrics(output, data)
         for handler in self.handlers:
-            handler(result)
+            handler(nstep, nepoch, result)
 
 class ConsoleHandler:
     def __init__(self):
         pass
 
-    def init(self, metrics):
-        print(f" | ".join([f"{key:<10s}" for key in metrics.keys()]))
+    def init(self, name, metrics, log_dir):
+        print("step | epoch | ", f" | ".join([f"{key:<10s}" for key in metrics.keys()]))
 
-    def __call__(self, results):
-        formatted_result = []
+    def __call__(self, nstep, nepoch, results):
+        formatted_result = [str(nstep), str(nepoch)]
         for result in results.values():
             if isinstance(result, float):
                 formatted_result.append(f"{result:<10.4f}")
@@ -38,3 +40,18 @@ class ConsoleHandler:
                 formatted_result.append(f"{str(result):<10s}")
         msg = f" | ".join(formatted_result)
         print(msg)
+
+class TensorBoardHandler:
+    def __init__(self):
+        pass
+        
+    def init(self, name, metrics, log_dir):
+        from torch.utils.tensorboard import SummaryWriter
+        self.writer = SummaryWriter(log_dir, comment=name)
+
+    def __call__(self, nstep, nepoch, results):
+        for key, value in results.items():
+            self.writer.add_scalar(key, value, nstep)
+
+    def __del__(self):
+        self.writer.close()

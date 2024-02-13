@@ -9,7 +9,7 @@ class Metric:
     def __init__(self, name):
         self.name = name
 
-    def __call__(self, step, output, data):
+    def __call__(self, output, data):
         raise NotImplementedError
     
 class Identity(Metric):
@@ -18,7 +18,7 @@ class Identity(Metric):
         super().__init__('identity')
         self.key = key
 
-    def __call__(self, step, output, data):
+    def __call__(self, output, data):
         return output[self.key]
 
 class Accuracy(Metric):
@@ -27,7 +27,7 @@ class Accuracy(Metric):
         self.result_key = result_key
         self.target_key = target_key
 
-    def __call__(self, nstep, output, data):
+    def __call__(self, output, data):
 
         result = output[self.result_key]
         target = data[self.target_key]
@@ -45,7 +45,7 @@ class TopKAccuracy(Metric):
         self.target_key = target_key
         self.k = k
 
-    def __call__(self, step, output, data):
+    def __call__(self, output, data):
 
         result = output[self.result_key]
         target = data[self.target_key]
@@ -64,7 +64,7 @@ class MAE(Metric):
         self.target_key = target_key
         self.kernel = torch.nn.L1Loss(reduction=reduction)
 
-    def __call__(self, step, output, data):
+    def __call__(self, output, data):
             
         result = output[self.result_key]
         target = data[self.target_key]
