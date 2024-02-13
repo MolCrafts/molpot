@@ -1,7 +1,4 @@
 import torch
-from torch import nn
-
-__all__ = ["index_add"]
 
 
 def index_add(

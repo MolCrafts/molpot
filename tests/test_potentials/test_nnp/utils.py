@@ -35,7 +35,7 @@ def rotate(x, roll, pitch, yaw):
     ndim = x.ndim - 2
     rot = create_rotation_matrix(roll, pitch, yaw)
     if ndim == 0:
-        return torch.einsum("xc, xy->yc", x, rot)
+        return torch.einsum("ix,xy->iy", x, rot)
     elif ndim == 1:
         return torch.einsum("ixc, xy->iyc", x, rot)
     elif ndim == 2:
@@ -43,14 +43,13 @@ def rotate(x, roll, pitch, yaw):
 
 
 def foreach_rotate(x, eqvar_index, roll, pitch, yaw):
-    if isinstance(x, (list, tuple)):
-        return [
+    return [
         rotate(x, roll, pitch, yaw) if i in eqvar_index else x for i, x in enumerate(x)
     ]
-    elif isinstance(x, dict):
-        return {
-            k: rotate(v, roll, pitch, yaw) if k in eqvar_index else v for k, v in x.items()
-        }
+    # elif isinstance(x, dict):
+    #     return {
+    #         k: rotate(v, roll, pitch, yaw) if k in eqvar_index else v for k, v in x.items()
+    #     }
 
 
 def allclose(a, b, verbose: bool = True, rtol=1e-5, atol=1e-5):

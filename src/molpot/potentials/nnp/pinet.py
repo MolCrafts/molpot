@@ -230,7 +230,7 @@ class PiNet(NNPotential):
         )
         self.cutoff_fn = cutoff_fn
         self.radial_basis_fn = radial_basis
-        self.n_basis = radial_basis.n_rbf
+        self.n_basis = radial_basis.n_basis
         self.n_atom_basis = n_atom_basis
         self.embbding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
 
@@ -247,15 +247,11 @@ class PiNet(NNPotential):
     def forward(self, tensors: dict):
 
         r_ij = tensors[alias.Rij]
-        d_ij = torch.norm(r_ij, dim=1, keepdim=True)
+        d_ij = torch.norm(r_ij, dim=-1)
         p1 = tensors[alias.pinet.p1]
         p1 = self.embbding(p1)
-        norm_rij = r_ij / d_ij
-        fc = self.cutoff_fn(tensors[alias.Rij])
-        print(fc.shape)
-        print(norm_rij.shape)
-        print(self.radial_basis_fn(norm_rij).shape)
-        basis = self.radial_basis_fn(norm_rij) * fc[..., None]
+        fc = self.cutoff_fn(d_ij)
+        basis = self.radial_basis_fn(d_ij, fc)
         output = 0.0  # broadcast to shape:= (n_atoms, 1)
         for i in range(self.depth):
             p = self.gc_blocks[i](

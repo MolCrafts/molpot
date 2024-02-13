@@ -134,21 +134,21 @@ class GaussianRBF(nn.Module):
     r"""Gaussian radial basis functions."""
 
     def __init__(
-        self, n_rbf: int, cutoff: float, start: float = 0.0, trainable: bool = False
+        self, n_basis: int, cutoff: float, start: float = 0.0, trainable: bool = False
     ):
-        """
+        r"""
         Args:
-            n_rbf: total number of Gaussian functions, :math:`N_g`.
+            n_basis: total number of Gaussian functions, :math:`N_g`.
             cutoff: center of last Gaussian function, :math:`\mu_{N_g}`
             start: center of first Gaussian function, :math:`\mu_0`.
             trainable: If True, widths and offset of Gaussian functions
                 are adjusted during training process.
         """
         super(GaussianRBF, self).__init__()
-        self.n_rbf = n_rbf
+        self.n_basis = n_basis
 
         # compute offset and width of Gaussian functions
-        offset = torch.linspace(start, cutoff, n_rbf)
+        offset = torch.linspace(start, cutoff, n_basis)
         widths = torch.abs(offset[1] - offset[0]) * torch.ones_like(offset)
         offset = offset.to(Config.device)
         widths = widths.to(Config.device)
@@ -160,15 +160,16 @@ class GaussianRBF(nn.Module):
             self.register_buffer("widths", widths)
             self.register_buffer("offsets", offset)
 
-    def forward(self, inputs: torch.Tensor):
+    def forward(self, dij: torch.Tensor, fc: torch.Tensor):
         coeff = -0.5 / torch.pow(self.widths, 2)
-        diff = inputs[..., None] - self.offsets
+        diff = dij[..., None] - self.offsets
         y = torch.exp(coeff * torch.pow(diff, 2))
-        return y
+        basis = y * fc[..., None]
+        return basis
 
 
 class AtomicOnehot(nn.Module):
-    R"""One-hot embedding layer
+    r"""One-hot embedding layer
 
     Given the atomic number of each atom ($Z_{i}$) and a list of specified
     element types denoted as ($Z^{\mathrm{0}}_{\alpha}$), returns:
@@ -199,7 +200,7 @@ class AtomicOnehot(nn.Module):
 
 
 class ANNOutput(nn.Module):
-    """ANN Ouput layer
+    r"""ANN Ouput layer
 
     Output atomic or molecular (system) properties depending on `out_pool`
 
@@ -243,7 +244,7 @@ class ANNOutput(nn.Module):
 
 
 class PolynomialBasis(nn.Module):
-    """Polynomial Basis Layer
+    r"""Polynomial Basis Layer
 
     Builds the polynomial basis function:
 

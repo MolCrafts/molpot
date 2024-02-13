@@ -3,7 +3,7 @@ import torch
 import molpot.potentials.nnp as nnp
 from molpot import Config, alias
 from molpot.potentials.nnp.pinet import DotLayer
-from .utils import assert_eqvar, assert_invar
+from .utils import assert_eqvar, assert_invar, rotate
 
 
 class TestPiNet:
@@ -163,8 +163,20 @@ class TestPiNet:
             alias.idx_i : idx_i,
             alias.idx_j : idx_j
         })
-        assert output.shape == (n_atoms, )
-        assert_invar(layer, [p1, idx_i, idx_j, basis], [alias.Rij])
+        assert output[alias.T0].shape == (n_atoms, 1)
+        actual = layer({
+            alias.Rij : rotate(torch.rand(n_pairs, 3), *torch.rand(3)),
+            alias.pinet.p1 : p1,
+            alias.idx_i : idx_i,
+            alias.idx_j : idx_j
+        })[alias.T0]
+        expect = layer({
+            alias.Rij : torch.rand(n_pairs, 3),
+            alias.pinet.p1 : p1,
+            alias.idx_i : idx_i,
+            alias.idx_j : idx_j
+        })[alias.T0]
+        assert torch.allclose(actual, expect)
 
     # def test_gcblock_p3(self):
 

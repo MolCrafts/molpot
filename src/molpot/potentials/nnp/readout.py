@@ -45,9 +45,9 @@ class Atomwise(nn.Module):
         )
         self.aggregation_mode = aggregation_mode
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         # predict atomwise contributions
-        y = self.outnet(inputs[alias.p1])
+        y = self.outnet(inputs)
 
         # aggregate
         if self.aggregation_mode is not None:
@@ -59,5 +59,4 @@ class Atomwise(nn.Module):
             if self.aggregation_mode == "avg":
                 y = y / inputs[alias.n_atoms]
 
-        inputs[self.output_key] = y
-        return inputs
+        return y
