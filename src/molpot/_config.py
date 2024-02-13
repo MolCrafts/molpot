@@ -3,6 +3,11 @@ import torch
 class Config:
 
     device: torch.device = torch.device("cpu")
+    ftype: torch.dtype = torch.float32
+    stype: torch.dtype = torch.int32
+
+    def __init__(self):
+        raise Exception("This class should not be instantiated")
 
     @classmethod
     def set_device(cls, device_type:str):

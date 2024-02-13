@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from .layers import Dense
 from .ops import scatter_add
 import molpot as mpot
-from molpot import Config
+from molpot import Config, alias
 
 __all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
 
@@ -242,7 +242,7 @@ class PaiNN(nn.Module):
 
         q = q.squeeze(1)
 
-        inputs["scalar_representation"] = q
-        inputs["vector_representation"] = mu
+        inputs[alias.T1] = q
+        inputs[alias.T2] = mu
         return inputs
     

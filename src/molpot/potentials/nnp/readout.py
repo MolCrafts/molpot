@@ -63,7 +63,7 @@ class Atomwise(nn.Module):
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # predict atomwise contributions
-        y = self.outnet(inputs["scalar_representation"])
+        y = self.outnet(inputs[alias.p1])
 
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:
