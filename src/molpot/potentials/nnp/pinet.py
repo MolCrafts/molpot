@@ -7,7 +7,7 @@ from .readout import Atomwise
 from ..base import NNPotential
 import torch
 from torch import nn
-from .layers import build_mlp
+from .layers import Dense, build_mlp
 import molpot as mpot
 from molpot import alias
 from typing import Optional, Callable, Sequence
@@ -15,31 +15,24 @@ import torch.nn.functional as F
 
 
 class PILayer(nn.Module):
-    def __init__(self, n_channel:int, n_hidden:Sequence[int], n_basis:int, **kwargs):
+    def __init__(self, n_channel: int, n_hidden: Sequence[int], n_basis: int, **kwargs):
         super().__init__()
         self.n_basis = n_basis
-        self.n_neurons = [n_channel*2, *n_hidden, n_hidden[-1]*n_basis]
-        
-        self.ff_layer = build_mlp(self.n_neurons, activation=None, last_bias=False, **kwargs)
+        self.n_neurons = [n_channel * 2, *n_hidden, n_hidden[-1] * n_basis]
+
+        self.ff_layer = build_mlp(
+            self.n_neurons, activation=None, last_bias=False, **kwargs
+        )
 
     def forward(self, prop, idx_i, idx_j, basis):
         prop_i = prop[idx_i]
         prop_j = prop[idx_j]
 
         inter = torch.cat([prop_i, prop_j], axis=-1)
-        inter = self.ff_layer(inter)
+        inter = self.ff_layer(inter)  # NOTE: weight?
         inter = inter.reshape([*inter.shape[:-1], self.n_neurons[-2], self.n_basis])
-        inter = torch.einsum("ijkl,il->ijk", inter, basis)
+        inter = torch.einsum("i...c,ic->i...", inter, basis)
         return inter
-
-
-class PIXLayer(nn.Module):
-
-    def forward(self, px, idx_i, idx_j):
-        px_i = px[idx_i]
-        px_j = px[idx_j]
-
-        return px_j
 
 
 class DotLayer(nn.Module):
@@ -50,8 +43,8 @@ class DotLayer(nn.Module):
         """
         super().__init__()
 
-    def forword(self, px):
-        return torch.einsum("ixr,ixr->ir", px, px)
+    def forward(self, px):
+        return torch.einsum("i...c,i...c->ic", px, px)
 
 
 class ScaleLayer(nn.Module):
@@ -59,17 +52,19 @@ class ScaleLayer(nn.Module):
         super().__init__()
 
     def forward(self, px, p1):
-        return px * p1[:, None, :]
+        return torch.einsum("i...c,i...c->i...c", px, p1)
 
 
 class IPLayer(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, prop, idx_i, inter):
-        return torch.scatter_add(
-            torch.zeros(prop.shape[0], prop.shape[-1]), 0, idx_i, inter
+    def forward(self, i, idx_i, p):
+        
+        p.index_add(
+            0, idx_i, i
         )
+        return p
 
 
 class OutLayer(nn.Module):
@@ -81,6 +76,34 @@ class OutLayer(nn.Module):
         p1 = self.ff_layer(p1)
         output = p1 + prev_output
         return output
+
+
+# class ResUpdate(nn.Module):
+#     def __init__(self, in_features: int, out_features: int, n_hidden, n_layers):
+#         super().__init__()
+#         self.transform = Dense(
+#             in_features, out_features, n_hidden, n_layers, activation=None
+#         )
+
+#     def forward(self, old, new):
+#         return self.transform(old) + new
+
+
+class GCBlockP1(nn.Module):
+
+    def __init__(self, pp_nodes, pi_nodes, ii_nodes, n_basis):
+        super().__init__()
+        self.pp_layer = build_mlp(pp_nodes)
+        self.pi_layer = PILayer(pp_nodes[-1], pi_nodes, n_basis)
+        self.ii_layer = build_mlp(ii_nodes)
+        self.ip_layer = IPLayer()
+
+    def forward(self, p, idx_i, idx_j, basis):
+        p1 = self.pp_layer(p)
+        i1 = self.pi_layer(p1, idx_i, idx_j, basis)
+        i1 = self.ii_layer(i1)
+        p  = self.ip_layer(i1, idx_i, p)
+        return p
 
 
 class GCBlock(nn.Module):
@@ -141,7 +164,6 @@ class GCBlock(nn.Module):
         self.scale3_layer = ScaleLayer()
         self.scale4_layer = ScaleLayer()
 
-
     def forward(self, p1, p3, p5, idx_i, idx_j, diff, basis):
 
         p1 = self.pp1_layer(p1)
@@ -161,26 +183,20 @@ class GCBlock(nn.Module):
         p5 = self.pp5_layer(p5)
         i5 = self.pi5_layer(p5, idx_i, idx_j)
         i5 = self.scale2_layer([i5, i1_4[:, None, :]])
-        vvt = torch.einsum('ijl, ikl->ijkl', scaled_diff, scaled_diff)
-        vvt_trace = torch.einsum('ijjl->il', vvt) 
-        S = vvt - torch.reshape(vvt_trace[:, :, None, None] * torch.eye(3).broadcast_to(vvt_trace) / 3, vvt.shape)
+        vvt = torch.einsum("ijl, ikl->ijkl", scaled_diff, scaled_diff)
+        vvt_trace = torch.einsum("ijjl->il", vvt)
+        S = vvt - torch.reshape(
+            vvt_trace[:, :, None, None] * torch.eye(3).broadcast_to(vvt_trace) / 3,
+            vvt.shape,
+        )
 
         i5 = i5 + S
-        p5 = self.ip5_layer(idx_i, p5, i5)        
+        p5 = self.ip5_layer(idx_i, p5, i5)
 
         next_p1 = p1 + self.dot_layer(p1)
         next_p3 = self.scale3_layer(p3, p1)
 
         return next_p1, next_p3
-
-
-class ResUpdate(nn.Module):
-    def __init__(self):
-        super(ResUpdate, self).__init__()
-
-    def forward(self, tensors):
-        old, new = tensors
-        return old + new
 
 
 class PiNet(NNPotential):
@@ -199,7 +215,7 @@ class PiNet(NNPotential):
         ii_nodes=[16, 16],
         out_nodes=[16, 16],
         out_pool=False,
-        upto:int = 3,
+        upto: int = 3,
         act="tanh",
     ):
         """
