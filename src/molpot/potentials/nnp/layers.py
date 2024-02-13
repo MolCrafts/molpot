@@ -85,7 +85,7 @@ class Dense(nn.Linear):
         """
         self.weight_init = weight_init
         self.bias_init = bias_init
-        super().__init__(in_features, out_features, bias, device=Config.device)
+        super().__init__(in_features, out_features, bias, device=Config.device, dtype=Config.ftype)
 
         self.activation = activation
         if self.activation is None:
@@ -120,7 +120,7 @@ class CosineCutoff(nn.Module):
             cutoff (float, optional): cutoff radius.
         """
         super(CosineCutoff, self).__init__()
-        self.register_buffer("cutoff", torch.tensor([cutoff], device="cuda"))
+        self.register_buffer("cutoff", torch.tensor([cutoff], device=Config.device))
 
     def forward(self, input: torch.Tensor):
         # Compute values of cutoff function
@@ -150,8 +150,8 @@ class GaussianRBF(nn.Module):
         # compute offset and width of Gaussian functions
         offset = torch.linspace(start, cutoff, n_rbf)
         widths = torch.abs(offset[1] - offset[0]) * torch.ones_like(offset)
-        offset = offset.to("cuda")
-        widths = widths.to("cuda")
+        offset = offset.to(Config.device)
+        widths = widths.to(Config.device)
 
         if trainable:
             self.widths = nn.Parameter(widths)

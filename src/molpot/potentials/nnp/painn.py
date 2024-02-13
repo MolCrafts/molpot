@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .layers import Dense
-from .ops import scatter_add
+from .ops import index_add
 import molpot as mpot
 from molpot import Config, alias
 
@@ -67,9 +67,9 @@ class PaiNNInteraction(nn.Module):
         x = Wij * xj
 
         dq, dmuR, dmumu = torch.split(x, self.n_atom_basis, dim=-1)
-        dq = scatter_add(dq, idx_i, dim_size=n_atoms)
+        dq = index_add(dq, idx_i, dim_size=n_atoms, accumulate=False)
         dmu = dmuR * dir_ij[..., None] + dmumu * muj
-        dmu = scatter_add(dmu, idx_i, dim_size=n_atoms)
+        dmu = index_add(dmu, idx_i, dim_size=n_atoms, accumulate=False)
 
         q = q + dq
         mu = mu + dmu

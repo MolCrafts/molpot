@@ -3,6 +3,7 @@
 # date: 2023-10-12
 # version: 0.0.1
 
+from molpot.potentials.nnp.ops import index_acc
 from .readout import Atomwise
 from ..base import NNPotential
 import torch
@@ -26,11 +27,10 @@ class PILayer(nn.Module):
 
     def forward(self, prop, idx_i, idx_j, basis):
         prop_i = prop[idx_i]
-        prop_j = prop[idx_j]
-
+        prop_j = prop[idx_j]  # (n_pairs, n_channel)
         inter = torch.cat([prop_i, prop_j], axis=-1)
-        inter = self.ff_layer(inter)  # NOTE: weight?
-        inter = inter.reshape([*inter.shape[:-1], self.n_neurons[-2], self.n_basis])
+        inter = self.ff_layer(inter)  # NOTE: weight? (n_pairs, n_hidden[-1] * n_basis)
+        inter = inter.reshape([*inter.shape[:-1], self.n_neurons[-2], self.n_basis])  # (n_pairs, n_hidden[-1], n_basis)
         inter = torch.einsum("i...c,ic->i...", inter, basis)
         return inter
 
@@ -61,21 +61,20 @@ class IPLayer(nn.Module):
 
     def forward(self, i, idx_i, p):
         
-        p.index_add(
-            0, idx_i, i
+        index_acc(
+            p, 0, idx_i, i
         )
         return p
 
 
 class OutLayer(nn.Module):
-    def __init__(self, in_features: int, out_features: int, n_hidden, n_layers):
+    def __init__(self, n_channel: int, n_hidden: Sequence[int], out_units:int):
         super().__init__()
-        self.ff_layer = build_mlp(in_features, out_features, n_hidden, n_layers)
 
-    def forward(self, prev_output, p1, p3):
-        p1 = self.ff_layer(p1)
-        output = p1 + prev_output
-        return output
+        self.ff_layer = build_mlp([n_channel, *n_hidden, out_units])
+
+    def forward(self, p):
+        return self.ff_layer(p)
 
 
 # class ResUpdate(nn.Module):
@@ -91,11 +90,11 @@ class OutLayer(nn.Module):
 
 class GCBlockP1(nn.Module):
 
-    def __init__(self, pp_nodes, pi_nodes, ii_nodes, n_basis):
+    def __init__(self, pp_nodes, pi_nodes, ii_nodes, n_basis, activation):
         super().__init__()
-        self.pp_layer = build_mlp(pp_nodes)
+        self.pp_layer = build_mlp(pp_nodes, activation)
         self.pi_layer = PILayer(pp_nodes[-1], pi_nodes, n_basis)
-        self.ii_layer = build_mlp(ii_nodes)
+        self.ii_layer = build_mlp(ii_nodes, activation)
         self.ip_layer = IPLayer()
 
     def forward(self, p, idx_i, idx_j, basis):
@@ -208,33 +207,15 @@ class PiNet(NNPotential):
         depth: int,
         radial_basis: nn.Module,
         cutoff_fn: Optional[Callable] = None,
-        activation: Optional[Callable] = F.silu,
-        max_z: int = 100,
         pp_nodes=[16, 16],
         pi_nodes=[16, 16],
         ii_nodes=[16, 16],
         out_nodes=[16, 16],
-        out_pool=False,
-        upto: int = 3,
-        act="tanh",
+        out_pool=None,
+        activation: Optional[Callable] = F.silu,
+        max_z: int = 100,
     ):
-        """
-        Args:
-            atom_types (list): elements for the one-hot embedding
-            pp_nodes (list): number of nodes for PPLayer
-            pi_nodes (list): number of nodes for PILayer
-            ii_nodes (list): number of nodes for IILayer
-            out_nodes (list): number of nodes for OutLayer
-            out_pool (str): pool atomic outputs, see ANNOutput
-            depth (int): number of interaction blocks
-            rc (float): cutoff radius
-            basis_type (string): basis function, can be "polynomial" or "gaussian"
-            n_basis (int): number of basis functions to use
-            gamma (float or array): width of gaussian function for gaussian basis
-            center (float or array): center of gaussian function for gaussian basis
-            cutoff_type (string): cutoff function to use with the basis.
-            act (string): activation function to use
-        """
+
         super().__init__("PiNet")
         if activation == "tanh":
             activation = nn.Tanh()
@@ -252,64 +233,38 @@ class PiNet(NNPotential):
         self.n_basis = radial_basis.n_rbf
         self.n_atom_basis = n_atom_basis
         self.embbding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
-        self.res_update1 = nn.Sequential(*[ResUpdate() for _ in range(depth)])
-        self.res_update3 = nn.Sequential(*[ResUpdate() for _ in range(depth)])
-        gc_blocks = [
-            GCBlock([], pi_nodes, ii_nodes, self.n_basis, activation=activation)
-        ]
-        gc_blocks += [
-            GCBlock(pp_nodes, pi_nodes, ii_nodes, self.n_basis, activation=activation)
-            for _ in range(depth - 1)
-        ]
-        self.gc_blocks = nn.Sequential(*gc_blocks)
+
+        self.gc_blocks = nn.Sequential(
+            *[GCBlockP1(pp_nodes, pi_nodes, ii_nodes, self.n_basis, activation=activation)
+            for _ in range(depth)]
+        )
         self.out_layers = [
-            OutLayer(1, out_nodes[-1], out_nodes[:-1], len(out_nodes) + 1)
+            OutLayer(n_atom_basis, out_nodes, 1)
             for _ in range(depth)
         ]
-        self.ann_output = Atomwise(out_pool)
+        self.ann_output = Atomwise(1, [], 1, aggregation_mode=out_pool)
 
     def forward(self, tensors: dict):
-        """PiNet takes batches atomic data as input, the following keys are
-        required in the input dictionary of tensors:
 
-        - `ind_1`: [sparse indices](layers.md#sparse-indices) for the batched data, with shape `(n_atoms, 1)`;
-        - `elems`: element (atomic numbers) for each atom, with shape `(n_atoms)`;
-        - `coord`: coordintaes for each atom, with shape `(n_atoms, 3)`.
-
-        Optionally, the input dataset can be processed with
-        `PiNet.preprocess(tensors)`, which adds the following tensors to the
-        dictionary:
-
-        - `ind_2`: [sparse indices](layers.md#sparse-indices) for neighbour list, with shape `(n_pairs, 2)`;
-        - `dist`: distances from the neighbour list, with shape `(n_pairs)`;
-        - `diff`: distance vectors from the neighbour list, with shape `(n_pairs, 3)`;
-        - `prop`: initial properties `(n_pairs, n_elems)`;
-
-        Args:
-            tensors (dict of tensors): input tensors
-
-        Returns:
-            output (tensor): output tensor with shape `[n_atoms, out_nodes]`
-        """
         r_ij = tensors[alias.Rij]
         d_ij = torch.norm(r_ij, dim=1, keepdim=True)
-        dir_ij = r_ij / d_ij
+        p1 = tensors[alias.pinet.p1]
+        p1 = self.embbding(p1)
+        norm_rij = r_ij / d_ij
         fc = self.cutoff_fn(tensors[alias.Rij])
-        basis = self.radial_basis_fn(dir_ij) * fc[..., None]
+        print(fc.shape)
+        print(norm_rij.shape)
+        print(self.radial_basis_fn(norm_rij).shape)
+        basis = self.radial_basis_fn(norm_rij) * fc[..., None]
+        output = 0.0  # broadcast to shape:= (n_atoms, 1)
         for i in range(self.depth):
-            p1, p3, p5 = self.gc_blocks[i](
-                tensors[alias.pinet.p1],
-                tensors[alias.pinet.p3],
-                tensors[alias.pinet.p5],
+            p = self.gc_blocks[i](
+                p1,
                 tensors[alias.idx_i],
                 tensors[alias.idx_j],
-                d_ij,
                 basis,
             )
-            tensors = self.out_layers[i](tensors[alias.idx_m], p1, p3, p5)
-            tensors[alias.pinet.p1] = self.res_update1[i](tensors[alias.pinet.p1], p1)
-            tensors[alias.pinet.p3] = self.res_update1[i](tensors[alias.pinet.p3], p3)
-            tensors[alias.pinet.p5] = self.res_update1[i](tensors[alias.pinet.p5], p5)
+            output += self.out_layers[i](p)
 
-        tensors[alias.pinet.p1] = self.ann_output(tensors)
+        tensors[alias.T0] = self.ann_output(output)
         return tensors

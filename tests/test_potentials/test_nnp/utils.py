@@ -43,9 +43,14 @@ def rotate(x, roll, pitch, yaw):
 
 
 def foreach_rotate(x, eqvar_index, roll, pitch, yaw):
-    return [
+    if isinstance(x, (list, tuple)):
+        return [
         rotate(x, roll, pitch, yaw) if i in eqvar_index else x for i, x in enumerate(x)
     ]
+    elif isinstance(x, dict):
+        return {
+            k: rotate(v, roll, pitch, yaw) if k in eqvar_index else v for k, v in x.items()
+        }
 
 
 def allclose(a, b, verbose: bool = True, rtol=1e-5, atol=1e-5):
