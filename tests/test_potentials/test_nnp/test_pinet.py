@@ -119,6 +119,25 @@ class TestPiNet:
         assert output.shape == (n_atoms, n_dim, n_dim, n_channels)
         assert_eqvar(layer, [i5, idx_i, p5], [0])
 
+    def test_addlayer(self):
+
+        n_dim = 3
+        n_pairs = 12
+        n_channels = 5
+        i3 = torch.rand(n_pairs, n_dim, n_channels)
+        # p3
+        layer = nnp.pinet.AddLayer(3)
+        output = layer(i3, i3)
+        assert output.shape == (n_pairs, n_dim, n_channels)
+        assert_eqvar(layer, [i3, i3], [0, 1])
+        # p5
+        layer = nnp.pinet.AddLayer(5)
+        i5 = torch.rand(n_pairs, n_dim, n_dim, n_channels)
+        output = layer(i5, i3)
+        assert output.shape == (n_pairs, n_dim, n_dim, n_channels)
+        assert_eqvar(layer, [i5, i3], [0, 1])
+        
+
     def test_gcblock_p1(self):
 
         n_atoms = 10
@@ -132,13 +151,13 @@ class TestPiNet:
         idx_i = torch.randint(0, n_atoms, (n_pairs,))
         idx_j = torch.randint(0, n_atoms, (n_pairs,))
         basis = torch.rand(n_pairs, n_basis)
-        activation = torch.nn.Identity()
+        activation = torch.nn.ReLU()
 
         layer = nnp.pinet.GCBlockP1(pp_nodes, pi_nodes, ii_nodes, n_basis, activation)
         output = layer(p1, idx_i, idx_j, basis)
         assert output.shape == (n_atoms, n_channels)
 
-    def test_pinet(self):
+    def test_pinet_p1(self):
 
         n_atoms = 10
         n_atomtypes = 5
@@ -154,7 +173,6 @@ class TestPiNet:
         p1 = torch.randint(0, n_atomtypes, (n_atoms,))
         idx_i = torch.randint(0, n_atoms, (n_pairs,))
         idx_j = torch.randint(0, n_atoms, (n_pairs,))
-        basis = torch.rand(n_pairs, n_basis)
 
         layer = nnp.pinet.PiNet(n_basis, depth, radial_basis, cutoff_fn, pp_nodes, pi_nodes, ii_nodes)
         output = layer({
@@ -178,22 +196,65 @@ class TestPiNet:
         })[alias.T0]
         assert torch.allclose(actual, expect)
 
-    # def test_gcblock_p3(self):
+    def test_gcblock_p3(self):
 
-    #     n_atoms = 10
-    #     n_pairs = 12
-    #     n_dim = 3
-    #     n_channels = 16
-    #     n_basis = 6
-    #     pp_nodes = [16, 16]
-    #     pi_nodes = [16, 16]
-    #     ii_nodes = [16, 16]
-    #     p3 = torch.rand(n_atoms, n_dim, n_channels)
-    #     idx_i = torch.randint(0, n_atoms, (n_pairs,))
-    #     idx_j = torch.randint(0, n_atoms, (n_pairs,))
-    #     basis = torch.rand(n_pairs, n_basis)
+        n_atoms = 10
+        n_pairs = 12
+        n_dim = 3
+        n_channels = 16
+        n_basis = 6
+        pp_nodes = [16, 16]
+        pi_nodes = [16, 16]
+        ii_nodes = [16, 16]
+        p1 = torch.rand(n_atoms, n_channels)
+        p3 = torch.rand(n_atoms, n_dim, n_channels)
+        r3 = torch.rand(n_pairs, n_dim)
+        idx_i = torch.randint(0, n_atoms, (n_pairs,))
+        idx_j = torch.randint(0, n_atoms, (n_pairs,))
+        basis = torch.rand(n_pairs, n_basis)
+        activation = torch.nn.ReLU()
 
-    #     layer = nnp.pinet.GCBlockP3(pp_nodes, pi_nodes, ii_nodes, n_basis)
-    #     output = layer(p3, idx_i, idx_j, basis)
-    #     assert output.shape == (n_atoms, n_dim, n_channels)
-    #     assert_eqvar(layer, [p3, idx_i, idx_j, basis], [0])
+        layer = nnp.pinet.GCBlockP3(pp_nodes, pi_nodes, ii_nodes, n_basis, activation)
+        output = layer(p1, p3, r3, idx_i, idx_j, basis)
+        assert output[0].shape == (n_atoms, n_channels)
+        assert output[1].shape == (n_atoms, n_dim, n_channels)
+        assert_eqvar(layer, [p1, p3, r3, idx_i, idx_j, basis], [1, 2], [1])
+
+    def test_pinet_p3(self):
+
+        n_atoms = 10
+        n_atomtypes = 5
+        n_pairs = 12
+        n_basis = 16
+        depth = 4
+        cutoff = 1.0
+        cutoff_fn = nnp.layers.CosineCutoff(1.0)
+        radial_basis = nnp.layers.GaussianRBF(n_basis, cutoff)
+        pp_nodes = [16, 16]
+        pi_nodes = [16, 16]
+        ii_nodes = [16, 16]
+        p1 = torch.randint(0, n_atomtypes, (n_atoms,))
+        idx_i = torch.randint(0, n_atoms, (n_pairs,))
+        idx_j = torch.randint(0, n_atoms, (n_pairs,))
+
+        layer = nnp.pinet.PiNetP3(n_basis, depth, radial_basis, cutoff_fn, pp_nodes, pi_nodes, ii_nodes)
+        output = layer({
+            alias.Rij : torch.rand(n_pairs, 3),
+            alias.pinet.p1 : p1,
+            alias.idx_i : idx_i,
+            alias.idx_j : idx_j
+        })
+        assert output[alias.T0].shape == (n_atoms, 1)
+        actual = layer({
+            alias.Rij : rotate(torch.rand(n_pairs, 3), *torch.rand(3)),
+            alias.pinet.p1 : p1,
+            alias.idx_i : idx_i,
+            alias.idx_j : idx_j
+        })[alias.T0]
+        expect = layer({
+            alias.Rij : torch.rand(n_pairs, 3),
+            alias.pinet.p1 : p1,
+            alias.idx_i : idx_i,
+            alias.idx_j : idx_j
+        })[alias.T0]
+        assert torch.allclose(actual, expect)

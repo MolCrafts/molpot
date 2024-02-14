@@ -65,6 +65,7 @@ def assert_eqvar(
     layer,
     input: list[Any],
     eqvar_index: list[int],
+    assert_index: list[int] | None = None,
     verbose: bool = False,
     rtol: float = 1e-5,
     atol: float = 1e-5,
@@ -72,10 +73,15 @@ def assert_eqvar(
     """Assert that the variance of the output of a layer is the same as the input."""
     roll, pitch, yaw = torch.rand(3)
     eqvars = foreach_rotate(input, eqvar_index, roll, pitch, yaw)
-    expected = rotate(layer(*input), roll, pitch, yaw)
+    output = layer(*input)
     actual = layer(*eqvars)
-
-    allclose(expected, actual, verbose, rtol, atol)
+    if isinstance(actual, tuple):
+        expected = foreach_rotate(output, assert_index, roll, pitch, yaw)
+        [allclose(expected[i], actual[i], verbose, rtol, atol) for i in assert_index]
+    else:
+        expected = output
+        print(eqvars, input)
+        allclose(expected, actual, verbose, rtol, atol)
 
 
 def assert_invar(
