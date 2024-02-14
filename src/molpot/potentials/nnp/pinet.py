@@ -307,7 +307,7 @@ class PiNetP3(NNPotential):
 
         r_ij = tensors[alias.Rij]
         d_ij = torch.norm(r_ij, dim=-1)
-        p1 = tensors[alias.Z]
+        p1 = torch.squeeze(tensors[alias.Z])
         p1 = self.embbding(p1)
         p3 = torch.zeros(p1.shape[0], 3, p1.shape[-1])
         fc = self.cutoff_fn(d_ij)

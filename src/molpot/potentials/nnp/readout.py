@@ -15,7 +15,7 @@ class Atomwise(nn.Module):
 
     def __init__(
         self,
-        n_in: int,
+        n_in: int = 1,
         n_hidden: Optional[Sequence[int]] = None,
         n_out: int = 1,
         activation: Callable = F.silu,

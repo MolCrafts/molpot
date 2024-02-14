@@ -59,7 +59,7 @@ class QM9Reader(IterDataPipe):
                     value = mp.units.convert(float(p), src_unit, dst_unit)
                 else:
                     value = torch.tensor(float(p))
-                frame[prop] = torch.atleast_1d(value).to(Config.device).to(Config.ftype)
+                frame[prop.key] = torch.atleast_1d(value).to(Config.device).to(Config.ftype)
 
             xyz = torch.tensor(
                 [
