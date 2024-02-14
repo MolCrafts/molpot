@@ -324,5 +324,5 @@ class PiNetP3(NNPotential):
             )
             output += self.out_layers[i](p1)
 
-        tensors[alias.pinet.output_p1] = output
+        tensors[alias.T0] = output
         return tensors

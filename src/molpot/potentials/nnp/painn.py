@@ -8,7 +8,7 @@ from .ops import index_add
 import molpot as mpot
 from molpot import Config, alias
 
-__all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
+__all__ = ["PaiNN"]
 
 def replicate_module(
     module_factory: Callable[[], nn.Module], n: int, share_params: bool
@@ -67,9 +67,9 @@ class PaiNNInteraction(nn.Module):
         x = Wij * xj
 
         dq, dmuR, dmumu = torch.split(x, self.n_atom_basis, dim=-1)
-        dq = index_add(dq, idx_i, dim_size=n_atoms, accumulate=False)
+        dq = index_add(dq, 0, idx_i, dim_size=n_atoms)
         dmu = dmuR * dir_ij[..., None] + dmumu * muj
-        dmu = index_add(dmu, idx_i, dim_size=n_atoms, accumulate=False)
+        dmu = index_add(dmu, 0, idx_i, dim_size=n_atoms)
 
         q = q + dq
         mu = mu + dmu
@@ -164,6 +164,7 @@ class PaiNN(nn.Module):
         self.cutoff_fn = cutoff_fn
         self.cutoff = cutoff_fn.cutoff
         self.radial_basis = radial_basis
+        self.n_basis = radial_basis.n_basis
 
         self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0).to(Config.device)
 
@@ -171,11 +172,11 @@ class PaiNN(nn.Module):
 
         if shared_filters:
             self.filter_net = Dense(
-                self.radial_basis.n_basis, 3 * n_atom_basis, activation=None
+                self.n_basis, 3 * n_atom_basis, activation=None
             )
         else:
             self.filter_net = Dense(
-                self.radial_basis.n_basis,
+                self.n_basis,
                 self.n_interactions * n_atom_basis * 3,
                 activation=None,
             )
@@ -223,8 +224,8 @@ class PaiNN(nn.Module):
         # compute atom and pair features
         d_ij = torch.norm(r_ij, dim=1, keepdim=True)
         dir_ij = r_ij / d_ij
-        phi_ij = self.radial_basis(d_ij)
         fcut = self.cutoff_fn(d_ij)
+        phi_ij = self.radial_basis(d_ij, fcut)
 
         filters = self.filter_net(phi_ij) * fcut[..., None]
         if self.share_filters:
@@ -242,7 +243,7 @@ class PaiNN(nn.Module):
 
         q = q.squeeze(1)
 
-        inputs[alias.T1] = q
-        inputs[alias.T2] = mu
+        inputs[alias.T0] = q
+        inputs[alias.T1] = mu
         return inputs
     

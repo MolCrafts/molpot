@@ -7,13 +7,14 @@ import tempfile
 import time
 import json
 import logging
-from urllib.request import urlretrieve
+from urllib.request import urlopen
 import numpy as np
 import torch
 import tarfile
 from itertools import islice
 import molpy as mp
 from molpot import alias
+import zipfile
 
 __all__ = ["DataSet", "DataLoader2", "QM9", "rMD17"]
 
@@ -64,16 +65,26 @@ class DataSet:
             dp = dp.header(self.total).set_length(self.total)
         return dp.batch(self.batch_size)
 
-    def fetch(self, url, filename, dir: Path | str) -> Path:
-        fpath = Path(dir) / Path(filename)
-        if dir is None:
-            dir = self.data_dir
-        if not fpath.exists():
-            log.info(f"downloading from {url}... to {fpath}")
-            urlretrieve(url, fpath)
-        else:
-            log.info(f"{fpath} already exists.")
-        return fpath
+    def fetch(self, url, filename, dir: Path | str | None) -> Path | bytes:
+        # fpath = Path(dir) / Path(filename)
+        # if dir is None:
+        #     dir = self.data_dir
+        # if not fpath.exists():
+        #     log.info(f"downloading from {url}... to {fpath}")
+        #     response = urlopen(url, fpath)
+        # else:
+        #     log.info(f"{fpath} already exists.")
+        # return fpath
+        with urlopen(url) as response:
+            byte_data = response.read()
+            if dir is None:
+                return byte_data
+            else:
+                dir = Path(dir)
+                dir.mkdir(parents=True, exist_ok=True)
+                with open(dir / filename, "wb") as f:
+                    f.write(byte_data)
+                return dir / filename
 
     def extract_tar(self, tar_path, dest_path, member):
 
@@ -123,46 +134,45 @@ class QM9(DataSet):
         alias.QM9.set("Cv", "_Cv", float, "cal/mol/K", "_heat_capacity")
 
     def prepare(self) -> IterDataPipe:
+
+        # atomrefs = self._download_atomrefs()
+        # if self.remove_uncharacterized:
+        #     uncharacterized = self._download_uncharacterized()
+        # else:
+        #     uncharacterized = None
+
         if self.in_memory:
-            import requests
-            import io
+            # import requests
+            # import io
 
-            qm9_url = "https://ndownloader.figshare.com/files/3195389"
-            qm9_bytes = requests.get(qm9_url, allow_redirects=True).content
-            qm9_fobj = io.BytesIO(qm9_bytes)
-            qm9_fobj.seek(0)
-            qm9_tar = tarfile.open(fileobj=qm9_fobj, mode="r:bz2")
-            names = qm9_tar.getnames()
+            # qm9_url = "https://ndownloader.figshare.com/files/3195389"
+            # qm9_bytes = requests.get(qm9_url, allow_redirects=True).content
+            # qm9_fobj = io.BytesIO(qm9_bytes)
+            # qm9_fobj.seek(0)
+            # qm9_tar = tarfile.open(fileobj=qm9_fobj, mode="r:bz2")
+            # names = qm9_tar.getnames()
 
-            exclude_url = "https://figshare.com/ndownloader/files/3195404"
-            exclude_bytes = requests.get(exclude_url, allow_redirects=True).content
-            exclude_fobj = io.TextIOWrapper(io.BytesIO(exclude_bytes))
-            exclude = [int(line.split()[0]) for line in exclude_fobj.readlines()[9:-1]]
-            names = [name for name in names if int(name[-10:-4]) not in exclude]
-            dp = (
-                IterableWrapper(names)
-                .map(lambda x: io.TestIOWrapper(qm9_tar.extractfile(x)).readlines())
-                .read_qm9()
-            )
-            return self._prepare(dp)
+            # exclude_url = "https://figshare.com/ndownloader/files/3195404"
+            # exclude_bytes = requests.get(exclude_url, allow_redirects=True).content
+            # exclude_fobj = io.TextIOWrapper(io.BytesIO(exclude_bytes))
+            # exclude = [int(line.split()[0]) for line in exclude_fobj.readlines()[9:-1]]
+            # names = [name for name in names if int(name[-10:-4]) not in exclude]
+            # dp = (
+            #     IterableWrapper(names)
+            #     .map(qm9_tar.extractfile)
+            # )
+            # return self._prepare(dp)
+            raise NotImplementedError('Can not read from memory, torchdata not allow to pickle _io.BufferedReader')
 
         else:
-            atomrefs = self._download_atomrefs()
-            if self.remove_uncharacterized:
-                uncharacterized = self._download_uncharacterized()
-            else:
-                uncharacterized = None
-            filepaths = self._download_data()
 
-            # irange = np.arange(len(ordered_files), dtype=int)
-            # if uncharacterized is not None:
-            #     irange = np.setdiff1d(irange, np.array(uncharacterized, dtype=int) - 1)
+            filepaths = self._download_data()
 
             dp = (
                 IterableWrapper(list(filepaths))
                 .open_files()
-                .read_qm9()
             )
+        dp = dp.read_qm9()
         return self._prepare(dp)
 
     def _download_atomrefs(self):
@@ -213,13 +223,16 @@ class rMD17(DataSet):
     def __init__(
         self,
         data_dir: Optional[Path | str] = None,
+        in_memory: bool = False,
         total: int = 0,
+        batch_size: int = 64,
         molecule: str = "aspirin",
     ):
         super().__init__("rMD17", data_dir, False, total)
         self.molecule = molecule
+        self.batch_size = batch_size
         alias("rMD17")
-        alias.rMD17.set("energy", "_rmd17_U", float, "kcal/mol", "_energy_U")
+        alias.rMD17.set("U", "_rmd17_U", float, "kcal/mol", "_energy")
         alias.rMD17.set(
             "forces", "_rmd17_F", float, "kcal/mol/angstrom", "_forces"
         )
@@ -227,25 +240,56 @@ class rMD17(DataSet):
             "R", "_rmd17_R", np.ndarray, "angstrom", "atomic coordinates"
         )
         alias.rMD17.set("Z", "_rmd17_Z", int, None, "atomic numbers in molecule")
+        self.in_memory = in_memory
 
     def prepare(self) -> IterDataPipe:
-        fpath = self._download_data()
+        byte_data = self._download_data()
         dp = IterableWrapper([fpath]).read_rmd17()
         return self._prepare(dp)
 
     def _download_data(
         self,
-    ):
+    )-> bytes:
+        
+#   rmd17_url = "https://figshare.com/ndownloader/articles/12672038/versions/3"
+#   zip_bytes = requests.get(rmd17_url, allow_redirects=True).content
+#   zip_bytes_io = io.BytesIO(zip_bytes)
+#   zip_bytes_io.seek(0)
+#   zip_fobj = zipfile.ZipFile(zip_bytes_io)
+#   tar_path = zip_fobj.extract(zip_fobj.infolist()[0])
+#   tar_fobj = tarfile.open(tar_path)
+#   npz_obj = tar_fobj.extractfile('rmd17/npz_data/rmd17_${rmd17_tag}.npz')
+#   tag_npz = np.load(npz_obj)
+#   tag_size = tag_npz['coords'].shape[0]
+#   tag_ds = load_numpy({
+#       'elems': np.repeat(tag_npz['nuclear_charges'][None,:], tag_size, axis=0),
+#       'coord': tag_npz['coords'],
+#       'e_data': tag_npz['energies'],
+#       'f_data': tag_npz['forces']
+#   })
+#   write_tfrecord(f'rmd17-${rmd17_tag}.yml', tag_ds)
+#   tar_fobj.close()
+#   zip_fobj.close()
+#   os.remove(tar_path)
+
         logging.info("Downloading {} data".format(self.molecule))
         dest_path = self.data_dir / 'npz_data'
         tar_path = self.data_dir / Path("rmd17.tar.gz")
-        url = "https://figshare.com/ndownloader/files/23950376"
-        self.fetch(url, "rmd17.tar.gz", self.data_dir)
-        logging.info("Done.")
-        path = self.extract_tar(tar_path, dest_path, f"rmd17/npz_data/rmd17_{self.molecule}.npz")
+        url = "https://figshare.com/ndownloader/articles/12672038/versions/3"
+        if self.in_memory:
+            byte_data = self.fetch(url, None, None)
+            zip_fobj = zipfile.ZipFile(byte_data)
+            tar_path = zip_fobj.extract(zip_fobj.infolist()[0])
+            tar_fobj = tarfile.open(tar_path)
+            npz_obj = tar_fobj.extractfile('rmd17/npz_data/rmd17_${rmd17_tag}.npz')
+        else:
+            tar_path = self.fetch(url, "rmd17.tar.gz", self.data_dir)
+
+            npz_obj = self.extract_tar(tar_path, dest_path, f"rmd17/npz_data/rmd17_{self.molecule}.npz")
+        
         logging.info("Parsing molecule {:s}".format(self.molecule))
 
-        return path
+        return npz_obj
 
 class Trajectory(DataSet):
 

@@ -3,6 +3,7 @@ testdata/
 saved/
 data/
 tmp/
+train_*/
 # ide
 .vscode/
 

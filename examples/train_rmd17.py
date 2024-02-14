@@ -1,60 +1,80 @@
+import os
+from pathlib import Path
 import molpot as mpot
-from molpot.potentials.base import NNPotential
 import torch
 
+from molpot.potentials.base import NNPotential
 from molpot.potentials.nnp.layers import CosineCutoff, GaussianRBF
 from molpot.potentials.nnp.readout import Atomwise
-
+from molpot.trainer.metric.metrics import Identity, MAE
+from molpot.trainer.logger.adapter import ConsoleHandler, TensorBoardHandler
 from molpot import alias
-from tests.conftest import batch_size
+
 
 def load_rmd17() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    rmd17_dataset = mpot.rMD17(data_dir="data/rmd17", total=100, batch_size=32)
+    rmd17_dataset = mpot.rMD17(data_dir="rmd17", batch_size=64, total=1000)
     dp = rmd17_dataset.prepare()
-    train, valid = (
-        dp.calc_nblist(5)
-        .shuffle()
-        .random_split(weights={"train": 0.8, "valid": 0.2}, seed=42)
+    train, valid = dp.calc_nblist(5).random_split(
+        weights={"train": 0.8, "valid": 0.2}, seed=42
     )
-    train_dataloader = mpot.create_dataloader(
-        train.batch(batch_size=4).collate_data(), nworkers=0
-    )
-    valid_dataloader = mpot.create_dataloader(
-        valid.batch(batch_size=16).collate_data(), nworkers=0
-    )
+    train_dataloader = mpot.create_dataloader(train)
+    valid_dataloader = mpot.create_dataloader(valid)
     return train_dataloader, valid_dataloader
 
 
 def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     train_dataloader, valid_dataloader = load_rmd17
+    n_atom_basis = 16
+    arch = mpot.potentials.nnp.PiNetP3(
+        n_atom_basis, 5, GaussianRBF(20, 5), CosineCutoff(5)
+    )
+    readout = Atomwise(16, input_key=alias.T0, output_key=alias.energy)
+    model = NNPotential("pinet", arch, readout)
+    criterion = mpot.MultiMSELoss([1], targets=[(alias.energy, alias.rmd17.U)])
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.99)
 
-    n_atom_basis = 128
-    model = NNPotential("PaiNN")
-    arch = mpot.PaiNN(n_atom_basis, 3, GaussianRBF(20, 5), CosineCutoff(5))
-    readout = Atomwise(n_in=n_atom_basis, output_key='_pred_energy')
-    model.append(arch)
-    model.append(readout)
-    # TODO: _pred_energy -> alias
-    # e.g. alias.scalar
-    criterion = mpot.MultiMSELoss([1], targets=[("_pred_energy", alias.rMD17.U)])
-    optimizer = torch.optim.Adam(model.parameters())
+    stagnation = mpot.strategy.Stagnation(alias.loss, patience=torch.inf)
+
+    mae = mpot.metric.MAE("energy_mae", alias.energy, alias.rMD17.U)
 
     trainer = mpot.Trainer(
+        "pinet-rmd17",
         model,
         criterion,
         optimizer,
+        scheduler,
         train_dataloader,
-        valid_data_loader=valid_dataloader,
+        valid_dataloader,
+        strategies=[stagnation],
+        metrics=[mae],
+        logger={
+            "metrics": {
+                "speed": Identity("speed"),
+                "loss": Identity(alias.loss),
+                "energy_mae": MAE(alias.energy, alias.rMD17.U),
+            },
+            "handlers": [ConsoleHandler(), TensorBoardHandler()],
+            "save_dir": "./log",
+        },
         config={
-            "save_dir": "data/rmd17",
-            "metrics": [],
-            "device": {"type": "cpu"},
+            "save_dir": "model",
+            "device": {"type": "gpu", "n_gpu_use": 1},
+            "report_rate": 1000,
+            "valid_rate": 1000,
+            "modify_lr_rate": 100,
+            "checkpoint_rate": 1000000,
         },
     )
-    trainer.train(1e6)
+
+    trainer.jit()
+    trainer.train(1000000)
+
     return "done"
 
+
 if __name__ == "__main__":
-    import logging
-    logging.basicConfig(level=logging.INFO)
+    proj_dir = Path.cwd() / "train_rmd17"
+    proj_dir.mkdir(exist_ok=True)
+    os.chdir(proj_dir)
     train_rmd17(load_rmd17())
