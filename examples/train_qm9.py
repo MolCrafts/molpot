@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 import molpot as mpot
 import torch
 import molpot
@@ -10,7 +12,7 @@ from molpot.trainer.logger.adapter import ConsoleHandler, TensorBoardHandler
 from molpot import alias
 
 def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    qm9_dataset = mpot.QM9(data_dir="data/qm9", batch_size=64, total=1000)
+    qm9_dataset = mpot.QM9(data_dir="qm9", batch_size=64, total=1000)
     dp = qm9_dataset.prepare()
     train, valid = (
         dp# .atomic_dress([1, 6, 7, 8, 9], alias.Z, alias.QM9.U)
@@ -25,20 +27,21 @@ def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
 def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     train_dataloader, valid_dataloader = load_qm9
 
-    n_atom_basis = 128
-    arch = mpot.PaiNN(n_atom_basis, 3, GaussianRBF(20, 5), CosineCutoff(5))
-    readout = Atomwise(n_in=n_atom_basis, output_key=alias.ti)
-    model = NNPotential("PaiNN", arch, readout)
-    criterion = mpot.MultiMSELoss([1], targets=[(alias.ti, alias.QM9.U)])
+    n_atom_basis = 16
+    arch = mpot.PiNetP3(n_atom_basis, 3, GaussianRBF(20, 5), CosineCutoff(5))
+    alias.map(alias.pinet.p1, alias.QM9.U)
+    readout = Atomwise(n_in=n_atom_basis, input_key=alias.pinet.output_p1, output_key=alias.energy)
+    model = NNPotential("PiNet", arch, readout)
+    criterion = mpot.MultiMSELoss([1], targets=[(alias.T0, alias.QM9.U)])
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.99)
 
     stagnation = mpot.strategy.Stagnation(alias.loss, patience=torch.inf)
 
-    mae = mpot.metric.MAE("energy_mae", alias.ti, alias.QM9.U)
+    mae = mpot.metric.MAE("energy_mae", alias.T0, alias.QM9.U)
 
     trainer = mpot.Trainer(
-        "painn-qm9",
+        "pinet-qm9",
         model,
         criterion,
         optimizer,
@@ -51,26 +54,29 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
             "metrics": {
                 "speed": Identity("speed"),
                 "loss": Identity(alias.loss),
-                "energy_mae": MAE(alias.ti, alias.QM9.U),
+                "energy_mae": MAE(alias.T0, alias.QM9.U),
             },
             "handlers": [ConsoleHandler(), TensorBoardHandler()],
-            "save_dir": "./logs/qm9"
+            "save_dir": "./log"
         },
         config={
-            "save_dir": "data/qm9",
+            "save_dir": "model",
             "device": {"type": "gpu", 'n_gpu_use': 1},
-            "report_rate": 100,
-            "valid_rate": 1000,
-            "modify_lr_rate": 100,
-            "checkpoint_rate": 1000,
+            "report_rate": 10,
+            "valid_rate": 20,
+            "modify_lr_rate": 50,
+            "checkpoint_rate": 10,
         },
     )
 
-    trainer.jit()
+    # trainer.jit()
     trainer.train(1000000)
 
     return "done"
 
 
 if __name__ == "__main__":
+    proj_dir = Path.cwd() / "train_qm9"
+    proj_dir.mkdir(exist_ok=True)
+    os.chdir(proj_dir)
     train_qm9(load_qm9())

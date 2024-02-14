@@ -171,11 +171,11 @@ class PaiNN(nn.Module):
 
         if shared_filters:
             self.filter_net = Dense(
-                self.radial_basis.n_rbf, 3 * n_atom_basis, activation=None
+                self.radial_basis.n_basis, 3 * n_atom_basis, activation=None
             )
         else:
             self.filter_net = Dense(
-                self.radial_basis.n_rbf,
+                self.radial_basis.n_basis,
                 self.n_interactions * n_atom_basis * 3,
                 activation=None,
             )

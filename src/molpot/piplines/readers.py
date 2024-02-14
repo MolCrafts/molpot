@@ -49,9 +49,9 @@ class QM9Reader(IterDataPipe):
         for d in self.source_dp:
             frame = dict()
             lines = d[1].readlines()
-            frame[alias.natoms] = torch.tensor(int(lines[0]), dtype=torch.int32)
+            frame[alias.natoms] = torch.tensor(int(lines[0]), dtype=Config.stype)
             props_line = lines[1].split()[1:]
-            frame[alias.idx] = torch.tensor(int(props_line[0]), dtype=torch.int32)
+            frame[alias.idx] = torch.tensor(int(props_line[0]), dtype=Config.stype)
             for prop, p in zip(alias.QM9.items(), props_line[1:]):
                 if prop in alias:
                     src_unit = prop.unit
@@ -59,7 +59,7 @@ class QM9Reader(IterDataPipe):
                     value = mp.units.convert(float(p), src_unit, dst_unit)
                 else:
                     value = torch.tensor(float(p))
-                frame[prop.key] = torch.atleast_1d(value).to(Config.device)
+                frame[prop] = torch.atleast_1d(value).to(Config.device).to(Config.ftype)
 
             xyz = torch.tensor(
                 [
@@ -75,7 +75,7 @@ class QM9Reader(IterDataPipe):
                     mp.Element.get_atomic_number_by_symbol(line.split()[0])
                     for line in lines[2:-3]
                 ],
-                dtype=torch.int32,
+                dtype=Config.stype,
                 device=Config.device,
             )
 
@@ -100,7 +100,7 @@ class rMD17Reader(IterDataPipe):
                 data["coords"], data["energies"], data["forces"]
             ):
                 frame = {}
-                frame[alias.natoms] = torch.tensor(len(numbers), dtype=torch.int32)
+                frame[alias.natoms] = torch.tensor(len(numbers), dtype=Config.stype)
                 frame[alias.energy] = torch.tensor([energies]) * 43.3641
                 frame[alias.forces] = torch.tensor(forces) * 43.3641
                 frame[alias.Z] = torch.tensor(numbers)

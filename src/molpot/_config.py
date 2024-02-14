@@ -10,7 +10,8 @@ class Config:
         raise Exception("This class should not be instantiated")
 
     @classmethod
-    def set_device(cls, device_type:str):
+    def set_device(cls, device_info:dict):
+        device_type = device_info["type"]
         if device_type == "cpu":
             device = torch.device("cpu")
         elif device_type == "gpu" or device_type == "cuda":

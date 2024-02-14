@@ -3,10 +3,9 @@ import torch
 from molpot.trainer.logger.adapter import LogAdapter
 from molpot.trainer.strategy.base import StrategyManager
 from molpot.trainer.strategy.early_stop import StepCounter
-from molpot.trainer.utils import prepare_device
 from ..potentials import NNPotential
 import logging
-from molpot import alias
+from molpot import alias, Config
 import numpy as np
 import warnings
 import time
@@ -19,7 +18,7 @@ class BaseTrainer:
 
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def _save_checkpoint(self, step, save_best=False):
+    def _save_checkpoint(self, step):
         model = type(self.model).__name__
         state = {
             "name": self.name,
@@ -32,11 +31,6 @@ class BaseTrainer:
         filename = str(self.checkpoint_dir / "checkpoint-{}.pth".format(step))
         torch.save(state, filename)
         self.logger.info("Saving checkpoint: {} ...".format(filename))
-
-        if save_best:
-            best_path = str(self.checkpoint_dir / "model_best.pth")
-            torch.save(state, best_path)
-            self.logger.info("Saving current best: model_best.pth ...")
 
     def _resume_checkpoint(self, resume_path):
         resume_path = Path(resume_path)
@@ -89,13 +83,13 @@ class Trainer(BaseTrainer):
         self.metrics = metrics
 
         self.lr_scheduler = lr_scheduler
-        self.device, self.device_ids = prepare_device(config["device"])
+        Config.set_device(config["device"])
 
         self.strategies = StrategyManager(strategies)
 
         self.metrics = metrics
         self.log_config = logger
-        self.logger_adapter = LogAdapter(name, **logger)
+        self.logger_adapter = LogAdapter(name, **self.log_config)
 
         self.start_step = None
         self.checkpoint_rate = config.get("checkpoint_rate", 1000)
@@ -106,7 +100,7 @@ class Trainer(BaseTrainer):
 
     def jit(self):
         self.model = torch.compile(self.model)
-        self.model = self.model.to(self.device)
+        self.model = self.model.to(Config.device)
 
     def train(self, nsteps: int):
 
@@ -120,15 +114,13 @@ class Trainer(BaseTrainer):
             self.model.train()
             for data in self.train_data_loader:
                 for k, v in data.items():
-                    data[k] = v.to(self.device)
+                    data[k] = v.to(Config.device)
                 self.optimizer.zero_grad()
                 _output = self.model(data)
                 loss = self.criterion(_output, data)
                 loss.backward()
                 self.optimizer.step()
                 _output[alias.loss] = loss
-                # _output[alias.step] = nstep
-                # _output[alias.epoch] = nepoch
                 output.update(_output)
 
                 if nstep % self.config["report_rate"] == 0:
@@ -143,7 +135,7 @@ class Trainer(BaseTrainer):
 
                 if self.strategies(nstep, output, data):
                     if nstep < nsteps:
-                        logging.warning(f"Training stopped at step {nstep} due to early stopping.")
+                        self.logger.warning(f"Training stopped at step {nstep} due to early stopping.")
                     self._post_train(nstep, output, data)
                     return output
 
@@ -153,12 +145,13 @@ class Trainer(BaseTrainer):
                     with torch.no_grad():
                         for data in self.valid_data_loader:
                             for k, v in data.items():
-                                data[k] = v.to(self.device)
+                                data[k] = v.to(Config.device)
                             _output = self.model(data)
                             _output = self.criterion(_output, data)
                     self.model.train()
 
                 if nstep % self.checkpoint_rate == 0:
+
                     self._save_checkpoint(nstep)
                         
                 nstep += 1

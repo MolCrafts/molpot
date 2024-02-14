@@ -177,23 +177,23 @@ class TestPiNet:
         layer = nnp.pinet.PiNet(n_basis, depth, radial_basis, cutoff_fn, pp_nodes, pi_nodes, ii_nodes)
         output = layer({
             alias.Rij : torch.rand(n_pairs, 3),
-            alias.pinet.p1 : p1,
+            alias.Z : p1,
             alias.idx_i : idx_i,
             alias.idx_j : idx_j
         })
-        assert output[alias.T0].shape == (n_atoms, 1)
+        assert output[alias.pinet.output_p1].shape == (n_atoms, 1)
         actual = layer({
             alias.Rij : rotate(torch.rand(n_pairs, 3), *torch.rand(3)),
-            alias.pinet.p1 : p1,
+            alias.Z : p1,
             alias.idx_i : idx_i,
             alias.idx_j : idx_j
-        })[alias.T0]
+        })[alias.pinet.output_p1]
         expect = layer({
             alias.Rij : torch.rand(n_pairs, 3),
-            alias.pinet.p1 : p1,
+            alias.Z : p1,
             alias.idx_i : idx_i,
             alias.idx_j : idx_j
-        })[alias.T0]
+        })[alias.pinet.output_p1]
         assert torch.allclose(actual, expect)
 
     def test_gcblock_p3(self):
@@ -240,21 +240,21 @@ class TestPiNet:
         layer = nnp.pinet.PiNetP3(n_basis, depth, radial_basis, cutoff_fn, pp_nodes, pi_nodes, ii_nodes)
         output = layer({
             alias.Rij : torch.rand(n_pairs, 3),
-            alias.pinet.p1 : p1,
+            alias.Z : p1,
             alias.idx_i : idx_i,
             alias.idx_j : idx_j
         })
-        assert output[alias.T0].shape == (n_atoms, 1)
+        assert output[alias.pinet.output_p1].shape == (n_atoms, 1)
         actual = layer({
             alias.Rij : rotate(torch.rand(n_pairs, 3), *torch.rand(3)),
-            alias.pinet.p1 : p1,
+            alias.Z : p1,
             alias.idx_i : idx_i,
             alias.idx_j : idx_j
-        })[alias.T0]
+        })[alias.pinet.output_p1]
         expect = layer({
             alias.Rij : torch.rand(n_pairs, 3),
-            alias.pinet.p1 : p1,
+            alias.Z : p1,
             alias.idx_i : idx_i,
             alias.idx_j : idx_j
-        })[alias.T0]
+        })[alias.pinet.output_p1]
         assert torch.allclose(actual, expect)

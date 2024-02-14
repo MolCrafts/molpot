@@ -20,6 +20,8 @@ class Atomwise(nn.Module):
         n_out: int = 1,
         activation: Callable = F.silu,
         aggregation_mode: str | None = "sum",
+        input_key: str = alias.T0,
+        output_key: str = alias.energy,
     ):
         """
         Args:
@@ -45,9 +47,12 @@ class Atomwise(nn.Module):
         )
         self.aggregation_mode = aggregation_mode
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        self.input_key = input_key
+        self.output_key = output_key
+
+    def forward(self, inputs: dict[torch.Tensor]) -> dict[str, torch.Tensor]:
         # predict atomwise contributions
-        y = self.outnet(inputs)
+        y = self.outnet(inputs[self.input_key])
 
         # aggregate
         if self.aggregation_mode is not None:
@@ -58,5 +63,5 @@ class Atomwise(nn.Module):
 
             if self.aggregation_mode == "avg":
                 y = y / inputs[alias.n_atoms]
-
-        return y
+        inputs[self.output_key] = y
+        return inputs

@@ -213,6 +213,9 @@ class PiNet(NNPotential):
         alias.pinet.set(
             "p5", "_pinet_p5", torch.Tensor, None, "rank2 equivalent property"
         )
+        alias.pinet.set(
+            "output_p1", "_pinet_output_p1", torch.Tensor, None, "output property"
+        )
         self.cutoff_fn = cutoff_fn
         self.radial_basis_fn = radial_basis
         self.n_basis = radial_basis.n_basis
@@ -227,13 +230,13 @@ class PiNet(NNPotential):
             OutLayer(n_atom_basis, out_nodes, 1)
             for _ in range(depth)
         ]
-        self.ann_output = Atomwise(1, [], 1, aggregation_mode=out_pool)
+        # self.ann_output = Atomwise(1, [], 1, aggregation_mode=out_pool)
 
     def forward(self, tensors: dict):
 
         r_ij = tensors[alias.Rij]
         d_ij = torch.norm(r_ij, dim=-1)
-        p1 = tensors[alias.pinet.p1]
+        p1 = tensors[alias.Z]
         p1 = self.embbding(p1)
         fc = self.cutoff_fn(d_ij)
         basis = self.radial_basis_fn(d_ij, fc)
@@ -247,7 +250,8 @@ class PiNet(NNPotential):
             )
             output += self.out_layers[i](p)
 
-        tensors[alias.T0] = self.ann_output(output)
+        # tensors[alias.T0] = self.ann_output(output)
+        tensors[alias.pinet.output_p1] = output
         return tensors
 
 class PiNetP3(NNPotential):
@@ -280,6 +284,9 @@ class PiNetP3(NNPotential):
         alias.pinet.set(
             "p5", "_pinet_p5", torch.Tensor, None, "rank2 equivalent property"
         )
+        alias.pinet.set(
+            "output_p1", "_pinet_output_p1", torch.Tensor, None, "output property"
+        )
         self.cutoff_fn = cutoff_fn
         self.radial_basis_fn = radial_basis
         self.n_basis = radial_basis.n_basis
@@ -294,13 +301,13 @@ class PiNetP3(NNPotential):
             OutLayer(n_atom_basis, out_nodes, 1)
             for _ in range(depth)
         ]
-        self.ann_output = Atomwise(1, [], 1, aggregation_mode=out_pool)
+        # self.ann_output = Atomwise(1, [], 1, aggregation_mode=out_pool)
 
     def forward(self, tensors: dict):
 
         r_ij = tensors[alias.Rij]
         d_ij = torch.norm(r_ij, dim=-1)
-        p1 = tensors[alias.pinet.p1]
+        p1 = tensors[alias.Z]
         p1 = self.embbding(p1)
         p3 = torch.zeros(p1.shape[0], 3, p1.shape[-1])
         fc = self.cutoff_fn(d_ij)
@@ -317,5 +324,5 @@ class PiNetP3(NNPotential):
             )
             output += self.out_layers[i](p1)
 
-        tensors[alias.T0] = self.ann_output(output)
+        tensors[alias.pinet.output_p1] = output
         return tensors

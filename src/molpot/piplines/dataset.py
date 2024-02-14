@@ -11,10 +11,9 @@ from urllib.request import urlretrieve
 import numpy as np
 import torch
 import tarfile
-import molpot as mpot
-import molpy as mp
 from itertools import islice
 import molpy as mp
+from molpot import alias
 
 __all__ = ["DataSet", "DataLoader2", "QM9", "rMD17"]
 
@@ -104,24 +103,24 @@ class QM9(DataSet):
     ):
         super().__init__("QM9", data_dir, in_memory, total, batch_size)
         self.remove_uncharacterized = remove_uncharacterized
-        mpot.alias("QM9")
-        mpot.alias.QM9.set("A", "_A", float, "GHz", "rotational_constant_A")
-        mpot.alias.QM9.set("B", "_B", float, "GHz", "rotational_constant_B")
-        mpot.alias.QM9.set("C", "_C", float, "GHz", "rotational_constant_C")
-        mpot.alias.QM9.set("mu", "_mu", float, "Debye", "dipole_moment")
-        mpot.alias.QM9.set(
+        alias("QM9")
+        alias.QM9.set("A", "_A", float, "GHz", "rotational_constant_A")
+        alias.QM9.set("B", "_B", float, "GHz", "rotational_constant_B")
+        alias.QM9.set("C", "_C", float, "GHz", "rotational_constant_C")
+        alias.QM9.set("mu", "_mu", float, "Debye", "dipole_moment")
+        alias.QM9.set(
             "alpha", "_alpha", float, "a0 a0 a0", "isotropic_polarizability"
         )
-        mpot.alias.QM9.set("homo", "_homo", float, "hartree", "homo")
-        mpot.alias.QM9.set("lumo", "_lumo", float, "hartree", "lump")
-        mpot.alias.QM9.set("gap", "_gap", float, "hartree", "gap")
-        mpot.alias.QM9.set("r2", "_r2", float, "a0 a0", "electronic_spatial_extent")
-        mpot.alias.QM9.set("zpve", "_zpve", float, "hartree", "zpve")
-        mpot.alias.QM9.set("U0", "_U0", float, "hartree", "_energy_U0")
-        mpot.alias.QM9.set("U", "_U", float, "hartree", "_energy_U")
-        mpot.alias.QM9.set("H", "_H", float, "hartree", "_enthalpy_H")
-        mpot.alias.QM9.set("G", "_G", float, "hartree", "_free_energy")
-        mpot.alias.QM9.set("Cv", "_Cv", float, "cal/mol/K", "_heat_capacity")
+        alias.QM9.set("homo", "_homo", float, "hartree", "homo")
+        alias.QM9.set("lumo", "_lumo", float, "hartree", "lump")
+        alias.QM9.set("gap", "_gap", float, "hartree", "gap")
+        alias.QM9.set("r2", "_r2", float, "a0 a0", "electronic_spatial_extent")
+        alias.QM9.set("zpve", "_zpve", float, "hartree", "zpve")
+        alias.QM9.set("U0", "_U0", float, "hartree", "_energy_U0")
+        alias.QM9.set("U", "_U", float, "hartree", "_energy_U")
+        alias.QM9.set("H", "_H", float, "hartree", "_enthalpy_H")
+        alias.QM9.set("G", "_G", float, "hartree", "_free_energy")
+        alias.QM9.set("Cv", "_Cv", float, "cal/mol/K", "_heat_capacity")
 
     def prepare(self) -> IterDataPipe:
         if self.in_memory:
@@ -171,12 +170,12 @@ class QM9(DataSet):
         filename = "atomref.txt"
         atomrefs_path = self.fetch(url, filename, self.data_dir)
         props = [
-            mpot.alias.QM9.zpve,
-            mpot.alias.QM9.U0,
-            mpot.alias.QM9.U,
-            mpot.alias.QM9.H,
-            mpot.alias.QM9.G,
-            mpot.alias.QM9.Cv,
+            alias.QM9.zpve,
+            alias.QM9.U0,
+            alias.QM9.U,
+            alias.QM9.H,
+            alias.QM9.G,
+            alias.QM9.Cv,
         ]
         atref = {p: np.zeros((100,)) for p in props}
         with open(atomrefs_path) as f:
@@ -219,15 +218,15 @@ class rMD17(DataSet):
     ):
         super().__init__("rMD17", data_dir, False, total)
         self.molecule = molecule
-        mpot.alias("rMD17")
-        mpot.alias.rMD17.set("energy", "_rmd17_U", float, "kcal/mol", "_energy_U")
-        mpot.alias.rMD17.set(
+        alias("rMD17")
+        alias.rMD17.set("energy", "_rmd17_U", float, "kcal/mol", "_energy_U")
+        alias.rMD17.set(
             "forces", "_rmd17_F", float, "kcal/mol/angstrom", "_forces"
         )
-        mpot.alias.rMD17.set(
+        alias.rMD17.set(
             "R", "_rmd17_R", np.ndarray, "angstrom", "atomic coordinates"
         )
-        mpot.alias.rMD17.set("Z", "_rmd17_Z", int, None, "atomic numbers in molecule")
+        alias.rMD17.set("Z", "_rmd17_Z", int, None, "atomic numbers in molecule")
 
     def prepare(self) -> IterDataPipe:
         fpath = self._download_data()
