@@ -67,8 +67,8 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         },
     )
 
-    # trainer.jit()
-    trainer.train(1000000)
+    trainer.jit()
+    trainer.train(100)
 
     return "done"
 

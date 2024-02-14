@@ -6,8 +6,6 @@ from molpot.trainer.strategy.early_stop import StepCounter
 from ..potentials import NNPotential
 import logging
 from molpot import alias, Config
-import numpy as np
-import warnings
 import time
 
 class BaseTrainer:
