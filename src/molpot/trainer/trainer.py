@@ -1,4 +1,5 @@
 from pathlib import Path
+from pprint import pprint
 import torch
 from molpot.trainer.logger.adapter import LogAdapter
 from molpot.trainer.strategy.base import StrategyManager
@@ -8,6 +9,7 @@ import logging
 from molpot import alias, Config
 import time
 
+
 class BaseTrainer:
     def __init__(self, name, model: NNPotential, config: dict):
         self.name = name
@@ -16,41 +18,49 @@ class BaseTrainer:
 
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def _save_checkpoint(self, step):
-        model = type(self.model).__name__
+    def save_model(self, fpath, train_state: dict):
+        model = self.model.__class__.__name__
         state = {
             "name": self.name,
-            "model": model,
-            "step": step,
-            "state_dict": self.model.state_dict(),
-            "optimizer": self.optimizer.state_dict(),
-            "config": self.config,
+            "model": {"name": model, "state_dict": self.model.state_dict()},
+            "train_state": train_state,
         }
-        filename = str(self.checkpoint_dir / "checkpoint-{}.pth".format(step))
-        torch.save(state, filename)
-        self.logger.info("Saving checkpoint: {} ...".format(filename))
+        torch.save(state, fpath)
 
-    def _resume_checkpoint(self, resume_path):
+    def load_model(self, resume_path):
         resume_path = Path(resume_path)
-        self.logger.info("Loading checkpoint: {} ...".format(resume_path))
-        checkpoint = torch.load(resume_path)
-        self.start_step = checkpoint["step"] + 1
-        self.mnt_best = checkpoint['monitor_best']
+        self.logger.info("Loading checkpoint: {} ...".format(resume_path.absolute()))
+        if not resume_path.exists():
+            raise FileNotFoundError(
+                "Checkpoint file not found: {}".format(resume_path.absolute())
+            )
+        state = torch.load(resume_path)
+        train_state = state["train_state"]
+        model = state["model"]
+        self.start_step = train_state["step"] + 1
+        self.start_epoch = train_state["epoch"] + 1
 
         # load architecture params from checkpoint.
-        if checkpoint['config']['arch'] != self.config['arch']:
-            self.logger.warning("Warning: Architecture configuration given in config file is different from that of "
-                                "checkpoint. This may yield an exception while state_dict is being loaded.")
-        self.model.load_state_dict(checkpoint['state_dict'])
+        if model["name"] != self.model.__class__.__name__:
+            self.logger.warning(
+                "Warning: Architecture configuration given in config file is different from that of "
+                "checkpoint. This may yield an exception while state_dict is being loaded."
+            )
+        self.model.load_state_dict(model["state_dict"])
 
         # load optimizer state from checkpoint only when optimizer type is not changed.
-        if checkpoint['config']['optimizer']['type'] != self.config['optimizer']['type']:
-            self.logger.warning("Warning: Optimizer type given in config file is different from that of checkpoint. "
-                                "Optimizer parameters not being resumed.")
-        else:
-            self.optimizer.load_state_dict(checkpoint['optimizer'])
+        # if train_state["optimizer"]["type"] != self.config["optimizer"]["type"]:
+        #     self.logger.warning(
+        #         "Warning: Optimizer type given in config file is different from that of checkpoint. "
+        #         "Optimizer parameters not being resumed."
+        #     )
+        # else:
+        #     self.optimizer.load_state_dict(train_state["optimizer"])
+        self.optimizer.load_state_dict(train_state["optimizer"])
 
-        self.logger.info("Checkpoint loaded. Resume training from epoch {}".format(self.start_epoch))
+        self.logger.info(
+            "Checkpoint loaded. Resume training from epoch {}".format(self.start_epoch)
+        )
 
 
 class Trainer(BaseTrainer):
@@ -75,6 +85,11 @@ class Trainer(BaseTrainer):
 
         self.save_dir = Path(config["save_dir"])
 
+        if config.get("compile", False):
+            self.logger.info("Compiling model...")
+            self.model = torch.compile(self.model)
+            self.model = self.model.to(Config.device)
+
         self.train_data_loader = train_data_loader
         self.valid_data_loader = valid_data_loader
 
@@ -91,14 +106,20 @@ class Trainer(BaseTrainer):
 
         self.start_step = None
         self.checkpoint_rate = config.get("checkpoint_rate", 1000)
-        self.checkpoint_dir = Path(config.get("checkpoint_dir", self.save_dir / "checkpoints"))
-        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         self.start_time = time.time()
+        resume = config.get("resume", None)
 
-    def jit(self):
-        self.model = torch.compile(self.model)
-        self.model = self.model.to(Config.device)
+        if resume:
+            self.load_model(config["resume"])
+        else:
+            self.checkpoint_dir = Path(
+                config.get("checkpoint_dir", self.save_dir / "checkpoints")
+            )
+            if self.checkpoint_dir.exists():
+                self.checkpoint_dir.rmdir()
+            self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
 
     def train(self, nsteps: int):
 
@@ -106,7 +127,7 @@ class Trainer(BaseTrainer):
         stepCounter = StepCounter(nsteps)
         self.strategies.append(stepCounter)
         nstep = self.start_step
-        nepoch = 0
+        nepoch = self.start_epoch
         while True:
             # Training
             self.model.train()
@@ -125,16 +146,18 @@ class Trainer(BaseTrainer):
                     current_time = time.time()
                     elapsed_time = current_time - self.start_time
                     speed = (nstep - self.start_step) / elapsed_time
-                    output['speed'] = speed
+                    output["speed"] = speed
                     self.logger_adapter(nstep, nepoch, output, data)
 
-                if nstep % self.config['modify_lr_rate'] == 0:
+                if nstep % self.config["modify_lr_rate"] == 0:
                     self.lr_scheduler.step()
 
                 if self.strategies(nstep, output, data):
                     if nstep < nsteps:
-                        self.logger.warning(f"Training stopped at step {nstep} due to early stopping.")
-                    self._post_train(nstep, output, data)
+                        self.logger.warning(
+                            f"Training stopped at step {nstep} due to early stopping."
+                        )
+                    self._post_train()
                     return output
 
                 if nstep % self.config["valid_rate"] == 0:
@@ -149,27 +172,34 @@ class Trainer(BaseTrainer):
                     self.model.train()
 
                 if nstep % self.checkpoint_rate == 0:
+                    checkpoint_name = self.checkpoint_dir / f"{self.name}-{nstep}.pt"
+                    self.train_state["step"] = nstep
+                    self.train_state["epoch"] = nepoch
+                    self.save_model(checkpoint_name, self.train_state)
 
-                    self._save_checkpoint(nstep)
-                        
                 nstep += 1
-            
+
             nepoch += 1
 
     def _pre_train(self):
         if self.start_step is None:
             self.start_step = 0
+            self.start_epoch = 0
         self.logger_adapter.init()
+        self.train_state = {
+            "step": self.start_step,
+            "epoch": self.start_epoch,
+            "finish": False,
+            "optimizer": self.optimizer.state_dict(),
+        }
         return {}
 
-    def _post_train(self, nstep: int, output: dict, data: dict):
-        return output
+    def _post_train(self):
+        final_model = self.save_dir / f"{self.name}.pt"
+        self.train_state["finish"] = True
+        self.save_model(final_model, self.train_state)
+        return {}
 
-    def eval(self):
-        pass
-
-    def load(self, path: str):
-        self._resume_checkpoint(path)
 
 class OfflineALTrainer(Trainer):
     def _post_iter(self, nstep: int, output: dict, data: dict):

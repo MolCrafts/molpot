@@ -58,17 +58,18 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
             "save_dir": "./log",
         },
         config={
+            "resume": "model/painn-qm9.pt",
             "save_dir": "model",
             "device": {"type": "gpu", "n_gpu_use": 1},
-            "report_rate": 1000,
-            "valid_rate": 1000,
+            "compile": True,
+            "report_rate": 10,
+            "valid_rate": 10,
             "modify_lr_rate": 100,
-            "checkpoint_rate": 1000000,
+            "checkpoint_rate": 5,
         },
     )
 
-    trainer.jit()
-    trainer.train(1000000)
+    trainer.train(10)
 
     return "done"
 
