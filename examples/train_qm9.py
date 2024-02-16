@@ -58,7 +58,7 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
             "save_dir": "./log",
         },
         config={
-            "resume": "model/painn-qm9.pt",
+            # "resume": "model/painn-qm9.pt",
             "save_dir": "model",
             "device": {"type": "gpu", "n_gpu_use": 1},
             "compile": True,

@@ -20,8 +20,8 @@ class Atomwise(nn.Module):
         n_out: int = 1,
         activation: Callable = F.silu,
         aggregation_mode: str | None = "sum",
-        input_key: str = alias.T0,
-        output_key: str = alias.energy,
+        input_key: str = '_T0',
+        output_key: str = '_energy',
     ):
         """
         Args:
@@ -56,12 +56,12 @@ class Atomwise(nn.Module):
 
         # aggregate
         if self.aggregation_mode is not None:
-            idx_m = inputs[alias.idx_m]
-            maxm = int(idx_m[-1]) + 1
+            idx_m = inputs['_idx_m']
+            maxm = torch.max(idx_m) + 1
             y = index_add(y, 0, idx_m, dim_size=maxm)
             y = torch.squeeze(y, -1)
 
             if self.aggregation_mode == "avg":
-                y = y / inputs[alias.n_atoms]
+                y = y / inputs['_n_atoms']
         inputs[self.output_key] = y
         return inputs

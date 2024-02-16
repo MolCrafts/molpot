@@ -5,7 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .layers import Dense
 from .ops import index_add
-import molpot as mpot
 from molpot import Config, alias
 
 __all__ = ["PaiNN"]
@@ -215,10 +214,10 @@ class PaiNN(nn.Module):
             return_intermediate=True was used.
         """
         # get tensors from input dictionary
-        atomic_numbers = inputs[mpot.alias.Z]
-        r_ij = inputs[mpot.alias.Rij]
-        idx_i = inputs[mpot.alias.idx_i]
-        idx_j = inputs[mpot.alias.idx_j]
+        atomic_numbers = inputs[alias.Z]
+        r_ij = inputs[alias.Rij]
+        idx_i = inputs[alias.idx_i]
+        idx_j = inputs[alias.idx_j]
         n_atoms = atomic_numbers.shape[0]
 
         # compute atom and pair features

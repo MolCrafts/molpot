@@ -19,6 +19,7 @@ def index_add(
     """
     shape = list(x.shape)
     shape[dim] = dim_size
+    shape = torch.Size(shape)
     tmp = torch.zeros(shape, dtype=x.dtype, device=x.device)
     return tmp.index_add(dim, idx_i, x)
 

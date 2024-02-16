@@ -8,7 +8,7 @@ from ..potentials import NNPotential
 import logging
 from molpot import alias, Config
 import time
-
+from torch.export import export
 
 class BaseTrainer:
     def __init__(self, name, model: NNPotential, config: dict):
@@ -116,8 +116,6 @@ class Trainer(BaseTrainer):
             self.checkpoint_dir = Path(
                 config.get("checkpoint_dir", self.save_dir / "checkpoints")
             )
-            if self.checkpoint_dir.exists():
-                self.checkpoint_dir.rmdir()
             self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -199,7 +197,11 @@ class Trainer(BaseTrainer):
         self.train_state["finish"] = True
         self.save_model(final_model, self.train_state)
         return {}
-
+    
+    def export(self):
+        for data in self.train_data_loader:
+            # TODO: export factory
+            pass
 
 class OfflineALTrainer(Trainer):
     def _post_iter(self, nstep: int, output: dict, data: dict):
