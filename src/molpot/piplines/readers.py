@@ -46,10 +46,9 @@ class QM9Reader(IterDataPipe):
         self.source_dp = source_dp
 
     def __iter__(self) -> Iterable[dict]:
-        for d in self.source_dp:
-            print(d)
+        for path, text_io_wraqpper in self.source_dp:
+            lines = text_io_wraqpper.readlines()
             frame = dict()
-            lines = d[1].readlines()
             frame[alias.natoms] = torch.tensor(int(lines[0]), dtype=Config.stype)
             props_line = lines[1].split()[1:]
             frame[alias.idx] = torch.tensor(int(props_line[0]), dtype=Config.stype)
@@ -92,9 +91,9 @@ class rMD17Reader(IterDataPipe):
         super().__init__()
         self.source_dp = source_dp
 
-    def __iter__(self) -> mp.Frame:
-        for dp in self.source_dp:
-            data = np.load(dp)
+    def __iter__(self):
+        for path, steam in self.source_dp:
+            data = np.load(steam.read())
 
             numbers = data["nuclear_charges"]
             for positions, energies, forces in zip(
@@ -105,11 +104,7 @@ class rMD17Reader(IterDataPipe):
                 frame[alias.energy] = torch.tensor([energies]) * 43.3641
                 frame[alias.forces] = torch.tensor(forces) * 43.3641
                 frame[alias.Z] = torch.tensor(numbers)
-                frame[alias.R] = mp.units.convert(
-                    torch.tensor(positions), alias.rMD17["R"].unit, alias["R"].unit
-                )
+                frame[alias.R] = torch.tensor(positions)
                 frame[alias.cell] = torch.zeros((3, 3))
                 frame[alias.pbc] = torch.tensor([False, False, False])
-                yield frame
-
-            logging.info("Done.")
+            yield frame
