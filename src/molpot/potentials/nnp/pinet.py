@@ -30,7 +30,9 @@ class PILayer(nn.Module):
         prop_j = prop[idx_j]  # (n_pairs, n_channel)
         inter = torch.cat([prop_i, prop_j], axis=-1)
         inter = self.ff_layer(inter)  # NOTE: weight? (n_pairs, n_hidden[-1] * n_basis)
-        inter = inter.reshape([*inter.shape[:-1], self.n_neurons[-2], self.n_basis])  # (n_pairs, n_hidden[-1], n_basis)
+        inter = inter.reshape(
+            [*inter.shape[:-1], self.n_neurons[-2], self.n_basis]
+        )  # (n_pairs, n_hidden[-1], n_basis)
         inter = torch.einsum("i...c,ic->i...", inter, basis)
         return inter
 
@@ -53,32 +55,38 @@ class ScaleLayer(nn.Module):
 
     def forward(self, px, p1):
         return torch.einsum("i...c,i...c->i...c", px, p1)
-    
+
+
 class AddLayer(nn.Module):
 
     @staticmethod
     def add_i3(i3_, i3):
         return i3_ + i3
-    
+
     @staticmethod
     def add_i5(i5, i3):
-        vvt = torch.einsum('ijl, ikl->ijkl', i3, i3)
-        vvt_trace = torch.einsum('ijjl->il', vvt)  # [i,3,3,j] -> [i,j]
-        vvt_shape_id = torch.eye(3, device=i3.device).unsqueeze(0).unsqueeze(-1).expand((vvt_trace.shape[0], 3, 3, vvt_trace.shape[-1]))
+        vvt = torch.einsum("ijl, ikl->ijkl", i3, i3)
+        vvt_trace = torch.einsum("ijjl->il", vvt)  # [i,3,3,j] -> [i,j]
+        vvt_shape_id = (
+            torch.eye(3, device=i3.device)
+            .unsqueeze(0)
+            .unsqueeze(-1)
+            .expand((vvt_trace.shape[0], 3, 3, vvt_trace.shape[-1]))
+        )
         print(vvt_shape_id.shape)
-        print(vvt_shape_id[0,:,:,0])
+        print(vvt_shape_id[0, :, :, 0])
         vvt_trace_diag = vvt_trace[:, None, None, :] * vvt_shape_id / 3
         S = vvt - vvt_trace_diag
         return i5 + S
 
-    def __init__(self, n_dim:int):
+    def __init__(self, n_dim: int):
         super().__init__()
         if n_dim == 3:
             self.add = AddLayer.add_i3
         elif n_dim == 5:
             self.add = AddLayer.add_i5
         else:
-            raise NotImplementedError('only rank 2 and rank 3 allowed')
+            raise NotImplementedError("only rank 2 and rank 3 allowed")
 
     def forward(self, ix, i3):
         return self.add(ix, i3)
@@ -89,32 +97,19 @@ class IPLayer(nn.Module):
         super().__init__()
 
     def forward(self, i, idx_i, p):
-        
-        index_acc(
-            p, 0, idx_i, i
-        )
+
+        index_acc(p, 0, idx_i, i)
         return p
 
 
 class OutLayer(nn.Module):
-    def __init__(self, n_channel: int, n_hidden: Sequence[int], out_units:int):
+    def __init__(self, n_channel: int, n_hidden: Sequence[int], out_units: int):
         super().__init__()
 
         self.ff_layer = build_mlp([n_channel, *n_hidden, out_units])
 
     def forward(self, p):
         return self.ff_layer(p)
-
-
-# class ResUpdate(nn.Module):
-#     def __init__(self, in_features: int, out_features: int, n_hidden, n_layers):
-#         super().__init__()
-#         self.transform = Dense(
-#             in_features, out_features, n_hidden, n_layers, activation=None
-#         )
-
-#     def forward(self, old, new):
-#         return self.transform(old) + new
 
 
 class GCBlockP1(nn.Module):
@@ -130,7 +125,7 @@ class GCBlockP1(nn.Module):
         p1 = self.pp_layer(p)
         i1 = self.pi_layer(p1, idx_i, idx_j, basis)
         i1 = self.ii_layer(i1)
-        p  = self.ip_layer(i1, idx_i, p)
+        p = self.ip_layer(i1, idx_i, p)
         return p
 
 
@@ -153,7 +148,7 @@ class GCBlockP3(nn.Module):
         self.ip3_layer = IPLayer()
 
         self.dot_layer = DotLayer()
-        
+
         self.i1i3_scale_layer = ScaleLayer()
         self.i1r3_scale_layer = ScaleLayer()
         self.p1p3_scale_layer = ScaleLayer()
@@ -164,7 +159,7 @@ class GCBlockP3(nn.Module):
 
         p1 = self.pp1_layer(p1)
         i1 = self.pi1_layer(p1, idx_i, idx_j, basis)
-        i1_1, i1_2, i1_3 = torch.split(i1, int(i1.shape[-1]/3), dim=-1)
+        i1_1, i1_2, i1_3 = torch.split(i1, int(i1.shape[-1] / 3), dim=-1)
         i1 = self.ii1_layer(i1_1)
         p1 = self.ip1_layer(i1, idx_i, p1)
 
@@ -172,7 +167,7 @@ class GCBlockP3(nn.Module):
         i3 = self.pi3_layer(p3, idx_i, idx_j, basis)
         i3 = self.ii3_layer(i3)
         i3 = self.i1i3_scale_layer(i3, i1_2)
-        scaled_r3 = self.i1r3_scale_layer(r3[:,:,None], i1_3)
+        scaled_r3 = self.i1r3_scale_layer(r3[:, :, None], i1_3)
 
         i3 = self.i3_add_layer(i3, scaled_r3)
         p3 = self.ip3_layer(i3, idx_i, p3)
@@ -196,7 +191,6 @@ class PiNet(NNPotential):
         pi_nodes=[16, 16],
         ii_nodes=[16, 16],
         out_nodes=[16, 16],
-        out_pool=None,
         activation: Optional[Callable] = F.silu,
         max_z: int = 100,
     ):
@@ -223,13 +217,14 @@ class PiNet(NNPotential):
         self.embbding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
 
         self.gc_blocks = nn.Sequential(
-            *[GCBlockP1(pp_nodes, pi_nodes, ii_nodes, self.n_basis, activation=activation)
-            for _ in range(depth)]
+            *[
+                GCBlockP1(
+                    pp_nodes, pi_nodes, ii_nodes, self.n_basis, activation=activation
+                )
+                for _ in range(depth)
+            ]
         )
-        self.out_layers = [
-            OutLayer(n_atom_basis, out_nodes, 1)
-            for _ in range(depth)
-        ]
+        self.out_layers = [OutLayer(n_atom_basis, out_nodes, 1) for _ in range(depth)]
         # self.ann_output = Atomwise(1, [], 1, aggregation_mode=out_pool)
 
     def forward(self, tensors: dict):
@@ -254,6 +249,7 @@ class PiNet(NNPotential):
         tensors[alias.pinet.output_p1] = output
         return tensors
 
+
 class PiNetP3(NNPotential):
     """This class implements the Keras Model for the PiNet network."""
 
@@ -267,7 +263,6 @@ class PiNetP3(NNPotential):
         pi_nodes=[16, 16],
         ii_nodes=[16, 16],
         out_nodes=[16, 16],
-        out_pool=None,
         activation: Optional[Callable] = F.silu,
         max_z: int = 100,
     ):
@@ -294,13 +289,14 @@ class PiNetP3(NNPotential):
         self.embbding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
 
         self.gc_blocks = nn.Sequential(
-            *[GCBlockP3(pp_nodes, pi_nodes, ii_nodes, self.n_basis, activation=activation)
-            for _ in range(depth)]
+            *[
+                GCBlockP3(
+                    pp_nodes, pi_nodes, ii_nodes, self.n_basis, activation=activation
+                )
+                for _ in range(depth)
+            ]
         )
-        self.out_layers = [
-            OutLayer(n_atom_basis, out_nodes, 1)
-            for _ in range(depth)
-        ]
+        self.out_layers = [OutLayer(n_atom_basis, out_nodes, 1) for _ in range(depth)]
         # self.ann_output = Atomwise(1, [], 1, aggregation_mode=out_pool)
 
     def forward(self, tensors: dict):
@@ -312,7 +308,7 @@ class PiNetP3(NNPotential):
         p3 = torch.zeros(p1.shape[0], 3, p1.shape[-1])
         fc = self.cutoff_fn(d_ij)
         basis = self.radial_basis_fn(d_ij, fc)
-        output = 0.0  # broadcast to shape:= (n_atoms, 1)
+        # output = 0.0  # broadcast to shape:= (n_atoms, 1)
         for i in range(self.depth):
             p1, p3 = self.gc_blocks[i](
                 p1,
@@ -322,7 +318,8 @@ class PiNetP3(NNPotential):
                 tensors[alias.idx_j],
                 basis,
             )
-            output += self.out_layers[i](p1)
+            # output += self.out_layers[i](p1)
 
-        tensors[alias.T0] = output
+        tensors[alias.T0] = p1
+        tensors[alias.T1] = p3
         return tensors

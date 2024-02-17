@@ -8,14 +8,131 @@ from molpy import alias
 import numpy as np
 
 __all__ = ["alias"]
+# author: Roy Kid
+# contact: lijichen365@126.com
+# date: 2023-09-29
+# version: 0.0.1
 
-alias.set('T0', '_T0', int, None, 'rank 0 tensor')
-alias.set('T1', '_T1', int, None, 'rank 1 tensor')
-alias.set('T2', '_T2', int, None, 'rank 2 tensor')
+from collections import namedtuple
+from typing import Any
+import numpy as np
+from dataclasses import dataclass
 
-alias.set('loss', '_loss', float, None, 'loss')
-alias.set('step', '_step', int, None, 'step')
-alias.set('epoch', '_epoch', int, None, 'epoch')
+class Alias:
+
+    @dataclass
+    class Item:
+        alias: str
+        key: str
+        type: Any
+        unit: str
+        comment: str
+
+        def __hash__(self) -> int:
+            return hash(self.key)
+
+        def __repr__(self) -> str:
+            return f"<{self.alias}>"
+
+    _scopes: dict[str, dict] = {'default': {
+            "timestep": Item("timestep", "_ts", int, "fs", "time step"),
+            "name": Item("name", "_name", str, None, "atomic name"),
+            "natoms": Item("natoms", "_natoms", int, None, "number of atoms"),
+            "xyz": Item("xyz", "_xyz", np.ndarray, "angstrom", "atomic coordinates"),
+            "R": Item("xyz", "_xyz", np.ndarray, "angstrom", "atomic coordinates"),
+            "cell": Item("cell", "_cell", np.ndarray, "angstrom", "unit cell"),
+            "energy": Item("energy", "_energy", float, "meV", "energy"),
+            "forces": Item("forces", "_forces", np.ndarray, "eV/angstrom", "forces"),
+            "charge": Item("charge", "_charge", float, "C", "charge"),
+            "mass": Item("mass", "_mass", float, None, ""),
+            "stress": Item("stress", "_stress", np.ndarray, "GPa", "stress"),
+            "idx": Item("idx", "_idx", int, None, ""),
+            "Z": Item("Z", "_atomic_numbers", int, None, "nuclear charge"),
+            "atype": Item("atype", "_atomic_types", int, None, "atomic type"),
+            "idx_m": Item("idx_m", "_idx_m", int, None, "indices of systems"),
+            "idx_i": Item("idx_i", "_idx_i", int, None, "indices of center atoms"),
+            "idx_j": Item("idx_j", "_idx_j", int, None, "indices of neighboring atoms"),
+            "idx_i_lr": Item("idx_i_lr", "_idx_i_lr", int, None, "indices of center atoms for # long-range"),
+            "idx_j_lr": Item("idx_j_lr", "_idx_j_lr", int, None, "indices of neighboring atoms for # long-range"),
+            "offsets": Item("offsets", "_offsets", int, None, "cell offset vectors"),
+            "Rij": Item("Rij", "_Rij", np.ndarray, "angstrom", "vectors pointing from center atoms to neighboring atoms"),
+            "dist": Item("dist", "_dist", np.ndarray, "angstrom", "distances between center atoms and neighboring atoms"),
+            "pbc": Item("pbc", "_pbc", np.ndarray, None, "periodic boundary conditions"),
+            "T0": Item("T0", "_T0", int, None, "rank 0 tensor"),
+            "T1": Item("T1", "_T1", int, None, "rank 1 tensor"),
+            "T2": Item("T2", "_T2", int, None, "rank 2 tensor"),
+            "loss": Item("loss", "_loss", float, None, "loss"),
+            "step": Item("step", "_step", int, None, "step"),
+            "epoch": Item("epoch", "_epoch", int, None, "epoch")
+
+        }}
+
+    def __init__(self, scope_name: str = "default") -> None:
+        if scope_name not in self._scopes:
+            self._scopes[scope_name] = {}
+        self._current = scope_name
+
+    def __getattr__(self, alias: str):
+    
+        if alias in self._scopes:
+            return Alias(alias)
+        elif alias in self._current_scope:
+            return self._current_scope[alias].key
+        else:
+            raise AttributeError(f"alias '{alias}' not found in {self._current} scope")
+        
+    def __getitem__(self, alias: str):
+
+        if alias in self._current_scope:
+            return self._current_scope[alias]
+        else:
+            raise KeyError(f"alias '{alias}' not found in {self._current} scope")
+
+    def __getstate__(self) -> dict:
+        return {
+            "_scopes": self._scopes,
+            "_current": "default"
+        }
+    
+    def __call__(self, scope_name:str) -> 'Alias':
+        if scope_name not in self._scopes:
+            self._scopes[scope_name] = {}
+        return self
+    
+    def __iter__(self):
+        yield from self._current_scope
+    
+    def __contains__(self, alias: str) -> bool:
+        return alias in self._current_scope
+
+    def __setstate__(self, value: dict[str, Item]) -> None:
+        self._scopes = value["_scopes"]
+        self._current = value["_current"]
+
+    def set(self, alias: str, keyword: str, type: Any, unit: str, comment: str) -> None:
+        self._current_scope[alias] = Alias.Item(alias, keyword, type, unit, comment)
+
+    def alias(self)->list[str]:
+        return list(self._current_scope.keys())
+    
+    def items(self)->list[Item]:
+        return list(self._current_scope.values())
+    
+    def get_unit(self, alias: str) -> str:
+        return self._current_scope[alias].unit
+
+    @property
+    def _current_scope(self) -> str:
+        return self._scopes[self._current]
+
+    def map(self, alias, key):
+        alias.key = key.key
+        alias.alias = key.alias
+        alias.type = key.type
+        alias.unit = key.unit
+        alias.comment = key.comment
+
+alias = Alias()
 
 # alias = Alias('default')
 # alias.set('energy', 'energy', None, '')

@@ -17,9 +17,7 @@ def index_add(
         reduced input
 
     """
-    shape = list(x.shape)
-    shape[dim] = dim_size
-    shape = torch.Size(shape)
+    shape = [dim_size] + list(x.shape[1:])
     tmp = torch.zeros(shape, dtype=x.dtype, device=x.device)
     return tmp.index_add(dim, idx_i, x)
 

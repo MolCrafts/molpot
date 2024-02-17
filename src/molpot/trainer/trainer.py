@@ -74,7 +74,6 @@ class Trainer(BaseTrainer):
         train_data_loader,
         valid_data_loader,
         strategies=[],
-        metrics=[],
         logger=None,
         config={},
     ):
@@ -93,14 +92,11 @@ class Trainer(BaseTrainer):
         self.train_data_loader = train_data_loader
         self.valid_data_loader = valid_data_loader
 
-        self.metrics = metrics
-
         self.lr_scheduler = lr_scheduler
         Config.set_device(config["device"])
 
         self.strategies = StrategyManager(strategies)
 
-        self.metrics = metrics
         self.log_config = logger
         self.logger_adapter = LogAdapter(name, **self.log_config)
 

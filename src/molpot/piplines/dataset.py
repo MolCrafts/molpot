@@ -1,6 +1,5 @@
 from io import BytesIO, TextIOWrapper
-from torchdata.datapipes.iter import IterDataPipe, IterableWrapper, HttpReader
-from typing import Optional
+from torchdata.datapipes.iter import IterDataPipe, IterableWrapper
 from pathlib import Path
 import logging
 import numpy as np
@@ -9,7 +8,6 @@ import tempfile
 from itertools import islice
 import molpy as mp
 from molpot import alias
-import zipfile
 
 
 class DataSet:
@@ -23,7 +21,7 @@ class DataSet:
     """
 
     def __init__(
-        self, name: str, save_dir: None | Path | str, total: int, batch_size: int
+        self, name: str, save_dir: None | Path | str, total: int, batch_size: int, device: str = "cpu"
     ):
         self.name = name
         self.total = total
@@ -31,6 +29,7 @@ class DataSet:
         self.batch_size = batch_size
         self.in_memory = True if save_dir is None else False
         self.save_dir = save_dir
+        self.device = device
 
     def save_to(self, url):
         basename = Path(url).name
@@ -41,6 +40,7 @@ class DataSet:
         return str(save_dir)
 
     def _prepare(self, dp: IterDataPipe) -> IterDataPipe:
+        dp = dp.header(self.total).set_length(self.total).pin_memory(device=self.device)
         return dp.batch(self.batch_size)
 
 
@@ -48,6 +48,9 @@ def read_stream_as_text(_tuple: tuple[str, bytes]):
     path, stream = _tuple
     return path, TextIOWrapper(BytesIO(stream.read()))
 
+def read_stream_as_bytes(_tuple: tuple[str, bytes]):
+    path, stream = _tuple
+    return path, BytesIO(stream.read())
 
 class QM9(DataSet):
     def __init__(
@@ -55,10 +58,11 @@ class QM9(DataSet):
         save_dir: None | Path | str = None,
         total: int = 0,
         batch_size: int = 1,
+        device: str = "cpu",
         atom_ref: bool = True,
         remove_uncharacterized: bool = True,
     ):
-        super().__init__("QM9", save_dir, total, batch_size)
+        super().__init__("QM9", save_dir, total, batch_size, device)
         self.remove_uncharacterized = remove_uncharacterized
         self.atom_ref = atom_ref
         alias("QM9")
@@ -78,7 +82,7 @@ class QM9(DataSet):
         alias.QM9.set("G", "_G", float, "hartree", "_free_energy")
         alias.QM9.set("Cv", "_Cv", float, "cal/mol/K", "_heat_capacity")
 
-    def prepare(self) -> IterDataPipe:
+    def prepare(self, device='cpu') -> IterDataPipe:
 
         url = "https://ndownloader.figshare.com/files/3195389"  # tar.bz2
 
@@ -93,7 +97,7 @@ class QM9(DataSet):
         cache_dp.end_caching(same_filepath_fn=True)
         dp = cache_dp.map(read_stream_as_text).read_qm9()
 
-        return self._prepare(dp)
+        return self._prepare(dp, device)
 
     def _download_atomrefs(self):
         url = "https://ndownloader.figshare.com/files/3195395"
@@ -127,26 +131,28 @@ class QM9(DataSet):
         return uncharacterized
 
 
-class rMD17(DataSet):
+class RMD17(DataSet):
     def __init__(
         self,
         save_dir: None | Path | str = None,
         total: int = 0,
         batch_size: int = 64,
+        device: str = "cpu",
         molecule: str = "aspirin",
     ):
-        super().__init__("rMD17", save_dir, total, batch_size)
+        super().__init__("rmd17", save_dir, total, batch_size, device)
         self.molecule = molecule
-        alias("rMD17")
-        alias.rMD17.set("molecule", "_rmd17_molecule", str, None, "molecule name")
-        alias.rMD17.set("energy", "_rmd17_U", float, "kcal/mol", "_energy")
-        alias.rMD17.set("forces", "_rmd17_F", float, "kcal/mol/angstrom", "_forces")
-        alias.rMD17.set("R", "_rmd17_R", np.ndarray, "angstrom", "atomic coordinates")
-        alias.rMD17.set("Z", "_rmd17_Z", int, None, "atomic numbers in molecule")
+        alias("rmd17")
+        alias.rmd17.set("molecule", "_rmd17_molecule", str, None, "molecule name")
+        alias.rmd17.set("energy", "_rmd17_U", float, "kcal/mol", "_energy")
+        alias.rmd17.set("forces", "_rmd17_F", float, "kcal/mol/angstrom", "_forces")
+        alias.rmd17.set("R", "_rmd17_R", np.ndarray, "angstrom", "atomic coordinates")
+        alias.rmd17.set("Z", "_rmd17_Z", int, None, "atomic numbers in molecule")
 
-    def get_molecule(self, exfiletuple: str):
-        url, _ = exfiletuple
-        if url.endswith(f"{self.molecule}.npz"):
+    def get_molecule(self, _tuple: str):
+        filename = _tuple[0]
+        if filename.endswith(f"{self.molecule}.npz"):
+            print(filename)
             return True
         return False
 
@@ -162,8 +168,7 @@ class rMD17(DataSet):
             .filter(filter_fn=self.get_molecule)
         )
 
-        cache_dp.end_caching(same_filepath_fn=True)
-        dp = cache_dp.read_rmd17()
+        dp = cache_dp.end_caching(same_filepath_fn=True).read_rmd17()
 
         return self._prepare(dp)
 

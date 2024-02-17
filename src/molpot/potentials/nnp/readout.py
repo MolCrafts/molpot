@@ -53,13 +53,13 @@ class Atomwise(nn.Module):
     def forward(self, inputs: dict[torch.Tensor]) -> dict[str, torch.Tensor]:
         # predict atomwise contributions
         y = self.outnet(inputs[self.input_key])
-
+        y = torch.squeeze(y, -1)
         # aggregate
         if self.aggregation_mode is not None:
             idx_m = inputs['_idx_m']
             maxm = torch.max(idx_m) + 1
             y = index_add(y, 0, idx_m, dim_size=maxm)
-            y = torch.squeeze(y, -1)
+
 
             if self.aggregation_mode == "avg":
                 y = y / inputs['_n_atoms']

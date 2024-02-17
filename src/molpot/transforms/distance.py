@@ -1,29 +1,7 @@
-from typing import Dict, Optional
-
 import torch
-import torch.nn as nn
+from torch import nn
 
-import molpot.keywords as kw
-
-from .base import Transform
-
-class PairwiseDistances(Transform):
-    """
-    Compute pair-wise distances from indices provided by a neighbor list transform.
-    """
-
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        R = inputs[kw.R]
-        offsets = inputs[kw.offsets]
-        idx_i = inputs[kw.idx_i]
-        idx_j = inputs[kw.idx_j]
-
-        Rij = R[idx_j] - R[idx_i] + offsets
-        inputs[kw.Rij] = Rij
-        return inputs
-
-
-class FilterShortRange(Transform):
+class FilterShortRange(nn.Module):
     """
     Separate short-range from all supplied distances.
 

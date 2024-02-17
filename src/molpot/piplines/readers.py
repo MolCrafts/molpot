@@ -1,4 +1,4 @@
-from molpot.piplines.dataset import rMD17
+from molpot.piplines.dataset import RMD17
 from torchdata.datapipes import functional_datapipe
 import molpot as mpot
 import molpy as mp
@@ -92,8 +92,8 @@ class rMD17Reader(IterDataPipe):
         self.source_dp = source_dp
 
     def __iter__(self):
-        for path, steam in self.source_dp:
-            data = np.load(steam.read())
+        for steam in self.source_dp:
+            data = np.load(steam, allow_pickle=True)
 
             numbers = data["nuclear_charges"]
             for positions, energies, forces in zip(
@@ -101,10 +101,11 @@ class rMD17Reader(IterDataPipe):
             ):
                 frame = {}
                 frame[alias.natoms] = torch.tensor(len(numbers), dtype=Config.stype)
-                frame[alias.energy] = torch.tensor([energies]) * 43.3641
-                frame[alias.forces] = torch.tensor(forces) * 43.3641
-                frame[alias.Z] = torch.tensor(numbers)
-                frame[alias.R] = torch.tensor(positions)
-                frame[alias.cell] = torch.zeros((3, 3))
+                frame[alias.rmd17.energy] = torch.tensor([energies], dtype=Config.ftype)
+                frame[alias.rmd17.forces] = torch.tensor(forces, dtype=Config.ftype)
+                frame[alias.Z] = torch.tensor(numbers, dtype=Config.stype)
+                frame[alias.R] = torch.tensor(positions, dtype=Config.ftype)
+                frame[alias.cell] = torch.zeros((3, 3), dtype=Config.ftype)
                 frame[alias.pbc] = torch.tensor([False, False, False])
+
             yield frame

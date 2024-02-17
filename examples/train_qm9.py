@@ -12,7 +12,7 @@ from molpot import alias
 
 
 def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    qm9_dataset = mpot.QM9(data_dir="qm9", batch_size=64, total=1000)
+    qm9_dataset = mpot.dataset.QM9(save_dir="qm9", batch_size=64, total=1000, device="cpu")
     dp = qm9_dataset.prepare()
     train, valid = dp.calc_nblist(5).random_split(
         weights={"train": 0.8, "valid": 0.2}, seed=42
@@ -36,8 +36,6 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
 
     stagnation = mpot.strategy.Stagnation(alias.loss, patience=torch.inf)
 
-    mae = mpot.metric.MAE("energy_mae", alias.energy, alias.QM9.U)
-
     trainer = mpot.Trainer(
         "painn-qm9",
         model,
@@ -47,12 +45,11 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         train_dataloader,
         valid_dataloader,
         strategies=[stagnation],
-        metrics=[mae],
         logger={
             "metrics": {
                 "speed": Identity("speed"),
                 "loss": Identity(alias.loss),
-                "energy_mae": MAE(alias.energy, alias.QM9.U),
+                "energy_mae": mpot.metric.MAE("energy_mae", alias.energy, alias.QM9.U),
             },
             "handlers": [ConsoleHandler(), TensorBoardHandler()],
             "save_dir": "./log",

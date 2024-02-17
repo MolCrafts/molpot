@@ -1,8 +1,9 @@
 from ._config import Config
+Config()
 from ._alias import alias
 from .utils import units
 from .piplines import dataset
-from .piplines.dataloaders import DataLoader
+from .piplines.dataloaders import DataLoader, create_dataloader
 from .transforms import *
 from .app import *
 from .potentials import *
