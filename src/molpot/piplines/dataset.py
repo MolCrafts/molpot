@@ -1,13 +1,11 @@
 from functools import partial
-from torchdata.datapipes.iter import IterDataPipe, IterableWrapper
+from io import BytesIO
+from torchdata.datapipes.iter import IterDataPipe, IterableWrapper, HttpReader
 from torchdata.dataloader2 import DataLoader2
 from typing import Optional, Any
 from pathlib import Path
-import tempfile
-import time
-import json
 import logging
-from urllib.request import urlopen
+import requests
 import numpy as np
 import torch
 import tarfile
@@ -15,12 +13,7 @@ from itertools import islice
 import molpy as mp
 from molpot import alias
 import zipfile
-
-__all__ = ["DataSet", "DataLoader2", "QM9", "rMD17"]
-
-
-log = logging.getLogger(__name__)
-
+import random
 
 class DataSet:
 
@@ -33,87 +26,57 @@ class DataSet:
         * Wrap inside a DataLoader.
     """
 
-    def __init__(
-        self, name, data_dir: None | Path | str, in_memory: bool = True, total: Optional[None] = None, batch_size: int = 1
-    ):
-        super().__init__()
+    def __init__(self, name:str, save_dir: None | Path | str, total: int, batch_size: int):
         self.name = name
-        self.in_memory = in_memory
         self.total = total
         self.logger = logging.getLogger(self.name)
         self.batch_size = batch_size
-        if not in_memory:
-            if data_dir:
-                self.data_dir = Path(data_dir)
-            else:
-                self.data_dir = Path(tempfile.mkdtemp())
-            if not self.data_dir.exists():
-                self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.in_memory = True if save_dir is None else False
+        if save_dir is not None:
+            self.init_save_dir(Path(save_dir))
 
-    def update_meta(self, data: Optional[dict[str, Any]] = None):
-        self._data = {
-            "name": self.name,
-            "update_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-        }
-        self._data.update(data or {})
-        if not self.in_memory:
-            with open(self.data_dir / Path("meta.json"), "w") as f:
-                json.dump(self._data, f)
+    def init_save_dir(self, save_dir: Path):
+        if save_dir.exists():
+            pass
+        else:
+            save_dir.mkdir(parents=True, exist_ok=True)
+        # self.update_meta()
 
-    def _prepare(self, dp) -> IterDataPipe:
-        if self.total:
-            dp = dp.header(self.total).set_length(self.total)
+    def _prepare(self, dp: IterDataPipe) -> IterDataPipe:
+        # if self.total:
+        #     dp = dp.header(self.total).set_length(self.total)
+        # return dp.batch(self.batch_size)
         return dp.batch(self.batch_size)
 
-    def fetch(self, url, filename, dir: Path | str | None) -> Path | bytes:
-        # fpath = Path(dir) / Path(filename)
-        # if dir is None:
-        #     dir = self.data_dir
-        # if not fpath.exists():
-        #     log.info(f"downloading from {url}... to {fpath}")
-        #     response = urlopen(url, fpath)
-        # else:
-        #     log.info(f"{fpath} already exists.")
-        # return fpath
-        with urlopen(url) as response:
-            byte_data = response.read()
-            if dir is None:
-                return byte_data
-            else:
-                dir = Path(dir)
-                dir.mkdir(parents=True, exist_ok=True)
-                with open(dir / filename, "wb") as f:
-                    f.write(byte_data)
-                return dir / filename
+    # def download(self, url, fpath: Path) -> Path:
+    #     response = requests.get(url, stream=True)
+    #     assert response.status_code == 200, f"Failed to download {url}"
+    #     with open(fpath, "wb") as f:
+    #         for chunk in response.iter_content(chunk_size=1024):
+    #             if chunk:
+    #                 f.write(chunk)
+    #                 f.flush()
 
-    def extract_tar(self, tar_path, dest_path, member):
-
-        if dest_path.exists():
-            log.info(f"{dest_path} already exists.")
-            path = dest_path
-        else:
-            log.info("Extracting files...")
-            tar = tarfile.open(tar_path)
-            if member == "all":
-                path = tar.extractall(dest_path)
-            else:
-                path = tar.extract(path=dest_path, member=str(member))
-            tar.close()
-            log.info("Done.")
-        return path
-
+    #     return fpath
+        
+    # def load(self, url) -> bytes:
+    #     response = requests.get(url)
+    #     assert response.status_code == 200, f"Failed to download {url}"
+    #     return response.content
+    
 
 class QM9(DataSet):
     def __init__(
         self,
-        data_dir: Optional[Path | str] = None,
-        in_memory: bool = False,
-        remove_uncharacterized: bool = True,
+        save_dir: None | Path | str = None,
         total: int = 0,
         batch_size: int = 1,
+        atom_ref: bool = True,
+        remove_uncharacterized: bool = True,
     ):
-        super().__init__("QM9", data_dir, in_memory, total, batch_size)
+        super().__init__("QM9", save_dir, total, batch_size)
         self.remove_uncharacterized = remove_uncharacterized
+        self.atom_ref = atom_ref
         alias("QM9")
         alias.QM9.set("A", "_A", float, "GHz", "rotational_constant_A")
         alias.QM9.set("B", "_B", float, "GHz", "rotational_constant_B")
@@ -135,44 +98,13 @@ class QM9(DataSet):
 
     def prepare(self) -> IterDataPipe:
 
-        # atomrefs = self._download_atomrefs()
-        # if self.remove_uncharacterized:
-        #     uncharacterized = self._download_uncharacterized()
-        # else:
-        #     uncharacterized = None
+        url = 'https://ndownloader.figshare.com/files/3195389'  # tar.bz2
 
         if self.in_memory:
-            # import requests
-            # import io
+            http_reader_dp = HttpReader(IterableWrapper([url]))
+            dp = http_reader_dp.load_from_bz2(length=self.total).load_from_tar(length=self.total)  # (filename, StreamWrapper)
 
-            # qm9_url = "https://ndownloader.figshare.com/files/3195389"
-            # qm9_bytes = requests.get(qm9_url, allow_redirects=True).content
-            # qm9_fobj = io.BytesIO(qm9_bytes)
-            # qm9_fobj.seek(0)
-            # qm9_tar = tarfile.open(fileobj=qm9_fobj, mode="r:bz2")
-            # names = qm9_tar.getnames()
-
-            # exclude_url = "https://figshare.com/ndownloader/files/3195404"
-            # exclude_bytes = requests.get(exclude_url, allow_redirects=True).content
-            # exclude_fobj = io.TextIOWrapper(io.BytesIO(exclude_bytes))
-            # exclude = [int(line.split()[0]) for line in exclude_fobj.readlines()[9:-1]]
-            # names = [name for name in names if int(name[-10:-4]) not in exclude]
-            # dp = (
-            #     IterableWrapper(names)
-            #     .map(qm9_tar.extractfile)
-            # )
-            # return self._prepare(dp)
-            raise NotImplementedError('Can not read from memory, torchdata not allow to pickle _io.BufferedReader')
-
-        else:
-
-            filepaths = self._download_data()
-
-            dp = (
-                IterableWrapper(list(filepaths))
-                .open_files()
-            )
-        dp = dp.read_qm9()
+        dp.read_qm9()
         return self._prepare(dp)
 
     def _download_atomrefs(self):
@@ -214,7 +146,6 @@ class QM9(DataSet):
         # _sort_qm9 = lambda x: (int(re.sub(r"\D", "", str(x))), str(x))
         self.extract_tar(tar_path, dest_path, "all")
 
-        log.info("Parse xyz files...")
         xyz_files = dest_path.rglob("*.xyz")
         xyz_files = list(map(str, xyz_files))
         return xyz_files
@@ -232,7 +163,7 @@ class rMD17(DataSet):
         self.molecule = molecule
         self.batch_size = batch_size
         alias("rMD17")
-        alias.rMD17.set("U", "_rmd17_U", float, "kcal/mol", "_energy")
+        alias.rMD17.set("energy", "_rmd17_U", float, "kcal/mol", "_energy")
         alias.rMD17.set(
             "forces", "_rmd17_F", float, "kcal/mol/angstrom", "_forces"
         )

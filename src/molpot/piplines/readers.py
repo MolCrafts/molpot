@@ -47,6 +47,7 @@ class QM9Reader(IterDataPipe):
 
     def __iter__(self) -> Iterable[dict]:
         for d in self.source_dp:
+            print(d)
             frame = dict()
             lines = d[1].readlines()
             frame[alias.natoms] = torch.tensor(int(lines[0]), dtype=Config.stype)
