@@ -2,6 +2,8 @@ import molpot as mpot
 import molpy as mp
 import torch
 import molexp as me
+from pathlib import Path
+import os
 from molpot.piplines.dataloaders import DataLoader
 
 from molpot.trainer.metric.metrics import Identity, MAE
@@ -35,10 +37,10 @@ def gen_lj()->None:
         dump 1 all custom 1000 lj.lammpstrj id type x y z
         fix prt all print 1000 "${{step}} ${{etotal}}" file lj.log screen no
         timestep 0.005
-        run 10000
+        run 5000
     """
 
-    engine = me.LAMMPSEngine('lmp')
+    engine = me.engine.LAMMPSEngine('lmp')
     engine.add_script(script)
     engine.run('mpirun -np 4 lmp -in lj.in', cwd='tmp')
     return None
@@ -48,10 +50,10 @@ def load_lj(gen_lj)->tuple:
 
     traj = mp.io.load_trajectory('tmp/lj.lammpstrj')
     log = mp.io.loadtxt("tmp/lj.log")
-    traj.join({alias.energy: log[:, 1]})
 
     lj_dataset = mpot.dataset.Trajectory(traj, total=10)
     dp = lj_dataset.prepare()
+    dp = dp.zip(log[:,0])
     train, valid = (
         dp.calc_nblist(2.5)
         .collate_data()
@@ -106,4 +108,7 @@ def train_lj(load_lj: tuple[DataLoader, DataLoader]) -> str:
     return "done"
 
 if __name__ == "__main__":
-    train_lj(load_lj(gen_lj()))
+    proj_dir = Path.cwd() / "train_lj"
+    proj_dir.mkdir(exist_ok=True)
+    os.chdir(proj_dir)
+    train_lj(load_lj())

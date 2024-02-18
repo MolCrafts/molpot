@@ -21,7 +21,12 @@ class DataSet:
     """
 
     def __init__(
-        self, name: str, save_dir: None | Path | str, total: int, batch_size: int, device: str = "cpu"
+        self,
+        name: str,
+        save_dir: None | Path | str,
+        total: int,
+        batch_size: int,
+        device: str = "cpu",
     ):
         self.name = name
         self.total = total
@@ -48,9 +53,11 @@ def read_stream_as_text(_tuple: tuple[str, bytes]):
     path, stream = _tuple
     return path, TextIOWrapper(BytesIO(stream.read()))
 
+
 def read_stream_as_bytes(_tuple: tuple[str, bytes]):
     path, stream = _tuple
     return path, BytesIO(stream.read())
+
 
 class QM9(DataSet):
     def __init__(
@@ -82,7 +89,7 @@ class QM9(DataSet):
         alias.QM9.set("G", "_G", float, "hartree", "_free_energy")
         alias.QM9.set("Cv", "_Cv", float, "cal/mol/K", "_heat_capacity")
 
-    def prepare(self, device='cpu') -> IterDataPipe:
+    def prepare(self, device="cpu") -> IterDataPipe:
 
         url = "https://ndownloader.figshare.com/files/3195389"  # tar.bz2
 
