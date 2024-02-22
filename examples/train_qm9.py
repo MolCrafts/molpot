@@ -12,7 +12,7 @@ from molpot import alias
 
 
 def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    qm9_dataset = mpot.QM9(data_dir="qm9", batch_size=64, total=1000)
+    qm9_dataset = mpot.QM9(save_dir="qm9", batch_size=64, total=1000)
     dp = qm9_dataset.prepare()
     train, valid = dp.calc_nblist(5).random_split(
         weights={"train": 0.8, "valid": 0.2}, seed=42
