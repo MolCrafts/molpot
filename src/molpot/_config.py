@@ -1,13 +1,28 @@
 import torch
+import os
 
-class Config:
+class Singleton(type):
+    _instances = {}
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        # want to run __init__ every time the class is called, add
+        else:
+            cls._instances[cls].__init__(*args, **kwargs)
+        return cls._instances[cls]
+
+class Config(metaclass=Singleton):
 
     device: torch.device = torch.device("cpu")
     ftype: torch.dtype = torch.float32
     stype: torch.dtype = torch.int32
 
     def __init__(self):
-        raise Exception("This class should not be instantiated")
+        # 0 = all messages are logged (default behavior)
+        # 1 = INFO messages are not printed
+        # 2 = INFO and WARNING messages are not printed
+        # 3 = INFO, WARNING, and ERROR messages are not printed
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 
     @classmethod
     def set_device(cls, device_info:dict):
@@ -23,3 +38,8 @@ class Config:
             else:
                 device = torch.device("cuda:0")
         return device
+    
+    @classmethod
+    def set_environ(cls, **kwargs):
+        for k, v in kwargs.items():
+            os.environ[k] = v

@@ -2,11 +2,13 @@ import molpot as mpot
 import molpy as mp
 import torch
 import molexp as me
+from pathlib import Path
+import os
 from molpot.piplines.dataloaders import DataLoader
 
 from molpot.trainer.metric.metrics import Identity, MAE
 from molpot.trainer.logger.adapter import ConsoleHandler
-from molpot import alias
+from molpot import Alias
 
 def gen_lj()->None:
 
@@ -35,10 +37,10 @@ def gen_lj()->None:
         dump 1 all custom 1000 lj.lammpstrj id type x y z
         fix prt all print 1000 "${{step}} ${{etotal}}" file lj.log screen no
         timestep 0.005
-        run 10000
+        run 5000
     """
 
-    engine = me.LAMMPSEngine('lmp')
+    engine = me.engine.LAMMPSEngine('lmp')
     engine.add_script(script)
     engine.run('mpirun -np 4 lmp -in lj.in', cwd='tmp')
     return None
@@ -48,10 +50,10 @@ def load_lj(gen_lj)->tuple:
 
     traj = mp.io.load_trajectory('tmp/lj.lammpstrj')
     log = mp.io.loadtxt("tmp/lj.log")
-    traj.join({alias.energy: log[:, 1]})
 
     lj_dataset = mpot.dataset.Trajectory(traj, total=10)
     dp = lj_dataset.prepare()
+    dp = dp.zip(log[:,0])
     train, valid = (
         dp.calc_nblist(2.5)
         .collate_data()
@@ -67,13 +69,13 @@ def train_lj(load_lj: tuple[DataLoader, DataLoader]) -> str:
     train_dataloader, valid_dataloader = load_lj
     lj_pot = mpot.classical.pair.LJ126(1, 2.5)
     pot = mpot.Potentials(lj_pot)
-    criterion = mpot.MultiMSELoss([1], targets=[(alias.ti, alias.energy)])
+    criterion = mpot.MultiMSELoss([1], targets=[(Alias.ti, Alias.energy)])
     optimizer = torch.optim.Adam(pot.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.99)
 
-    stagnation = mpot.strategy.Stagnation(alias.loss, patience=torch.inf)
+    stagnation = mpot.strategy.Stagnation(Alias.loss, patience=torch.inf)
 
-    mae = mpot.metric.MAE("energy_mae", alias.ti, alias.energy)
+    mae = mpot.metric.MAE("energy_mae", Alias.ti, Alias.energy)
     trainer = mpot.Trainer(
         pot,
         criterion,
@@ -85,10 +87,10 @@ def train_lj(load_lj: tuple[DataLoader, DataLoader]) -> str:
         metrics=[mae],
         logger={
             "metrics": {
-                "step": Identity(alias.step),
-                "epoch": Identity(alias.epoch),
-                "loss": Identity(alias.loss),
-                "energy_mae": MAE(alias.ti, alias.energy),
+                "step": Identity(Alias.step),
+                "epoch": Identity(Alias.epoch),
+                "loss": Identity(Alias.loss),
+                "energy_mae": MAE(Alias.ti, Alias.energy),
             },
             "handlers": [ConsoleHandler()],
         },
@@ -106,4 +108,7 @@ def train_lj(load_lj: tuple[DataLoader, DataLoader]) -> str:
     return "done"
 
 if __name__ == "__main__":
-    train_lj(load_lj(gen_lj()))
+    proj_dir = Path.cwd() / "train_lj"
+    proj_dir.mkdir(exist_ok=True)
+    os.chdir(proj_dir)
+    train_lj(load_lj())

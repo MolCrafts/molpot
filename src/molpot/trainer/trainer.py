@@ -6,7 +6,7 @@ from molpot.trainer.strategy.base import StrategyManager
 from molpot.trainer.strategy.early_stop import StepCounter
 from ..potentials import NNPotential
 import logging
-from molpot import alias, Config
+from molpot import Alias, Config
 import time
 from torch.export import export
 
@@ -74,7 +74,6 @@ class Trainer(BaseTrainer):
         train_data_loader,
         valid_data_loader,
         strategies=[],
-        metrics=[],
         logger=None,
         config={},
     ):
@@ -93,14 +92,11 @@ class Trainer(BaseTrainer):
         self.train_data_loader = train_data_loader
         self.valid_data_loader = valid_data_loader
 
-        self.metrics = metrics
-
         self.lr_scheduler = lr_scheduler
         Config.set_device(config["device"])
 
         self.strategies = StrategyManager(strategies)
 
-        self.metrics = metrics
         self.log_config = logger
         self.logger_adapter = LogAdapter(name, **self.log_config)
 
@@ -137,7 +133,7 @@ class Trainer(BaseTrainer):
                 loss = self.criterion(_output, data)
                 loss.backward()
                 self.optimizer.step()
-                _output[alias.loss] = loss
+                _output[Alias.loss] = loss
                 output.update(_output)
 
                 if nstep % self.config["report_rate"] == 0:

@@ -12,14 +12,14 @@ class TestCollateFrame:
         frames = IterableWrapper([
             mp.Frame(
                 **{
-                    Alias.natoms: 2,
+                    Alias.n_atoms: 2,
                     Alias.xyz: np.array([[0, 0, 0], [1, 0, 1]]),
                     Alias.Z: [0, 1],
                 }
             ),
             mp.Frame(
                 **{
-                    Alias.natoms: 2,
+                    Alias.n_atoms: 2,
                     Alias.xyz: np.array([[2, 0, 0], [3, 0, 1]]),
                     Alias.Z: [2, 3],
                 }

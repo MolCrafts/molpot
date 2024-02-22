@@ -1,6 +1,6 @@
 import pytest
 import torch
-from molpot import alias
+from molpot import Alias
 from molpot.transforms import TorchNeighborList
 from torchdata.datapipes.iter import IterableWrapper
 from torchdata.dataloader2 import DataLoader2
@@ -22,11 +22,11 @@ class TestNeighborLists:
         cutoff, input, neighbors_ref = environment
         neighbor_list = neighbor_list(cutoff)
         neighbors = neighbor_list(input)
-        R = input[alias.R]
-        neighbors[alias.Rij] = (
-            R[neighbors[alias.idx_j]]
-            - R[neighbors[alias.idx_i]]
-            + input[alias.offsets]
+        R = input[Alias.R]
+        neighbors[Alias.Rij] = (
+            R[neighbors[Alias.idx_j]]
+            - R[neighbors[Alias.idx_i]]
+            + input[Alias.offsets]
         )
 
         neighbors = self._sort_neighbors(neighbors)
@@ -41,11 +41,11 @@ class TestNeighborLists:
         dp = IterableWrapper([input])
         dp = dp.calc_nblist(cutoff = cutoff)
         neighbors = next(iter(DataLoader2(dp)))
-        R = input[alias.R]
-        neighbors[alias.Rij] = (
-            R[neighbors[alias.idx_j]]
-            - R[neighbors[alias.idx_i]]
-            + neighbors[alias.offsets]
+        R = input[Alias.R]
+        neighbors[Alias.Rij] = (
+            R[neighbors[Alias.idx_j]]
+            - R[neighbors[Alias.idx_i]]
+            + neighbors[Alias.offsets]
         )
 
         neighbors = self._sort_neighbors(neighbors)
@@ -68,9 +68,9 @@ class TestNeighborLists:
             torch.LongTensor: cell offsets
             torch.Tensor: distance vectors associated with each pair
         """
-        idx_i = neighbors[alias.idx_i]
-        idx_j = neighbors[alias.idx_j]
-        Rij = neighbors[alias.Rij]
+        idx_i = neighbors[Alias.idx_i]
+        idx_j = neighbors[Alias.idx_j]
+        Rij = neighbors[Alias.Rij]
 
         sort_idx = self._get_unique_idx(idx_i, idx_j, Rij)
 

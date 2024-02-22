@@ -2,7 +2,7 @@ import torch
 
 from torchdata.datapipes.iter import IterDataPipe
 from torchdata.datapipes import functional_datapipe
-from molpot import alias
+from molpot import Alias
 
 class Typifier(IterDataPipe):
     pass
@@ -10,7 +10,7 @@ class Typifier(IterDataPipe):
 @functional_datapipe("identity_typify")
 class Identity(Typifier):
     
-    def __init__(self, source_dp: IterDataPipe, src: str = alias.Z, dst: str = alias.atype):
+    def __init__(self, source_dp: IterDataPipe, src: str = Alias.Z, dst: str = Alias.atype):
         self.dp = source_dp
         self.src = src
         self.dst = dst
