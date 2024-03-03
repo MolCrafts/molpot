@@ -1,14 +1,16 @@
-from molpot.piplines.dataset import RMD17
-from torchdata.datapipes import functional_datapipe
-import molpot as mpot
-import molpy as mp
-from typing import Iterable
-from torchdata.datapipes.iter import IterDataPipe
-from molpot import Alias, Config
-import torch
 import logging
-import numpy as np
 import tarfile as tar
+from typing import Iterable
+
+import molpy as mp
+import numpy as np
+import torch
+from torchdata.datapipes import functional_datapipe
+from torchdata.datapipes.iter import IterDataPipe
+
+import molpot as mpot
+from molpot import Alias, Config
+from molpot.piplines.dataset import RMD17
 
 __all__ = [
     "ChemFilesReader",
@@ -97,7 +99,7 @@ class rMD17Reader(IterDataPipe):
                 frame[Alias.rmd17.energy] = torch.tensor([energies], dtype=Config.ftype)
                 frame[Alias.rmd17.forces] = torch.tensor(forces, dtype=Config.ftype)
                 frame[Alias.Z] = torch.tensor(numbers, dtype=Config.stype)
-                frame[Alias.R] = torch.tensor(positions, dtype=Config.ftype)
+                frame[Alias.R] = torch.tensor(positions, requires_grad=True, dtype=Config.ftype)
                 frame[Alias.cell] = torch.zeros((3, 3), dtype=Config.ftype)
                 frame[Alias.pbc] = torch.tensor([False, False, False])
 

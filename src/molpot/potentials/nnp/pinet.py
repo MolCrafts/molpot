@@ -3,16 +3,19 @@
 # date: 2023-10-12
 # version: 0.0.1
 
-from molpot.potentials.nnp.ops import index_acc
-from .readout import Atomwise
-from ..base import NNPotential
+from typing import Callable, Optional, Sequence
+
 import torch
-from torch import nn
-from .layers import Dense, build_mlp
-import molpot as mpot
-from molpot import Alias
-from typing import Optional, Callable, Sequence
 import torch.nn.functional as F
+from torch import nn
+
+import molpot as mpot
+from molpot import Alias, Config
+from molpot.potentials.nnp.ops import index_acc
+
+from ..base import NNPotential
+from .layers import Dense, build_mlp
+from .readout import Atomwise
 
 
 class PILayer(nn.Module):
@@ -303,9 +306,10 @@ class PiNetP3(NNPotential):
 
         r_ij = tensors[Alias.Rij]
         d_ij = torch.norm(r_ij, dim=-1)
-        p1 = torch.squeeze(tensors[Alias.Z])
+        Z = tensors[Alias.Z]
+        p1 = torch.squeeze(Z)
         p1 = self.embbding(p1)
-        p3 = torch.zeros(p1.shape[0], 3, p1.shape[-1])
+        p3 = torch.zeros(p1.shape[0], 3, p1.shape[-1], requires_grad=True)
         fc = self.cutoff_fn(d_ij)
         basis = self.radial_basis_fn(d_ij, fc)
         # output = 0.0  # broadcast to shape:= (n_atoms, 1)

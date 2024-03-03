@@ -1,14 +1,18 @@
+import logging
+import time
 from pathlib import Path
 from pprint import pprint
+
 import torch
+from torch.export import export
+
+from molpot import Alias, Config
 from molpot.trainer.logger.adapter import LogAdapter
 from molpot.trainer.strategy.base import StrategyManager
 from molpot.trainer.strategy.early_stop import StepCounter
+
 from ..potentials import NNPotential
-import logging
-from molpot import Alias, Config
-import time
-from torch.export import export
+
 
 class BaseTrainer:
     def __init__(self, name, model: NNPotential, config: dict):
@@ -128,6 +132,7 @@ class Trainer(BaseTrainer):
             for data in self.train_data_loader:
                 for k, v in data.items():
                     data[k] = v.to(Config.device)
+
                 self.optimizer.zero_grad()
                 _output = self.model(data)
                 loss = self.criterion(_output, data)

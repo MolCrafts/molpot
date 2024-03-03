@@ -1,14 +1,15 @@
 import os
 from pathlib import Path
-import molpot as mpot
+
 import torch
 
+import molpot as mpot
+from molpot import Alias
 from molpot.potentials.base import NNPotential
 from molpot.potentials.nnp.layers import CosineCutoff, GaussianRBF
 from molpot.potentials.nnp.readout import Atomwise
-from molpot.trainer.metric.metrics import Identity
 from molpot.trainer.logger.adapter import ConsoleHandler, TensorBoardHandler
-from molpot import Alias
+from molpot.trainer.metric.metrics import Identity
 
 
 def load_rmd17() -> tuple[mpot.DataLoader, mpot.DataLoader]:
@@ -28,9 +29,9 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     arch = mpot.potentials.nnp.PiNetP3(
         n_atom_basis, 5, GaussianRBF(20, 5), CosineCutoff(5)
     )
-    energy_readout = Atomwise(16, input_key=Alias.T0, output_key=Alias.energy)
-    forces_readout = Atomwise(16, input_key=Alias.T1, output_key=Alias.forces, aggregation_mode=None)
-    model = NNPotential("pinet", arch, energy_readout, forces_readout)
+    energy_readout = Atomwise(16, [], 1, input_key=Alias.T0, output_key='per_atom_energy')
+    # forces_readout = Atomwise(16, 3, input_key=Alias.T1, output_key='per_atom_forces')
+    model = NNPotential("pinet", arch, energy_readout) #, forces_readout)
     criterion = mpot.MultiMSELoss(
         [1, 1],
         targets=[
