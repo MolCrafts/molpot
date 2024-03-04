@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+
 import molpot as mp
 
 class Potentials(nn.Sequential):
@@ -9,11 +10,11 @@ class Potentials(nn.Sequential):
         self._name = name
         self.derive_energy = derive_energy
 
-    def cite(self)->str:
+    def cite(self) -> str:
         raise NotImplementedError
-    
+
     @property
-    def name(self)->str:
+    def name(self) -> str:
         return self._name
     
     def forward(self, inputs:dict[str, dict]):
@@ -30,7 +31,7 @@ class Potentials(nn.Sequential):
         return inputs
 
 class Potential(nn.Module):
-    
+
     def __init__(self, name, *args, **kwargs):
         super().__init__()
         self._name = name

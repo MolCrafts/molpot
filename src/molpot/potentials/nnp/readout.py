@@ -1,11 +1,21 @@
+<<<<<<< HEAD
 from typing import Callable, Optional, Sequence
 from torch import nn
 from torch.nn import functional as F
 import torch
 from torch_scatter import scatter_add
+=======
+from typing import Callable, Dict, Optional, Sequence, Union
+
+import torch
+from torch import nn
+from torch.nn import functional as F
+
+>>>>>>> ef846de4acadadb52d411f04b6a330fb02315fe8
 from molpot import Alias
-from .ops import index_add
+
 from .layers import build_mlp
+
 
 class Atomwise(nn.Module):
     """
@@ -53,7 +63,7 @@ class Atomwise(nn.Module):
     def forward(self, inputs: dict[torch.Tensor]) -> dict[str, torch.Tensor]:
         # predict atomwise contributions
         y = self.outnet(inputs[self.input_key])
-        y = torch.squeeze(y, -1)
+        # y = torch.squeeze(y, -1)
         # aggregate
         # if self.aggregation_mode is not None:
         #     idx_m = inputs['_idx_m']

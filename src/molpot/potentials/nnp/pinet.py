@@ -6,14 +6,15 @@
 from .readout import Atomwise
 from ..base import Potential
 import torch
-from torch import nn
-from .layers import Dense, build_mlp
-import molpot as mpot
-from molpot import Alias
-from typing import Optional, Callable, Sequence
 import torch.nn.functional as F
 from .ops import index_add
 from torch_scatter import scatter_add
+from torch import nn
+import molpot as mpot
+from molpot import Alias, Config
+from .layers import Dense, build_mlp
+from .readout import Atomwise
+from typing import Callable, Optional, Sequence
 
 
 class PILayer(nn.Module):

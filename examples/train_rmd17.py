@@ -1,14 +1,15 @@
 import os
 from pathlib import Path
-import molpot as mpot
+
 import torch
 
+import molpot as mpot
+from molpot import Alias
 from molpot.potentials.base import Potentials
 from molpot.potentials.nnp.layers import CosineCutoff, GaussianRBF
 from molpot.potentials.nnp.readout import Atomwise
-from molpot.trainer.metric.metrics import Identity
 from molpot.trainer.logger.adapter import ConsoleHandler, TensorBoardHandler
-from molpot import Alias
+from molpot.trainer.metric.metrics import Identity
 
 
 def load_rmd17() -> tuple[mpot.DataLoader, mpot.DataLoader]:

@@ -1,14 +1,16 @@
-from molpot.piplines.dataset import RMD17
-from torchdata.datapipes import functional_datapipe
-import molpot as mpot
-import molpy as mp
-from typing import Iterable
-from torchdata.datapipes.iter import IterDataPipe
-from molpot import Alias, Config
-import torch
 import logging
-import numpy as np
 import tarfile as tar
+from typing import Iterable
+
+import molpy as mp
+import numpy as np
+import torch
+from torchdata.datapipes import functional_datapipe
+from torchdata.datapipes.iter import IterDataPipe
+
+import molpot as mpot
+from molpot import Alias, Config
+from molpot.piplines.dataset import RMD17
 
 __all__ = [
     "ChemFilesReader",
