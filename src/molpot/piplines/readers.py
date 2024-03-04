@@ -85,8 +85,8 @@ class rMD17Reader(IterDataPipe):
         self.source_dp = source_dp
 
     def __iter__(self):
-        for steam in self.source_dp:
-            data = np.load(steam, allow_pickle=True)
+        for data in self.source_dp:
+            data = np.load(data, allow_pickle=True)
 
             numbers = data["nuclear_charges"]
             for positions, energies, forces in zip(
@@ -94,11 +94,11 @@ class rMD17Reader(IterDataPipe):
             ):
                 frame = {}
                 frame[Alias.n_atoms] = torch.tensor(len(numbers), dtype=Config.stype)
-                frame[Alias.rmd17.energy] = torch.tensor([energies], dtype=Config.ftype)
+                frame[Alias.rmd17.energy] = torch.tensor(energies, dtype=Config.ftype)
                 frame[Alias.rmd17.forces] = torch.tensor(forces, dtype=Config.ftype)
                 frame[Alias.Z] = torch.tensor(numbers, dtype=Config.stype)
-                frame[Alias.R] = torch.tensor(positions, dtype=Config.ftype)
+                frame[Alias.R] = torch.tensor(positions, dtype=Config.ftype, requires_grad=True)
                 frame[Alias.cell] = torch.zeros((3, 3), dtype=Config.ftype)
                 frame[Alias.pbc] = torch.tensor([False, False, False])
 
-            yield frame
+                yield frame

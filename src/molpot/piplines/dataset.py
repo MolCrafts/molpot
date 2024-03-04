@@ -161,7 +161,6 @@ class RMD17(DataSet):
     def get_molecule(self, _tuple: str):
         filename = _tuple[0]
         if filename.endswith(f"{self.molecule}.npz"):
-            print(filename)
             return True
         return False
 

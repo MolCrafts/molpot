@@ -3,7 +3,7 @@ from pathlib import Path
 import molpot as mpot
 import torch
 
-from molpot.potentials.base import NNPotential
+from molpot.potentials.base import Potentials
 from molpot.potentials.nnp.layers import CosineCutoff, GaussianRBF
 from molpot.potentials.nnp.readout import Atomwise
 from molpot.trainer.metric.metrics import Identity
@@ -12,7 +12,7 @@ from molpot import Alias
 
 
 def load_rmd17() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    rmd17_dataset = mpot.dataset.RMD17(save_dir="rmd17", batch_size=64, total=1000, device="cuda")
+    rmd17_dataset = mpot.dataset.RMD17(save_dir="rmd17", batch_size=64, total=1000, device="cpu")
     dp = rmd17_dataset.prepare()
     train, valid = dp.calc_nblist(5).random_split(
         weights={"train": 0.8, "valid": 0.2}, seed=42
@@ -25,12 +25,16 @@ def load_rmd17() -> tuple[mpot.DataLoader, mpot.DataLoader]:
 def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     train_dataloader, valid_dataloader = load_rmd17
     n_atom_basis = 16
+    
     arch = mpot.potentials.nnp.PiNetP3(
-        n_atom_basis, 5, GaussianRBF(20, 5), CosineCutoff(5)
+        n_atom_basis, 2, GaussianRBF(20, 5), CosineCutoff(5)
     )
-    energy_readout = Atomwise(16, input_key=Alias.T0, output_key=Alias.energy)
-    forces_readout = Atomwise(16, input_key=Alias.T1, output_key=Alias.forces, aggregation_mode=None)
-    model = NNPotential("pinet", arch, energy_readout, forces_readout)
+    # define the readout layers
+    energy_readout = Atomwise(n_atom_basis, [], 1, input_key=Alias.pinet.p1, output_key=Alias.energy)
+    ## TODO: forces_readout = Atomwise(n_atom_basis, [], 3, input_key=Alias.T1, output_key=Alias.forces)
+
+    model = Potentials("pinet", arch, energy_readout, derive_energy=True)
+
     criterion = mpot.MultiMSELoss(
         [1, 1],
         targets=[
@@ -68,8 +72,8 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         },
         config={
             "save_dir": "model",
-            "device": {"type": "gpu", "n_gpu_use": 1},
-            "compile": True,
+            "device": {"type": "cpu"},
+            "compile": False,
             "report_rate": 2,
             "valid_rate": 5,
             "modify_lr_rate": 5,
@@ -77,8 +81,13 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         },
     )
 
-    trainer.train(10)
-
+    output = trainer.train(10)
+    # for data in train_dataloader:
+    #     output = model(data)
+    # energy = output[Alias.energy]
+    # from torchviz import make_dot
+    # make_dot(energy, params=dict(model.named_parameters()), show_attrs=True, show_saved=True, ).render("pinet3", format="png")
+    # print("done")
     return "done"
 
 

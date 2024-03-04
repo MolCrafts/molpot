@@ -1,7 +1,8 @@
-from typing import Callable, Dict, Optional, Sequence, Union
+from typing import Callable, Optional, Sequence
 from torch import nn
 from torch.nn import functional as F
 import torch
+from torch_scatter import scatter_add
 from molpot import Alias
 from .ops import index_add
 from .layers import build_mlp
@@ -19,7 +20,7 @@ class Atomwise(nn.Module):
         n_hidden: Optional[Sequence[int]] = None,
         n_out: int = 1,
         activation: Callable = F.silu,
-        aggregation_mode: str | None = "sum",
+        aggregate: str = "sum",
         input_key: str = '_T0',
         output_key: str = '_energy',
     ):
@@ -45,8 +46,7 @@ class Atomwise(nn.Module):
             [n_in, *n_hidden, n_out],
             activation=activation,
         )
-        self.aggregation_mode = aggregation_mode
-
+        self.aggregation = aggregate
         self.input_key = input_key
         self.output_key = output_key
 
@@ -55,13 +55,15 @@ class Atomwise(nn.Module):
         y = self.outnet(inputs[self.input_key])
         y = torch.squeeze(y, -1)
         # aggregate
-        if self.aggregation_mode is not None:
-            idx_m = inputs['_idx_m']
-            maxm = torch.max(idx_m) + 1
-            y = index_add(y, 0, idx_m, dim_size=maxm)
+        # if self.aggregation_mode is not None:
+        #     idx_m = inputs['_idx_m']
+        #     maxm = torch.max(idx_m) + 1
+        #     y = index_add(y, 0, idx_m, dim_size=maxm)
+        #     if self.aggregation_mode == "avg":
+        #         y = y / inputs['_n_atoms']
+        idx_m = inputs['_idx_m']
+        maxm = torch.max(idx_m) + 1
+        y = scatter_add(y, idx_m, dim=0, dim_size=maxm)
 
-
-            if self.aggregation_mode == "avg":
-                y = y / inputs['_n_atoms']
-        inputs[self.output_key] = y
+        inputs[self.output_key] += y
         return inputs

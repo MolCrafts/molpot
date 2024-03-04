@@ -42,8 +42,8 @@ class TorchNeighborList(nn.Module):
         inputs[Alias.idx_i] = idx_i.detach()
         inputs[Alias.idx_j] = idx_j.detach()
         inputs[Alias.offsets] = offset
-        inputs[Alias.Rij] = R[idx_j] - R[idx_i] + offset
-        inputs[Alias.dist] = distance
+        # inputs[Alias.Rij] = R[idx_j] - R[idx_i] + offset
+        # inputs[Alias.dist] = distance
 
         return inputs
 

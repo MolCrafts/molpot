@@ -4,14 +4,14 @@ import torch
 from molpot.trainer.logger.adapter import LogAdapter
 from molpot.trainer.strategy.base import StrategyManager
 from molpot.trainer.strategy.early_stop import StepCounter
-from ..potentials import NNPotential
+from ..potentials import Potentials
 import logging
 from molpot import Alias, Config
 import time
 from torch.export import export
 
 class BaseTrainer:
-    def __init__(self, name, model: NNPotential, config: dict):
+    def __init__(self, name, model: Potentials, config: dict):
         self.name = name
         self.model = model
         self.config = config
@@ -130,7 +130,7 @@ class Trainer(BaseTrainer):
                     data[k] = v.to(Config.device)
                 self.optimizer.zero_grad()
                 _output = self.model(data)
-                loss = self.criterion(_output, data)
+                loss = self.criterion(_output)
                 loss.backward()
                 self.optimizer.step()
                 _output[Alias.loss] = loss
