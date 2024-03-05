@@ -74,22 +74,22 @@ class QM9(DataSet):
         super().__init__("QM9", save_dir, total, batch_size, device)
         self.remove_uncharacterized = remove_uncharacterized
         self.atom_ref = atom_ref
-        Alias("QM9")
-        Alias.QM9.set("A", "_A", float, "GHz", "rotational_constant_A")
-        Alias.QM9.set("B", "_B", float, "GHz", "rotational_constant_B")
-        Alias.QM9.set("C", "_C", float, "GHz", "rotational_constant_C")
-        Alias.QM9.set("mu", "_mu", float, "Debye", "dipole_moment")
-        Alias.QM9.set("alpha", "_alpha", float, "a0 a0 a0", "isotropic_polarizability")
-        Alias.QM9.set("homo", "_homo", float, "hartree", "homo")
-        Alias.QM9.set("lumo", "_lumo", float, "hartree", "lump")
-        Alias.QM9.set("gap", "_gap", float, "hartree", "gap")
-        Alias.QM9.set("r2", "_r2", float, "a0 a0", "electronic_spatial_extent")
-        Alias.QM9.set("zpve", "_zpve", float, "hartree", "zpve")
-        Alias.QM9.set("U0", "_U0", float, "hartree", "_energy_U0")
-        Alias.QM9.set("U", "_U", float, "hartree", "_energy_U")
-        Alias.QM9.set("H", "_H", float, "hartree", "_enthalpy_H")
-        Alias.QM9.set("G", "_G", float, "hartree", "_free_energy")
-        Alias.QM9.set("Cv", "_Cv", float, "cal/mol/K", "_heat_capacity")
+        Alias("qm9")
+        Alias.qm9.set("A", "_A", float, "GHz", "rotational_constant_A")
+        Alias.qm9.set("B", "_B", float, "GHz", "rotational_constant_B")
+        Alias.qm9.set("C", "_C", float, "GHz", "rotational_constant_C")
+        Alias.qm9.set("mu", "_mu", float, "Debye", "dipole_moment")
+        Alias.qm9.set("alpha", "_alpha", float, "a0 a0 a0", "isotropic_polarizability")
+        Alias.qm9.set("homo", "_homo", float, "hartree", "homo")
+        Alias.qm9.set("lumo", "_lumo", float, "hartree", "lump")
+        Alias.qm9.set("gap", "_gap", float, "hartree", "gap")
+        Alias.qm9.set("r2", "_r2", float, "a0 a0", "electronic_spatial_extent")
+        Alias.qm9.set("zpve", "_zpve", float, "hartree", "zpve")
+        Alias.qm9.set("U0", "_U0", float, "hartree", "_energy_U0")
+        Alias.qm9.set("U", "_U", float, "hartree", "_energy_U")
+        Alias.qm9.set("H", "_H", float, "hartree", "_enthalpy_H")
+        Alias.qm9.set("G", "_G", float, "hartree", "_free_energy")
+        Alias.qm9.set("Cv", "_Cv", float, "cal/mol/K", "_heat_capacity")
 
     def prepare(self) -> IterDataPipe:
 
@@ -157,6 +157,10 @@ class RMD17(DataSet):
         Alias.rmd17.set("forces", "_rmd17_F", float, "kcal/mol/angstrom", "_forces")
         Alias.rmd17.set("R", "_rmd17_R", np.ndarray, "angstrom", "atomic coordinates")
         Alias.rmd17.set("Z", "_rmd17_Z", int, None, "atomic numbers in molecule")
+
+    @property
+    def Z(self):
+        return [1, 6, 8]
 
     def get_molecule(self, _tuple: str):
         filename = _tuple[0]

@@ -41,6 +41,9 @@ class PILayer(nn.Module):
 
 class DotLayer(nn.Module):
 
+    def __init__(self):
+        super().__init__()
+
     def forward(self, px):
         return torch.einsum("i...c,i...c->ic", px, px)
 
@@ -88,22 +91,16 @@ class IPLayer(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, i, idx_i):
-        maxm = torch.max(idx_i) + 1
-        # p = torch.zeros(maxm, *i.shape[1:], device=i.device, requires_grad=True)
-        # p = p.index_add(0, idx_i, i)
+    def forward(self, i, idx_i, p):
+        maxm = p.shape[0]
         p = scatter_add(i, idx_i, dim=0, dim_size=maxm)
         return p
 
 
-class OutLayer(nn.Module):
-    def __init__(self, n_channel: int, n_hidden: Sequence[int], out_units: int):
-        super().__init__()
+class ResUpdate(nn.Module):
 
-        self.ff_layer = build_mlp([n_channel, *n_hidden, out_units])
-
-    def forward(self, p):
-        return self.ff_layer(p)
+    def forward(self, new, old):
+        return new - old
 
 
 class GCBlockP1(nn.Module):
@@ -119,8 +116,8 @@ class GCBlockP1(nn.Module):
         p1 = self.pp_layer(p)
         i1 = self.pi_layer(p1, idx_i, idx_j, basis)
         i1 = self.ii_layer(i1)
-        p = self.ip_layer(i1, idx_i)
-        return p
+        p1 = self.ip_layer(i1, idx_j, p1)
+        return p1
 
 
 class GCBlockP3(nn.Module):
@@ -155,7 +152,7 @@ class GCBlockP3(nn.Module):
         i1 = self.pi1_layer(p1, idx_i, idx_j, basis)
         i1_1, i1_2, i1_3 = torch.split(i1, int(i1.shape[-1] / 3), dim=-1)
         i1 = self.ii1_layer(i1_1)
-        p1 = self.ip1_layer(i1, idx_i)
+        p1 = self.ip1_layer(i1, idx_j, p1)
 
         p3 = self.pp3_layer(p3)
         i3 = self.pi3_layer(p3, idx_i, idx_j, basis)
@@ -164,7 +161,7 @@ class GCBlockP3(nn.Module):
         scaled_r3 = self.i1r3_scale_layer(r3[..., None], i1_3)
 
         i3 = self.i3_add_layer(i3, scaled_r3)
-        p3 = self.ip3_layer(i3, idx_i)
+        p3 = self.ip3_layer(i3, idx_j, p3)
 
         p1 = self.dot_layer(p3) + p1
         p3 = self.p1p3_scale_layer(p3, p1)
@@ -209,7 +206,6 @@ class PiNet(Potential):
                 for _ in range(depth)
             ]
         )
-        self.out_layers = [OutLayer(n_atom_basis, out_nodes, 1) for _ in range(depth)]
 
     def forward(self, inputs: dict):
 
@@ -250,7 +246,6 @@ class PiNetP3(Potential):
         pp_nodes=[16, 16],
         pi_nodes=[16, 16],
         ii_nodes=[16, 16],
-        out_nodes=[16, 16],
         activation: Optional[Callable] = F.silu,
         max_z: int = 100,
     ):
@@ -263,12 +258,6 @@ class PiNetP3(Potential):
         Alias.pinet.set("p1", "_pinet_p1", torch.Tensor, None, "invariant property")
         Alias.pinet.set(
             "p3", "_pinet_p3", torch.Tensor, None, "rank1 equivalent property"
-        )
-        Alias.pinet.set(
-            "p5", "_pinet_p5", torch.Tensor, None, "rank2 equivalent property"
-        )
-        Alias.pinet.set(
-            "output_p1", "_pinet_output_p1", torch.Tensor, None, "output property"
         )
         self.cutoff_fn = cutoff_fn
         self.radial_basis_fn = radial_basis
@@ -284,8 +273,7 @@ class PiNetP3(Potential):
                 for _ in range(depth)
             ]
         )
-        self.out_layers = [OutLayer(n_atom_basis, out_nodes, 1) for _ in range(depth)]
-        # self.ann_output = Atomwise(1, [], 1, aggregation_mode=out_pool)
+        self.res_update = ResUpdate()
 
     def forward(self, inputs: dict):
 
@@ -293,7 +281,6 @@ class PiNetP3(Potential):
         idx_i = inputs[Alias.idx_i]
         idx_j = inputs[Alias.idx_j]
         offsets = inputs[Alias.offsets]
-        offsets = offsets.requires_grad_(True)
         r_ij = R[idx_i] - R[idx_j] + offsets
         d_ij = torch.norm(r_ij, dim=-1)
         p1 = torch.squeeze(inputs[Alias.Z])
@@ -301,9 +288,9 @@ class PiNetP3(Potential):
         p3 = torch.zeros(p1.shape[0], 3, p1.shape[-1], requires_grad=True)
         fc = self.cutoff_fn(d_ij)
         basis = self.radial_basis_fn(d_ij, fc)
-        # output = 0.0  # broadcast to shape:= (n_atoms, 1)
+
         for i in range(self.depth):
-            p1, p3 = self.gc_blocks[i](
+            next_p1, next_p3 = self.gc_blocks[i](
                 p1,
                 p3,
                 r_ij,
@@ -311,8 +298,8 @@ class PiNetP3(Potential):
                 idx_j,
                 basis,
             )
-            print(p1)
-            # output += self.out_layers[i](p1)
+            p1 = self.res_update(next_p1, p1)
+            p3 = self.res_update(next_p3, p3)
 
         inputs[Alias.pinet.p1] = p1
         inputs[Alias.pinet.p3] = p3

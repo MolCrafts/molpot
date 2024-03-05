@@ -12,7 +12,9 @@ from molpot import Alias
 
 
 def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    qm9_dataset = mpot.dataset.QM9(save_dir="qm9", batch_size=64, total=1000, device="cpu")
+    qm9_dataset = mpot.dataset.QM9(
+        save_dir="qm9", batch_size=64, total=1000, device="cpu"
+    )
     dp = qm9_dataset.prepare()
     train, valid = dp.calc_nblist(5).random_split(
         weights={"train": 0.8, "valid": 0.2}, seed=42
@@ -28,11 +30,11 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     arch = mpot.potentials.nnp.PaiNN(
         n_atom_basis, 3, GaussianRBF(20, 5), CosineCutoff(5)
     )
-    readout = Atomwise(16, input_key=Alias.T0, output_key=Alias.energy)
-    model = NNPotential("PaiNN", arch, readout)
-    criterion = mpot.MultiMSELoss([1], targets=[(Alias.energy, Alias.QM9.U)])
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.99)
+    readout = Atomwise(16, input_key=Alias.painn.p1, output_key=Alias.energy)
+    model = NNPotential("PaiNN", arch, readout, derive_energy=True)
+    criterion = mpot.MultiMSELoss([1], targets=[(Alias.energy, Alias.qm9.U)])
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.9)
 
     stagnation = mpot.strategy.Stagnation(Alias.loss, patience=torch.inf)
 
@@ -49,24 +51,26 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
             "metrics": {
                 "speed": Identity("speed"),
                 "loss": Identity(Alias.loss),
-                "energy_mae": mpot.metric.MAE("energy_mae", Alias.energy, Alias.QM9.U),
+                "energy_mae": mpot.metric.MAE(
+                    Alias.energy, Alias.qm9.U
+                ),
             },
             "handlers": [ConsoleHandler(), TensorBoardHandler()],
             "save_dir": "./log",
         },
         config={
-            # "resume": "model/painn-qm9.pt",
             "save_dir": "model",
-            "device": {"type": "gpu", "n_gpu_use": 1},
-            "compile": True,
-            "report_rate": 10,
-            "valid_rate": 10,
-            "modify_lr_rate": 100,
+            "device": {"type": "cpu"},
+            "compile": False,
+            "report_rate": 2,
+            "valid_rate": 5,
+            "modify_lr_rate": 5,
             "checkpoint_rate": 5,
         },
     )
 
-    trainer.train(10)
+
+    trainer.train(100)
 
     return "done"
 

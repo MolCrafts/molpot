@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
+from torch_scatter import scatter_add
 
 import molpot as mp
 
-class Potentials(nn.Sequential):
+class NNPotential(nn.Sequential):
 
     def __init__(self, name, *potentials, derive_energy: bool = True):
         super().__init__(*potentials)
@@ -19,16 +20,20 @@ class Potentials(nn.Sequential):
     
     def forward(self, inputs:dict[str, dict]):
 
-        if mp.Alias.energy not in inputs:
-            inputs[mp.Alias.energy] = 0
-
         inputs = super().forward(inputs)
+
+        inputs[mp.Alias.energy] = torch.squeeze(scatter_add(inputs[mp.Alias.energy], inputs[mp.Alias.idx_m], dim=0, dim_size=torch.max(inputs[mp.Alias.idx_m]) + 1))
+
         if self.derive_energy:
             # diff = R_j - R_i, so -dE/dR_j = -dE/ddiff, -dE/R_i = dE/ddiff 
             de_drij = torch.autograd.grad(torch.sum(inputs[mp.Alias.energy]), inputs[mp.Alias.R], retain_graph=True)[0]
             inputs[mp.Alias.forces] = de_drij
 
         return inputs
+
+
+class Potentials(nn.Sequential):
+    pass
 
 class Potential(nn.Module):
 

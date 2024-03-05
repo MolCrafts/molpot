@@ -4,7 +4,7 @@ import molpot.potentials.nnp as nnp
 from molpot import Config, Alias
 from molpot.potentials.nnp.pinet import DotLayer
 from .utils import assert_eqvar, assert_invar, rotate
-
+import numpy.testing as npt
 
 class TestPiNet:
 
@@ -106,7 +106,6 @@ class TestPiNet:
         p3 = torch.rand(n_atoms, n_dim, n_channels)
         p5 = torch.rand(n_atoms, n_dim, n_dim, n_channels)
 
-
         layer = nnp.pinet.IPLayer()
         output = layer(i1, idx_i, p1)
         assert output.shape == (n_atoms, n_channels)
@@ -170,30 +169,35 @@ class TestPiNet:
         pp_nodes = [16, 16]
         pi_nodes = [16, 16]
         ii_nodes = [16, 16]
+        R = torch.rand(n_atoms, 3)
+        offsets = torch.zeros(n_pairs, 3)
         p1 = torch.randint(0, n_atomtypes, (n_atoms,))
         idx_i = torch.randint(0, n_atoms, (n_pairs,))
         idx_j = torch.randint(0, n_atoms, (n_pairs,))
 
         layer = nnp.pinet.PiNet(n_basis, depth, radial_basis, cutoff_fn, pp_nodes, pi_nodes, ii_nodes)
         output = layer({
-            Alias.Rij : torch.rand(n_pairs, 3),
+            Alias.R : R,
+            Alias.offsets: offsets,
             Alias.Z : p1,
             Alias.idx_i : idx_i,
             Alias.idx_j : idx_j
         })
-        assert output[Alias.pinet.output_p1].shape == (n_atoms, 1)
+        assert output[Alias.pinet.p1].shape == (n_atoms, n_basis)
         actual = layer({
-            Alias.Rij : rotate(torch.rand(n_pairs, 3), *torch.rand(3)),
+            Alias.R : rotate(R, *torch.rand(3)),
+            Alias.offsets: offsets,
             Alias.Z : p1,
             Alias.idx_i : idx_i,
             Alias.idx_j : idx_j
-        })[Alias.pinet.output_p1]
+        })[Alias.pinet.p1]
         expect = layer({
-            Alias.Rij : torch.rand(n_pairs, 3),
+            Alias.R : R,
+            Alias.offsets: offsets,
             Alias.Z : p1,
             Alias.idx_i : idx_i,
             Alias.idx_j : idx_j
-        })[Alias.pinet.output_p1]
+        })[Alias.pinet.p1]
         assert torch.allclose(actual, expect)
 
     def test_gcblock_p3(self):
@@ -233,28 +237,35 @@ class TestPiNet:
         pp_nodes = [16, 16]
         pi_nodes = [16, 16]
         ii_nodes = [16, 16]
+        R = torch.rand(n_atoms, 3)
         p1 = torch.randint(0, n_atomtypes, (n_atoms,))
         idx_i = torch.randint(0, n_atoms, (n_pairs,))
         idx_j = torch.randint(0, n_atoms, (n_pairs,))
+        offsets = torch.zeros(n_pairs, 3)
 
         layer = nnp.pinet.PiNetP3(n_basis, depth, radial_basis, cutoff_fn, pp_nodes, pi_nodes, ii_nodes)
         output = layer({
-            Alias.Rij : torch.rand(n_pairs, 3),
+            Alias.R : R,
+            Alias.offsets: offsets,
             Alias.Z : p1,
             Alias.idx_i : idx_i,
             Alias.idx_j : idx_j
         })
-        assert output[Alias.pinet.output_p1].shape == (n_atoms, 1)
+        assert output[Alias.pinet.p1].shape == (n_atoms, n_basis)
+        assert output[Alias.pinet.p3].shape == (n_atoms, 3, n_basis)
         actual = layer({
-            Alias.Rij : rotate(torch.rand(n_pairs, 3), *torch.rand(3)),
+            Alias.R : rotate(R, *torch.rand(3)),
+            Alias.offsets: offsets,
             Alias.Z : p1,
             Alias.idx_i : idx_i,
             Alias.idx_j : idx_j
-        })[Alias.pinet.output_p1]
+        })[Alias.pinet.p1]
         expect = layer({
-            Alias.Rij : torch.rand(n_pairs, 3),
+            Alias.R : R,
+            Alias.offsets: offsets,
             Alias.Z : p1,
             Alias.idx_i : idx_i,
             Alias.idx_j : idx_j
-        })[Alias.pinet.output_p1]
+        })[Alias.pinet.p1]
+        
         assert torch.allclose(actual, expect)

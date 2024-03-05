@@ -128,30 +128,35 @@ class Trainer(BaseTrainer):
         self.strategies.append(stepCounter)
         nstep = self.start_step
         nepoch = self.start_epoch
+        start_time = time.time()
         while True:
             # Training
             self.model.train()
             for data in self.train_data_loader:
-                for k, v in data.items():
-                    data[k] = v.to(Config.device)
-
+                
                 self.optimizer.zero_grad()
                 _output = self.model(data)
-                loss = self.criterion(_output)
+                loss = self.criterion(_output, data)
                 loss.backward()
                 self.optimizer.step()
                 _output[Alias.loss] = loss
                 output.update(_output)
 
+                if nstep % self.config["valid_rate"] == 0:
+                    # Validation
+                    self.model.eval()
+                    # for data in self.valid_data_loader:
+                    #     _output = self.model(data)
+                    #     _output = self.criterion(_output)
+                    self.model.train()
+
                 if nstep % self.config["report_rate"] == 0:
                     current_time = time.time()
-                    elapsed_time = current_time - self.start_time
-                    speed = (nstep - self.start_step) / elapsed_time
+                    elapsed_time = current_time - start_time
+                    speed = self.config["report_rate"] / elapsed_time
                     output["speed"] = speed
+                    start_time = current_time
                     self.logger_adapter(nstep, nepoch, output, data)
-
-                if nstep % self.config["modify_lr_rate"] == 0:
-                    self.lr_scheduler.step()
 
                 if self.strategies(nstep, output, data):
                     if nstep < nsteps:
@@ -160,17 +165,9 @@ class Trainer(BaseTrainer):
                         )
                     self._post_train()
                     return output
-
-                if nstep % self.config["valid_rate"] == 0:
-                    # Validation
-                    self.model.eval()
-                    with torch.no_grad():
-                        for data in self.valid_data_loader:
-                            for k, v in data.items():
-                                data[k] = v.to(Config.device)
-                            _output = self.model(data)
-                            _output = self.criterion(_output, data)
-                    self.model.train()
+                
+                if nstep % self.config["modify_lr_rate"] == 0:
+                    self.lr_scheduler.step()
 
                 if nstep % self.checkpoint_rate == 0:
                     checkpoint_name = self.checkpoint_dir / f"{self.name}-{nstep}.pt"

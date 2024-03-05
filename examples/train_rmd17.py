@@ -15,7 +15,7 @@ from molpot.trainer.metric.metrics import Identity
 def load_rmd17() -> tuple[mpot.DataLoader, mpot.DataLoader]:
     rmd17_dataset = mpot.dataset.RMD17(save_dir="rmd17", batch_size=64, total=1000, device="cpu")
     dp = rmd17_dataset.prepare()
-    train, valid = dp.calc_nblist(5).random_split(
+    train, valid = dp.atomic_dress(types_list=rmd17_dataset.Z, key=Alias.Z, prop=Alias.rmd17.energy, buffer=1000).calc_nblist(5).random_split(
         weights={"train": 0.8, "valid": 0.2}, seed=42
     )
     train_dataloader = mpot.create_dataloader(train)
@@ -27,20 +27,20 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     train_dataloader, valid_dataloader = load_rmd17
     n_atom_basis = 16
     
-    arch = mpot.potentials.nnp.PiNetP3(
+    arch = mpot.potentials.nnp.PiNet(
         n_atom_basis, 2, GaussianRBF(20, 5), CosineCutoff(5)
     )
     # define the readout layers
     energy_readout = Atomwise(n_atom_basis, [], 1, input_key=Alias.pinet.p1, output_key=Alias.energy)
     ## TODO: forces_readout = Atomwise(n_atom_basis, [], 3, input_key=Alias.T1, output_key=Alias.forces)
 
-    model = Potentials("pinet", arch, energy_readout, derive_energy=True)
+    model = mpot.NNPotential("pinet", arch, energy_readout, derive_energy=True)
 
     criterion = mpot.MultiMSELoss(
-        [1, 1],
+        [1],
         targets=[
             (Alias.energy, Alias.rmd17.energy),
-            (Alias.forces, Alias.rmd17.forces),
+            # (Alias.forces, Alias.rmd17.forces),
         ],
     )
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -64,9 +64,9 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
                 "energy_mae": mpot.metric.MAE(
                     Alias.energy, Alias.rmd17.energy
                 ),
-                "forces_mae": mpot.metric.MAE(
-                    Alias.forces, Alias.rmd17.forces
-                ),
+                # "forces_mae": mpot.metric.MAE(
+                #     Alias.forces, Alias.rmd17.forces
+                # ),
             },
             "handlers": [ConsoleHandler(), TensorBoardHandler()],
             "save_dir": "./log",
@@ -82,7 +82,7 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         },
     )
 
-    output = trainer.train(10)
+    output = trainer.train(10000)
     # for data in train_dataloader:
     #     output = model(data)
     # energy = output[Alias.energy]

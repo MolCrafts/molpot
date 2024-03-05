@@ -167,6 +167,10 @@ class PaiNN(nn.Module):
 
         self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0).to(Config.device)
 
+        Alias("painn")
+        Alias.painn.set("p1", "_painn_p1", torch.Tensor, None, "invariant property")
+        Alias.painn.set("p3", "_painn_p3", torch.Tensor, None, "equivariant property")
+
         self.share_filters = shared_filters
 
         if shared_filters:
@@ -215,9 +219,13 @@ class PaiNN(nn.Module):
         """
         # get tensors from input dictionary
         atomic_numbers = inputs[Alias.Z]
-        r_ij = inputs[Alias.Rij]
+        R = inputs[Alias.R]
         idx_i = inputs[Alias.idx_i]
         idx_j = inputs[Alias.idx_j]
+        offsets = inputs[Alias.offsets]
+        r_ij = R[idx_i] - R[idx_j] + offsets
+        d_ij = torch.norm(r_ij, dim=-1)
+
         n_atoms = atomic_numbers.shape[0]
 
         # compute atom and pair features
@@ -242,7 +250,7 @@ class PaiNN(nn.Module):
 
         q = q.squeeze(1)
 
-        inputs[Alias.T0] = q
-        inputs[Alias.T1] = mu
+        inputs[Alias.painn.p1] = q
+        inputs[Alias.painn.p3] = mu
         return inputs
     

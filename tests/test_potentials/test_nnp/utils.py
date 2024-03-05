@@ -52,7 +52,7 @@ def foreach_rotate(x, eqvar_index, roll, pitch, yaw):
     #     }
 
 
-def allclose(a, b, verbose: bool = True, rtol=1e-5, atol=1e-5):
+def allclose(a, b, verbose: bool = True, rtol=1e-8, atol=1e-8):
     if verbose:
         npt.assert_allclose(
             a.detach().numpy(), b.detach().numpy(), rtol=rtol, atol=atol

@@ -1,3 +1,3 @@
 from .nnp import *
 from .classical import *
-from .base import Potentials
+from .base import Potentials, NNPotential
