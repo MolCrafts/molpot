@@ -1,6 +1,7 @@
+import numpy as np
 import torch
 from torch import nn
-import numpy as np
+
 from molpot import Alias, Config
 
 __all__ = [
@@ -36,14 +37,12 @@ class TorchNeighborList(nn.Module):
         cell = inputs[Alias.cell]
         pbc = inputs[Alias.pbc]
 
-        idx_i, idx_j, offset, distance = self._build_neighbor_list(
+        idx_i, idx_j, offset = self._build_neighbor_list(
             R, cell, pbc, self._cutoff
         )
         inputs[Alias.idx_i] = idx_i.detach()
         inputs[Alias.idx_j] = idx_j.detach()
         inputs[Alias.offsets] = offset
-        # inputs[Alias.Rij] = R[idx_j] - R[idx_i] + offset
-        # inputs[Alias.dist] = distance
 
         return inputs
 
@@ -53,7 +52,7 @@ class TorchNeighborList(nn.Module):
             shifts = torch.zeros(0, 3, device=cell.device, dtype=torch.long)
         else:
             shifts = self._get_shifts(cell, pbc, cutoff)
-        idx_i, idx_j, offset, distance = self._get_neighbor_pairs(
+        idx_i, idx_j, offset = self._get_neighbor_pairs(
             positions, cell, shifts, cutoff
         )
 
@@ -70,7 +69,7 @@ class TorchNeighborList(nn.Module):
         offset = bi_offset[sorted_idx]
         offset = torch.mm(offset.to(cell.dtype), cell)
 
-        return idx_i, idx_j, offset, distance
+        return idx_i, idx_j, offset
 
     def _get_neighbor_pairs(self, positions, cell, shifts, cutoff):
         """Compute pairs of atoms that are neighbors
@@ -119,7 +118,7 @@ class TorchNeighborList(nn.Module):
         atom_index_j = pj_all[pair_index]
         offsets = shifts_all[pair_index]
 
-        return atom_index_i, atom_index_j, offsets, distances[cutoff_mask]
+        return atom_index_i, atom_index_j, offsets
 
     def _get_shifts(self, cell, pbc, cutoff):
         """Compute the shifts of unit cell along the given cell vectors to make it

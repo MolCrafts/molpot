@@ -27,8 +27,8 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     train_dataloader, valid_dataloader = load_rmd17
     n_atom_basis = 16
     
-    arch = mpot.potentials.nnp.PiNet(
-        n_atom_basis, 2, GaussianRBF(20, 5), CosineCutoff(5)
+    arch = mpot.potentials.nnp.PiNetP3(
+        n_atom_basis, 2, GaussianRBF(20, 5), CosineCutoff(5),
     )
     # define the readout layers
     energy_readout = Atomwise(n_atom_basis, [], 1, input_key=Alias.pinet.p1, output_key=Alias.energy)
@@ -43,7 +43,7 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
             # (Alias.forces, Alias.rmd17.forces),
         ],
     )
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.9)
 
     stagnation = mpot.strategy.Stagnation(Alias.loss, patience=torch.inf)
