@@ -97,13 +97,13 @@ class QM9(DataSet):
 
         cache_dp = (
             IterableWrapper([url])
-            .on_disk_cache(filepath_fn=self.save_to)
+            # .on_disk_cache(filepath_fn=self.save_to)
             .read_from_http()
             .load_from_bz2(length=self.total)
             .load_from_tar(length=self.total)
         )
 
-        cache_dp.end_caching(same_filepath_fn=True)
+        # cache_dp.end_caching(same_filepath_fn=True)
         dp = cache_dp.map(read_stream_as_text).read_qm9()
 
         return self._prepare(dp)

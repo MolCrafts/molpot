@@ -1,3 +1,4 @@
+from itertools import cycle
 import logging
 import time
 from pathlib import Path
@@ -129,14 +130,15 @@ class Trainer(BaseTrainer):
         nstep = self.start_step
         nepoch = self.start_epoch
         start_time = time.time()
+        self.model.train()
+
         while True:
             # Training
-            self.model.train()
             for data in self.train_data_loader:
-                
-                self.optimizer.zero_grad()
+        
                 _output = self.model(data)
                 loss = self.criterion(_output, data)
+                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
                 _output[Alias.loss] = loss
