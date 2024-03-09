@@ -1,11 +1,15 @@
 from functools import partial
+
+from torchdata.dataloader2 import (DataLoader2, InProcessReadingService,
+                                   MultiProcessingReadingService)
 from torchdata.datapipes.iter import IterDataPipe
-from torchdata.dataloader2 import DataLoader2, MultiProcessingReadingService, InProcessReadingService
+
 
 class DataLoader(DataLoader2):
     pass
 
-def create_dataloader(datapipe: IterDataPipe, nworkers:int=0) -> DataLoader:
+
+def create_dataloader(datapipe: IterDataPipe, nworkers: int = 0) -> DataLoader:
 
     datapipe = datapipe.collate_data().cycle()
 
