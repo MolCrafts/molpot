@@ -26,12 +26,15 @@ def load_rmd17() -> tuple[mpot.DataLoader, mpot.DataLoader]:
 def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     train_dataloader, valid_dataloader = load_rmd17
     n_atom_basis = 16
-    
+    pp_nodes = [64, 64, 64, 64]
+    pi_nodes = [64, 64, 64, 64]
+    ii_nodes = [64, 64]
     arch = mpot.potentials.nnp.PiNetP3(
-        n_atom_basis, 2, GaussianRBF(20, 5), CosineCutoff(5),
+        n_atom_basis, 2, GaussianRBF(n_atom_basis, 5), CosineCutoff(5),
+        pp_nodes, pi_nodes, ii_nodes
     )
     # define the readout layers
-    energy_readout = Atomwise(n_atom_basis, [], 1, input_key=Alias.pinet.p1, output_key=Alias.energy)
+    energy_readout = Atomwise(pp_nodes[-1], [64], 1, input_key=Alias.pinet.p1, output_key=Alias.energy)
     ## TODO: forces_readout = Atomwise(n_atom_basis, [], 3, input_key=Alias.T1, output_key=Alias.forces)
 
     model = mpot.NNPotential("pinet", arch, energy_readout, derive_energy=True)

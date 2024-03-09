@@ -20,22 +20,36 @@ from typing import Callable, Optional, Sequence
 class PILayer(nn.Module):
     def __init__(self, n_channel: int, n_hidden: Sequence[int], n_basis: int, **kwargs):
         super().__init__()
-        self.n_basis = n_basis
-        self.n_neurons = [n_channel * 2, *n_hidden, n_hidden[-1] * n_basis]
 
+        self.n_neurons = [n_channel, *n_hidden, n_basis]
+
+        # self.w1 = build_mlp(
+        #     self.n_neurons, activation=None, last_bias=False, **kwargs
+        # )
+        # self.w2 = build_mlp(
+        #     self.n_neurons, activation=None, last_bias=False, **kwargs
+        # )
+        self.basis_layer = build_mlp(
+            [n_basis, n_channel]
+        )
         self.ff_layer = build_mlp(
             self.n_neurons, activation=None, last_bias=False, **kwargs
         )
 
     def forward(self, prop, idx_i, idx_j, basis):
         prop_i = prop[idx_i]
-        prop_j = prop[idx_j]  # (n_pairs, n_channel)
-        inter = torch.cat([prop_i, prop_j], axis=-1)
-        inter = self.ff_layer(inter)  # NOTE: weight? (n_pairs, n_hidden[-1] * n_basis)
-        inter = inter.reshape(
-            [*inter.shape[:-1], self.n_neurons[-2], self.n_basis]
-        )  # (n_pairs, n_hidden[-1], n_basis)
-        inter = torch.einsum("i...c,ic->i...", inter, basis)
+        prop_j = prop[idx_j]  # (n_pairs, n_channel, n_basis)
+        # inter = torch.cat([prop_i, prop_j], axis=-1)
+        # inter = self.ff_layer(inter)  # NOTE: weight? (n_pairs, n_hidden[-1] * n_basis)
+        # inter = inter.reshape(
+        #     [*inter.shape[:-1], self.n_neurons[-2], self.n_basis]
+        # )  # (n_pairs, n_hidden[-1], n_basis)
+        # inter = torch.einsum("i...c,ic->i...", inter, basis)
+        # return inter
+        prop_i = torch.einsum("i...c,ic->i...", prop_i, basis)
+        prop_j = torch.einsum("i...c,ic->i...", prop_j, basis)
+
+        inter = self.ff_layer(prop_i + prop_j)
         return inter
 
 
@@ -125,11 +139,10 @@ class GCBlockP3(nn.Module):
         super().__init__()
 
         pi1_nodes = pi_nodes.copy()
-        pi1_nodes[-1] = pi1_nodes[-1] * 3
         pi3_nodes = pi_nodes.copy()
 
         self.pp1_layer = build_mlp(pp_nodes, activation)
-        self.pi1_layer = PILayer(pp_nodes[-1], pi1_nodes, n_basis)
+        self.pi1_layer = PILayer(pp_nodes[-1], pi1_nodes, n_basis*3)
         self.ii1_layer = build_mlp(ii_nodes, activation)
         self.ip1_layer = IPLayer()
 
@@ -265,6 +278,10 @@ class PiNetP3(Potential):
         self.n_atom_basis = n_atom_basis
         self.embbding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
 
+        self.init_gc_blocks = GCBlockP3(
+            [self.n_basis, *pp_nodes], pi_nodes, ii_nodes, self.n_basis, activation
+        )
+
         self.gc_blocks = nn.Sequential(
             *[
                 GCBlockP3(
@@ -283,17 +300,27 @@ class PiNetP3(Potential):
         offsets = inputs[Alias.offsets]
         r_ij = R[idx_i] - R[idx_j] + offsets
         d_ij = torch.norm(r_ij, dim=-1)
+        norm_r_ij = r_ij / d_ij[...,None]
         p1 = torch.squeeze(inputs[Alias.Z])
         p1 = self.embbding(p1)
         p3 = torch.zeros(p1.shape[0], 3, p1.shape[-1], requires_grad=True)
         fc = self.cutoff_fn(d_ij)
         basis = self.radial_basis_fn(d_ij, fc)
 
+        p1, p3 = self.init_gc_blocks(
+            p1,
+            p3,
+            norm_r_ij,
+            idx_i,
+            idx_j,
+            basis,
+        )
+
         for i in range(self.depth):
             next_p1, next_p3 = self.gc_blocks[i](
                 p1,
                 p3,
-                r_ij,
+                norm_r_ij,
                 idx_i,
                 idx_j,
                 basis,
