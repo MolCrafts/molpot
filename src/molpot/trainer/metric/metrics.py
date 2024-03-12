@@ -2,7 +2,7 @@ import torch
 
 from molpot.statistic.tracker import Tracker
 
-__all__ = ["Accuracy", "TopKAccuracy", "MAE"]
+__all__ = ["Accuracy", "TopKAccuracy", "MAE", "Identity", "StepSpeed"]
 
 class Metric:
     
@@ -78,3 +78,12 @@ def track(metric):
         tracker(metric(step, output, data))
         return (tracker.mean, tracker.stddev)
     return update
+
+class StepSpeed(Metric):
+
+    def __init__(self):
+        super().__init__("step_speed")
+
+    def __call__(self, outputs, inputs):
+        elaspse_time = outputs["this_report_time"] - outputs["last_report_time"]
+        return outputs["elaspse_time"] / elaspse_time 

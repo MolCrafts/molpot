@@ -1,9 +1,9 @@
+from typing import Callable, Sequence, Union
+
 import torch
 import torch.nn as nn
-from typing import Callable, Union, Sequence
 import torch.nn.functional as F
-from torch.nn.init import xavier_uniform_
-from torch.nn.init import zeros_
+from torch.nn.init import uniform_, xavier_uniform_, zeros_
 
 from molpot import Config
 
@@ -11,8 +11,6 @@ from molpot import Config
 def build_mlp(
     n_neurons: Union[int, Sequence[int]],
     activation: Union[Callable, nn.Module] | None = None,
-    last_bias: bool = True,
-    last_zero_init: bool = False,
     **kwargs
 ) -> nn.Module:
     """
@@ -34,26 +32,12 @@ def build_mlp(
     # get list of number of nodes in input, hidden & output layers
 
     n_layers = len(n_neurons)
-
+    assert n_layers > 1, "At least two layers are required."
     # assign a Dense layer (with activation function) to each hidden layer
     layers = [
         Dense(n_neurons[i], n_neurons[i + 1], activation=activation, **kwargs)
-        for i in range(n_layers - 2)
+        for i in range(n_layers - 1)
     ]
-    # assign a Dense layer (without activation function) to the output layer
-    if last_zero_init:
-        layers.append(
-            Dense(
-                n_neurons[-2],
-                n_neurons[-1],
-                activation=None,
-                weight_init=torch.nn.init.zeros_,
-                **kwargs
-            )
-        )
-    else:
-        layers.append(Dense(n_neurons[-2], n_neurons[-1], activation=None, bias=last_bias))
-    # put all layers together to make the network
     out_net = nn.Sequential(*layers)
     return out_net
 

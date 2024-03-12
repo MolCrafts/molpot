@@ -4,8 +4,9 @@
 # version: 0.0.1
 
 from collections import defaultdict
-import torch
+
 import numpy as np
+import torch
 
 __all__ = ["DataInspector"]
 

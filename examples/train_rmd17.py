@@ -13,9 +13,10 @@ from molpot.trainer.metric.metrics import Identity
 
 
 def load_rmd17() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    rmd17_dataset = mpot.dataset.RMD17(save_dir="rmd17", batch_size=64, total=1000, device="cpu")
+    rmd17_dataset = mpot.dataset.RMD17(save_dir="rmd17", batch_size=64, device="cpu", atom_dress=True, total=1000)
     dp = rmd17_dataset.prepare()
-    train, valid = dp.atomic_dress(types_list=rmd17_dataset.Z, key=Alias.Z, prop=Alias.rmd17.energy, buffer=1000).calc_nblist(5).random_split(
+    # dp = dp.atomic_dress(types_list=[1, 6, 8], key=Alias.Z, prop=Alias.rmd17.energy, buffer=1000)
+    train, valid = dp.calc_nblist(4.5).random_split(
         weights={"train": 0.8, "valid": 0.2}, seed=42
     )
     train_dataloader = mpot.create_dataloader(train)
@@ -25,19 +26,20 @@ def load_rmd17() -> tuple[mpot.DataLoader, mpot.DataLoader]:
 
 def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     train_dataloader, valid_dataloader = load_rmd17
-    n_atom_basis = 16
+    n_atom_basis = 10
+    n_atom_types = 3
     pp_nodes = [64, 64, 64, 64]
-    pi_nodes = [64, 64, 64, 64]
-    ii_nodes = [64, 64]
-    arch = mpot.potentials.nnp.PiNetP3(
-        n_atom_basis, 2, GaussianRBF(n_atom_basis, 5), CosineCutoff(5),
+    pi_nodes = [64, 64]
+    ii_nodes = [64, 64, 64, 64]
+    arch = mpot.potentials.nnp.PiNet(n_atom_types,
+        n_atom_basis, 5, GaussianRBF(n_atom_basis, 5), CosineCutoff(5),
         pp_nodes, pi_nodes, ii_nodes
     )
     # define the readout layers
-    energy_readout = Atomwise(pp_nodes[-1], [64], 1, input_key=Alias.pinet.p1, output_key=Alias.energy)
+    energy_readout = Atomwise(ii_nodes[-1], [64, 32], 1, input_key=Alias.pinet.p1, output_key=Alias.energy)
     ## TODO: forces_readout = Atomwise(n_atom_basis, [], 3, input_key=Alias.T1, output_key=Alias.forces)
 
-    model = mpot.NNPotential("pinet", arch, energy_readout, derive_energy=True)
+    model = mpot.NNPotential("pinet", arch, energy_readout, derive_energy=False)
 
     criterion = mpot.MultiMSELoss(
         [1],
@@ -46,8 +48,8 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
             # (Alias.forces, Alias.rmd17.forces),
         ],
     )
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.9)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.994)
 
     stagnation = mpot.strategy.Stagnation(Alias.loss, patience=torch.inf)
 
@@ -62,7 +64,7 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         strategies=[stagnation],
         logger={
             "metrics": {
-                "speed": Identity("speed"),
+                "speed": mpot.metric.StepSpeed(),
                 "loss": Identity(Alias.loss),
                 "energy_mae": mpot.metric.MAE(
                     Alias.energy, Alias.rmd17.energy
@@ -78,20 +80,20 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
             "save_dir": "model",
             "device": {"type": "cpu"},
             "compile": False,
-            "report_rate": 2,
-            "valid_rate": 5,
-            "modify_lr_rate": 5,
-            "checkpoint_rate": 5,
+            "report_rate": 1,
+            "valid_rate": 10000,
+            "modify_lr_rate": 10000,
+            "checkpoint_rate": 10000,
         },
     )
 
-    output = trainer.train(10000)
-    # for data in train_dataloader:
-    #     output = model(data)
-    # energy = output[Alias.energy]
-    # from torchviz import make_dot
-    # make_dot(energy, params=dict(model.named_parameters()), show_attrs=True, show_saved=True, ).render("pinet3", format="png")
-    # print("done")
+    output = trainer.train(1000)
+    for data in train_dataloader:
+        output = model(data)
+    energy = output[Alias.energy]
+    from torchviz import make_dot
+    make_dot(energy, params=dict(model.named_parameters()), show_attrs=True, show_saved=True, ).render("pinet3", format="png")
+    print("done")
     return "done"
 
 

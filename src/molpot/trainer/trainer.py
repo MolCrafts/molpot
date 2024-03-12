@@ -1,6 +1,6 @@
-from itertools import cycle
 import logging
 import time
+from itertools import cycle
 from pathlib import Path
 from pprint import pprint
 
@@ -11,11 +11,9 @@ from molpot import Alias, Config
 from molpot.trainer.logger.adapter import LogAdapter
 from molpot.trainer.strategy.base import StrategyManager
 from molpot.trainer.strategy.early_stop import StepCounter
+
 from ..potentials import Potentials
-import logging
-from molpot import Alias, Config
-import time
-from torch.export import export
+
 
 class BaseTrainer:
     def __init__(self, name, model: Potentials, config: dict):
@@ -91,16 +89,16 @@ class Trainer(BaseTrainer):
 
         self.save_dir = Path(config["save_dir"])
 
-        if config.get("compile", False):
-            self.logger.info("Compiling model...")
-            self.model = torch.compile(self.model)
-            self.model = self.model.to(Config.device)
-
         self.train_data_loader = train_data_loader
         self.valid_data_loader = valid_data_loader
 
         self.lr_scheduler = lr_scheduler
+
         Config.set_device(config["device"])
+        self.model = self.model.to(Config.device)
+        if config.get("compile", False):
+            self.logger.info("Compiling model...")
+            self.model = torch.compile(self.model)
 
         self.strategies = StrategyManager(strategies)
 
@@ -124,58 +122,60 @@ class Trainer(BaseTrainer):
 
     def train(self, nsteps: int):
 
-        output = self._pre_train()
+        outputs = self._pre_train()
         stepCounter = StepCounter(nsteps)
         self.strategies.append(stepCounter)
-        nstep = self.start_step
-        nepoch = self.start_epoch
+        nstep = outputs["step"]
+        nepoch = outputs["epoch"]
         start_time = time.time()
+        outputs["last_report_time"] = start_time
+        outputs["elaspse_time"] = self.config["report_rate"]
         self.model.train()
 
         while True:
             # Training
-            for data in self.train_data_loader:
+            for inputs in self.train_data_loader:
         
-                _output = self.model(data)
-                loss = self.criterion(_output, data)
                 self.optimizer.zero_grad()
+                outputs.update(self.model(inputs))
+                loss = self.criterion(outputs, inputs)
                 loss.backward()
+                # torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.01)
+                # for name, parms in self.model.named_parameters():
+                #     print('-->name:', name, '-->grad_requirs:', parms.requires_grad, '--weight', torch.mean(parms.data), ' -->grad_value:', torch.mean(parms.grad))
                 self.optimizer.step()
-                _output[Alias.loss] = loss
-                output.update(_output)
+                outputs[Alias.loss] = loss
 
                 if nstep % self.config["valid_rate"] == 0:
                     # Validation
                     self.model.eval()
-                    # for data in self.valid_data_loader:
-                    #     _output = self.model(data)
-                    #     _output = self.criterion(_output)
+                    for inputs in self.valid_data_loader:
+                        _output = self.model(inputs)
+                        _output = self.criterion(_output, inputs)
                     self.model.train()
 
                 if nstep % self.config["report_rate"] == 0:
-                    current_time = time.time()
-                    elapsed_time = current_time - start_time
-                    speed = self.config["report_rate"] / elapsed_time
-                    output["speed"] = speed
-                    start_time = current_time
-                    self.logger_adapter(nstep, nepoch, output, data)
+                    outputs["this_report_time"] = time.time()
+                    self.logger_adapter(nstep, nepoch, outputs, inputs)
+                    outputs["last_report_time"] = outputs["this_report_time"]
 
-                if self.strategies(nstep, output, data):
+
+                if self.strategies(nstep, outputs, inputs):
                     if nstep < nsteps:
                         self.logger.warning(
                             f"Training stopped at step {nstep} due to early stopping."
                         )
-                    self._post_train()
-                    return output
+                    self._post_train(outputs)
+                    return outputs
                 
                 if nstep % self.config["modify_lr_rate"] == 0:
                     self.lr_scheduler.step()
 
                 if nstep % self.checkpoint_rate == 0:
                     checkpoint_name = self.checkpoint_dir / f"{self.name}-{nstep}.pt"
-                    self.train_state["step"] = nstep
-                    self.train_state["epoch"] = nepoch
-                    self.save_model(checkpoint_name, self.train_state)
+                    outputs["step"] = nstep
+                    outputs["epoch"] = nepoch
+                    self.save_model(checkpoint_name, outputs)
 
                 nstep += 1
 
@@ -183,31 +183,27 @@ class Trainer(BaseTrainer):
 
     def _pre_train(self):
         if self.start_step is None:
-            self.start_step = 0
-            self.start_epoch = 0
+            start_step = 0
+            start_epoch = 0
         self.logger_adapter.init()
-        self.train_state = {
-            "step": self.start_step,
-            "epoch": self.start_epoch,
+        outputs = {
+            "step": start_step,
+            "epoch": start_epoch,
             "finish": False,
             "optimizer": self.optimizer.state_dict(),
         }
-        return {}
+        return outputs
 
-    def _post_train(self):
+    def _post_train(self, outputs):
         final_model = self.save_dir / f"{self.name}.pt"
-        self.train_state["finish"] = True
-        self.save_model(final_model, self.train_state)
+        outputs["finish"] = True
+        self.save_model(final_model, outputs)
         return {}
     
-    def export(self):
-        for data in self.train_data_loader:
-            # TODO: export factory
-            pass
-
+    
 class OfflineALTrainer(Trainer):
-    def _post_iter(self, nstep: int, output: dict, data: dict):
-        return super()._post_iter(output)
+    def _post_iter(self, nstep: int, outputs: dict, inputs: dict):
+        return super()._post_iter(outputs)
 
 
 class OnlineALTrainer(Trainer):

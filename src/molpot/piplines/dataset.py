@@ -1,13 +1,18 @@
-from io import BytesIO, TextIOWrapper
-from torchdata.datapipes.iter import IterDataPipe, IterableWrapper
-from pathlib import Path
 import logging
+import tempfile
+from functools import partial
+from io import BytesIO, TextIOWrapper
+from itertools import islice
+from pathlib import Path
+
+import molpy as mp
 import numpy as np
 import torch
-import tempfile
-from itertools import islice
-import molpy as mp
-from molpot import Alias
+from torchdata.datapipes.iter import IterableWrapper, IterDataPipe
+
+from molpot import Alias, Config
+
+from .process import apply_dress, atomic_dress
 
 
 class DataSet:
@@ -43,11 +48,15 @@ class DataSet:
         else:
             save_dir = Path(self.save_dir) / basename
         return str(save_dir)
+    
+    def pre_load(self, dp: IterDataPipe) -> IterDataPipe:
+        raise NotImplementedError
 
-    def _prepare(self, dp: IterDataPipe) -> IterDataPipe:
-        dp = dp.header(self.total).set_length(self.total)
-        if self.device == "cuda":
-            dp = dp.pin_memory(device=self.device)
+    def prepare(self, dp: IterDataPipe) -> IterDataPipe:
+        if self.total > 0:
+            dp = dp.header(self.total).set_length(self.total)
+        if self.device == "cuda" or self.device == "gpu":
+            dp = dp.pin_memory(device="cuda")
         return dp.batch(self.batch_size)
 
 
@@ -148,6 +157,7 @@ class RMD17(DataSet):
         batch_size: int = 64,
         device: str = "cpu",
         molecule: str = "aspirin",
+        atom_dress: bool = True,
     ):
         super().__init__("rmd17", save_dir, total, batch_size, device)
         self.molecule = molecule
@@ -157,12 +167,13 @@ class RMD17(DataSet):
         Alias.rmd17.set("forces", "_rmd17_F", float, "kcal/mol/angstrom", "_forces")
         Alias.rmd17.set("R", "_rmd17_R", np.ndarray, "angstrom", "atomic coordinates")
         Alias.rmd17.set("Z", "_rmd17_Z", int, None, "atomic numbers in molecule")
+        self.atom_dress = atom_dress
 
     @property
     def Z(self):
-        return [1, 6, 8]
+        return torch.tensor([1, 6, 8])
 
-    def get_molecule(self, _tuple: str):
+    def _get_molecule(self, _tuple: str):
         filename = _tuple[0]
         if filename.endswith(f"{self.molecule}.npz"):
             return True
@@ -175,15 +186,35 @@ class RMD17(DataSet):
         cache_dp = (
             dp.on_disk_cache(filepath_fn=self.save_to)
             .read_from_http()
-            .load_from_bz2(length=self.total)
-            .load_from_tar(length=self.total)
-            .filter(filter_fn=self.get_molecule)
+            .load_from_bz2()
+            .load_from_tar()
+            .filter(filter_fn=self._get_molecule)
         )
 
-        dp = cache_dp.end_caching(same_filepath_fn=True).read_rmd17()
+        dp = cache_dp.end_caching(same_filepath_fn=True).read_rmd17().shuffle()
+        if self.atom_dress:
+            self._pre_load(dp)
+            dp = dp.map(partial(apply_dress, type_list=self.Z, key=Alias.Z, target=Alias.rmd17.energy, w=self.w))
 
-        return self._prepare(dp)
+        return super().prepare(dp)
+    
+    def _pre_load(self, dp: IterDataPipe) -> IterDataPipe:
 
+        frames = []
+
+        for frame in dp:
+            frames.append(frame)
+
+        if self.atom_dress:
+            x = [torch.eq(frame[Alias.Z], self.Z.unsqueeze(1)).sum(dim=-1) for frame in frames]
+            x = torch.stack(x).to(Config.device).to(torch.float32)
+            y = [frame[Alias.rmd17.energy] for frame in frames]
+            y = torch.tensor(y).to(Config.device)
+
+            self.w, self.residue = atomic_dress(x, y)
+            self.logger.info(f"atomic dressing summary: ")
+            self.logger.info(f"weights: {self.w}")
+            self.logger.info(f"residue: {self.residue}")
 
 class Trajectory(DataSet):
 
