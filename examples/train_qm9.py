@@ -17,6 +17,7 @@ def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
         save_dir="qm9", batch_size=10, total=1000, device="cpu"
     )
     dp = qm9_dataset.prepare()
+    dp = dp.atomic_dress(types_list=[1, 6, 7, 8, 9], key=Alias.Z, prop=Alias.qm9.U0, buffer=1000)
     train, valid = dp.calc_nblist(5).random_split(
         weights={"train": 0.8, "valid": 0.2}, seed=42
     )
@@ -31,7 +32,7 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     arch = mpot.potentials.nnp.PaiNN(
         n_atom_basis, 3, GaussianRBF(n_atom_basis, 5), CosineCutoff(5)
     )
-    readout = Atomwise(n_atom_basis, [64, 32, 16], 1, input_key=Alias.painn.p1, output_key=Alias.energy)
+    readout = Atomwise(n_atom_basis, [], 1, input_key=Alias.painn.p1, output_key=Alias.energy)
     model = NNPotential("PaiNN", arch, readout, derive_energy=True)
     criterion = mpot.MultiMSELoss([1], targets=[(Alias.energy, Alias.qm9.U0)])
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
@@ -50,10 +51,10 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         strategies=[stagnation],
         logger={
             "metrics": {
-                "speed": Identity("speed"),
+                "speed": mpot.metric.StepSpeed(),
                 "loss": Identity(Alias.loss),
                 "energy_mae": mpot.metric.MAE(
-                    Alias.energy, Alias.qm9.U
+                    Alias.energy, Alias.qm9.U0
                 ),
             },
             "handlers": [ConsoleHandler(), TensorBoardHandler()],
@@ -65,7 +66,7 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
             "compile": False,
             "report_rate": 5,
             "valid_rate": 5,
-            "modify_lr_rate": 5,
+            "modify_lr_rate": 10,
             "checkpoint_rate": 5,
         },
     )

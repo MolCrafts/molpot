@@ -118,7 +118,7 @@ class GaussianRBF(nn.Module):
     r"""Gaussian radial basis functions."""
 
     def __init__(
-        self, n_basis: int, cutoff: float, start: float = 0.0, trainable: bool = False
+        self, n_basis: int, cutoff: float, start: float = 0.0, widths:float|None = 1, trainable: bool = False
     ):
         r"""
         Args:
@@ -133,8 +133,14 @@ class GaussianRBF(nn.Module):
 
         # compute offset and width of Gaussian functions
         offset = torch.linspace(start, cutoff, n_basis)
-        widths = torch.abs(offset[1] - offset[0]) * torch.ones_like(offset)
         offset = offset.to(Config.device)
+        
+        if widths is None:
+            widths = torch.abs(offset[1] - offset[0]) * torch.ones_like(offset)
+            print("test")
+        else:
+            widths = torch.tensor(widths)
+            widths = widths.broadcast_to(n_basis)
         widths = widths.to(Config.device)
 
         if trainable:

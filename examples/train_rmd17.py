@@ -15,7 +15,7 @@ from molpot.trainer.metric.metrics import Identity
 def load_rmd17() -> tuple[mpot.DataLoader, mpot.DataLoader]:
     rmd17_dataset = mpot.dataset.RMD17(save_dir="rmd17", batch_size=64, device="cpu", atom_dress=True, total=1000)
     dp = rmd17_dataset.prepare()
-    # dp = dp.atomic_dress(types_list=[1, 6, 8], key=Alias.Z, prop=Alias.rmd17.energy, buffer=1000)
+    dp = dp.atomic_dress(types_list=[1, 6, 8], key=Alias.Z, prop=Alias.rmd17.energy, buffer=1000)
     train, valid = dp.calc_nblist(4.5).random_split(
         weights={"train": 0.8, "valid": 0.2}, seed=42
     )
@@ -36,7 +36,7 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         pp_nodes, pi_nodes, ii_nodes
     )
     # define the readout layers
-    energy_readout = Atomwise(ii_nodes[-1], [64, 32], 1, input_key=Alias.pinet.p1, output_key=Alias.energy)
+    energy_readout = Atomwise(ii_nodes[-1], [64, 32, 16], 1, input_key=Alias.pinet.p1, output_key=Alias.energy)
     ## TODO: forces_readout = Atomwise(n_atom_basis, [], 3, input_key=Alias.T1, output_key=Alias.forces)
 
     model = mpot.NNPotential("pinet", arch, energy_readout, derive_energy=False)

@@ -3,7 +3,7 @@ name = "molpot"
 version = "0.0.1"
 dependencies = [
     "numpy",
-    "molpy@git+https://github.com/MolCrafts/molpy.git@dev".
+    "molpy@git+https://github.com/MolCrafts/molpy.git@dev",
     "pytorch_scatter",
     "torchdata",
     "portalocker"

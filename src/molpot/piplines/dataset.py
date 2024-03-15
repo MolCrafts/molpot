@@ -115,7 +115,7 @@ class QM9(DataSet):
         # cache_dp.end_caching(same_filepath_fn=True)
         dp = cache_dp.map(read_stream_as_text).read_qm9()
 
-        return self._prepare(dp)
+        return super().prepare(dp)
 
     def _download_atomrefs(self):
         url = "https://ndownloader.figshare.com/files/3195395"

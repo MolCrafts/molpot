@@ -110,7 +110,7 @@ class Trainer(BaseTrainer):
 
         self.start_time = time.time()
         resume = config.get("resume", None)
-
+        print(resume)
         if resume:
             self.load_model(config["resume"])
         else:
