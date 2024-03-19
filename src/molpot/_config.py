@@ -1,5 +1,7 @@
-import torch
 import os
+
+import torch
+
 
 class Singleton(type):
     _instances = {}
@@ -16,6 +18,7 @@ class Config(metaclass=Singleton):
     device: torch.device = torch.device("cpu")
     ftype: torch.dtype = torch.float32
     stype: torch.dtype = torch.int32
+    itype: torch.dtype = torch.complex64
 
     def __init__(self):
         # 0 = all messages are logged (default behavior)
