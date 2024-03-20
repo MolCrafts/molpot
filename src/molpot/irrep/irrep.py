@@ -192,7 +192,7 @@ class Irrep(tuple):
         d = torch.det(R).sign()
         R = d[..., None, None] * R
         k = (1 - d) / 2
-        return self.D_from_angles(*_rotation.matrix_to_angles(R), k)
+        return self.D_from_angles(*rotation.matrix_to_angles(R), k)
 
     def D_from_axis_angle(self, axis, angle) -> torch.Tensor:
         r"""Matrix of the representation, see `Irrep.D_from_angles`
@@ -210,7 +210,7 @@ class Irrep(tuple):
         `torch.Tensor`
             tensor of shape :math:`(..., 2l+1, 2l+1)`
         """
-        return self.D_from_angles(*_rotation.axis_angle_to_angles(axis, angle))
+        return self.D_from_angles(*rotation.axis_angle_to_angles(axis, angle))
 
     @property
     def dim(self) -> int:
@@ -664,7 +664,7 @@ class Irreps(tuple):
         `torch.Tensor`
             tensor of shape :math:`(..., \mathrm{dim}, \mathrm{dim})`
         """
-        return self.D_from_angles(*_rotation.quaternion_to_angles(q), k)
+        return self.D_from_angles(*rotation.quaternion_to_angles(q), k)
 
     def D_from_matrix(self, R):
         r"""Matrix of the representation
@@ -682,7 +682,7 @@ class Irreps(tuple):
         d = torch.det(R).sign()
         R = d[..., None, None] * R
         k = (1 - d) / 2
-        return self.D_from_angles(*_rotation.matrix_to_angles(R), k)
+        return self.D_from_angles(*rotation.matrix_to_angles(R), k)
 
     def D_from_axis_angle(self, axis, angle):
         r"""Matrix of the representation
@@ -700,4 +700,4 @@ class Irreps(tuple):
         `torch.Tensor`
             tensor of shape :math:`(..., \mathrm{dim}, \mathrm{dim})`
         """
-        return self.D_from_angles(*_rotation.axis_angle_to_angles(axis, angle))
+        return self.D_from_angles(*rotation.axis_angle_to_angles(axis, angle))

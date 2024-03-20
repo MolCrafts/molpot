@@ -1,8 +1,10 @@
 from typing import Callable, Optional, Sequence
+
+import torch
 from torch import nn
 from torch.nn import functional as F
-import torch
 from torch_scatter import scatter_add
+
 from molpot import Alias
 
 from .layers import build_mlp
@@ -21,7 +23,7 @@ class Atomwise(nn.Module):
         n_hidden: Optional[Sequence[int]] = None,
         n_out: int = 1,
         activation: Callable = F.silu,
-        aggregate: str = "sum",
+        scatter_type: str = "add",
         input_key: str = '_T0',
         output_key: str = '_energy',
     ):
@@ -47,12 +49,18 @@ class Atomwise(nn.Module):
             [n_in, *n_hidden, n_out],
             activation=activation,
         )
-        self.aggregation = aggregate
+        self.scatter_type = scatter_type
         self.input_key = input_key
         self.output_key = output_key
 
     def forward(self, inputs: dict[torch.Tensor]) -> dict[str, torch.Tensor]:
         # predict atomwise contributions
         y = self.outnet(inputs[self.input_key])
-        inputs[self.output_key] = y
+        # inputs[self.output_key] = y
+        if self.scatter_type == 'add':
+            y = torch.squeeze(scatter_add(y, inputs[Alias.idx_m], dim=0, dim_size=torch.max(inputs[Alias.idx_m]) + 1))
+        elif self.scatter_type == '':
+            pass
+
+        inputs[self.output_key] = torch.squeeze(y)
         return inputs

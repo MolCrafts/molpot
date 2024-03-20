@@ -1,12 +1,15 @@
-import molpot as mpot
+from pathlib import Path
+
 import molpy as mp
 import torch
 from torchviz import make_dot
-from pathlib import Path
+
+import molpot as mpot
+
 
 def inspect_model():
 
-    model = mpot.Potentials(mpot.potentials.classical.pair.LJ126(1, 1), derive_energy=False)
+    model = mpot.Potentials(mpot.potential.classical.pair.LJ126(1, 1), derive_energy=False)
     inputs = {
         mp.Alias.R: torch.rand(10, 3, requires_grad=True),
         mp.Alias.cell: torch.eye(3),

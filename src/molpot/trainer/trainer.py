@@ -2,17 +2,15 @@ import logging
 import time
 from itertools import cycle
 from pathlib import Path
-from pprint import pprint
 
 import torch
-from torch.export import export
 
 from molpot import Alias, Config
 from molpot.trainer.logger.adapter import LogAdapter
 from molpot.trainer.strategy.base import StrategyManager
 from molpot.trainer.strategy.early_stop import StepCounter
 
-from ..potentials import Potentials
+from ..potential import Potentials
 
 
 class BaseTrainer:
@@ -81,6 +79,7 @@ class Trainer(BaseTrainer):
         strategies=[],
         logger=None,
         config={},
+        hooks=[],
     ):
         super().__init__(name, model, config)
 
@@ -92,7 +91,7 @@ class Trainer(BaseTrainer):
         self.train_data_loader = train_data_loader
         self.valid_data_loader = valid_data_loader
 
-        self.lr_scheduler = lr_scheduler
+        # self.lr_scheduler = lr_scheduler
 
         Config.set_device(config["device"])
         self.model = self.model.to(Config.device)
@@ -107,10 +106,10 @@ class Trainer(BaseTrainer):
 
         self.start_step = None
         self.checkpoint_rate = config.get("checkpoint_rate", 1000)
+        self.hooks = hooks
 
         self.start_time = time.time()
         resume = config.get("resume", None)
-        print(resume)
         if resume:
             self.load_model(config["resume"])
         else:
@@ -131,14 +130,21 @@ class Trainer(BaseTrainer):
         outputs["last_report_time"] = start_time
         outputs["elaspse_time"] = self.config["report_rate"]
         self.model.train()
-
+        _data = []
+        for inputs in self.train_data_loader:
+            _data.append(inputs)
+            print(inputs[Alias.qm9.U0])
+            print(inputs[Alias.idx_m])
+            print(inputs[Alias.n_atoms])
+            print(inputs[Alias.Z])
+            break
         while True:
             # Training
-            for inputs in self.train_data_loader:
-        
+            for inputs in cycle(_data):
+                self.model.train()
                 self.optimizer.zero_grad()
                 outputs.update(self.model(inputs))
-                loss = self.criterion(outputs, inputs)
+                loss = self.criterion(outputs[Alias.energy], inputs[Alias.qm9.U0])
                 loss.backward()
                 # torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.01)
                 # for name, parms in self.model.named_parameters():
@@ -146,21 +152,21 @@ class Trainer(BaseTrainer):
                 self.optimizer.step()
                 outputs[Alias.loss] = loss
 
-                if nstep % self.config["valid_rate"] == 0:
-                    # Validation
-                    self.model.eval()
-                    for inputs in self.valid_data_loader:
-                        _output = self.model(inputs)
-                        _output = self.criterion(_output, inputs)
-                    self.model.train()
+                # if nstep % self.config["valid_rate"] == 0:
+                #     # Validation
+                #     self.model.eval()
+                #     for inputs in self.valid_data_loader:
+                #         _output = self.model(inputs)
+                #         _output = self.criterion(outputs)
+                    
 
-                if nstep % self.config["report_rate"] == 0:
-                    outputs["this_report_time"] = time.time()
-                    self.logger_adapter(nstep, nepoch, outputs, inputs)
-                    outputs["last_report_time"] = outputs["this_report_time"]
+                # if nstep % self.config["report_rate"] == 0:
+                #     outputs["this_report_time"] = time.time()
+                #     self.logger_adapter(nstep, nepoch, outputs)
+                #     outputs["last_report_time"] = outputs["this_report_time"]
 
 
-                if self.strategies(nstep, outputs, inputs):
+                if self.strategies(nstep, outputs):
                     if nstep < nsteps:
                         self.logger.warning(
                             f"Training stopped at step {nstep} due to early stopping."
@@ -168,15 +174,15 @@ class Trainer(BaseTrainer):
                     self._post_train(outputs)
                     return outputs
                 
-                if nstep % self.config["modify_lr_rate"] == 0:
-                    self.lr_scheduler.step()
+                # if nstep % self.config["modify_lr_rate"] == 0:
+                #     self.lr_scheduler.step()
+                # [hook(inputs) for hook in self.hooks]
 
-                if nstep % self.checkpoint_rate == 0:
-                    checkpoint_name = self.checkpoint_dir / f"{self.name}-{nstep}.pt"
-                    outputs["step"] = nstep
-                    outputs["epoch"] = nepoch
-                    self.save_model(checkpoint_name, outputs)
-
+                # if nstep % self.checkpoint_rate == 0:
+                #     checkpoint_name = self.checkpoint_dir / f"{self.name}-{nstep}.pt"
+                #     outputs["step"] = nstep
+                #     outputs["epoch"] = nepoch
+                #     self.save_model(checkpoint_name, outputs)
                 nstep += 1
 
             nepoch += 1

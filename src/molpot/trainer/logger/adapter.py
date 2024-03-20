@@ -1,7 +1,9 @@
 import logging
 import logging.config
 from pathlib import Path
+
 import torch
+
 
 class LogAdapter:
     def __init__(self, name, metrics, handlers, save_dir):
@@ -14,11 +16,11 @@ class LogAdapter:
         for handler in self.handlers:
             handler.init(self.name, self.metrics, self.save_dir)
 
-    def eval_metrics(self, output, data):
-        return {header: metric(output, data) for header, metric in self.metrics.items()}
+    def eval_metrics(self, outputs):
+        return {header: metric(outputs) for header, metric in self.metrics.items()}
 
-    def __call__(self, nstep, nepoch, output, data):
-        result = self.eval_metrics(output, data)
+    def __call__(self, nstep, nepoch, outputs):
+        result = self.eval_metrics(outputs)
         for handler in self.handlers:
             handler(nstep, nepoch, result)
 

@@ -1,10 +1,13 @@
+import numpy.testing as npt
 import pytest
 import torch
-import molpot.potentials.nnp as nnp
-from molpot import Config, Alias
-from molpot.potentials.nnp.pinet import DotLayer
+
+import molpot.potential.nnp as nnp
+from molpot import Alias, Config
+from molpot.potential.nnp.pinet import DotLayer
+
 from .utils import assert_eqvar, assert_invar, rotate
-import numpy.testing as npt
+
 
 class TestPiNet:
 

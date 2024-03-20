@@ -1,11 +1,13 @@
-from typing import Callable, Dict, Optional
+from typing import Callable
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from molpot import Alias, Config
+
 from .layers import Dense
 from .ops import index_add
-from molpot import Config, Alias
 
 __all__ = ["PaiNN"]
 
@@ -135,8 +137,8 @@ class PaiNN(nn.Module):
         n_atom_basis: int,
         n_interactions: int,
         radial_basis: nn.Module,
-        cutoff_fn: Optional[Callable] = None,
-        activation: Optional[Callable] = F.silu,
+        cutoff_fn: Callable|None = None,
+        activation: Callable|None = F.silu,
         max_z: int = 100,
         shared_interactions: bool = False,
         shared_filters: bool = False,
@@ -205,7 +207,7 @@ class PaiNN(nn.Module):
        ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
         """
 
-    def forward(self, inputs: Dict[str, torch.Tensor]):
+    def forward(self, inputs: dict[str, torch.Tensor]):
         """
         Compute atomic representations/embeddings.
 

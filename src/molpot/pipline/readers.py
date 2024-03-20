@@ -10,7 +10,7 @@ from torchdata.datapipes.iter import IterDataPipe
 
 import molpot as mpot
 from molpot import Alias, Config
-from molpot.piplines.dataset import RMD17
+from molpot.pipline.dataset import RMD17
 
 __all__ = [
     "ChemFilesReader",

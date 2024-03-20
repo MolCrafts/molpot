@@ -26,8 +26,8 @@ class StrategyManager:
     def extend(self, strategies:list):
         self.strategies.extend(strategies)
     
-    def __call__(self, nstep:int, output, data) -> bool:
+    def __call__(self, nstep:int, outputs) -> bool:
         for strategy in self.strategies:
-            if strategy(nstep, output, data):
+            if strategy(nstep, outputs):
                 return True
         return False

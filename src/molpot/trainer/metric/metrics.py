@@ -9,7 +9,7 @@ class Metric:
     def __init__(self, name):
         self.name = name
 
-    def __call__(self, output, data):
+    def __call__(self, outputs):
         raise NotImplementedError
     
 class Identity(Metric):
@@ -18,8 +18,8 @@ class Identity(Metric):
         super().__init__('identity')
         self.key = key
 
-    def __call__(self, output, data):
-        return output[self.key]
+    def __call__(self, outputs):
+        return outputs[self.key]
 
 class Accuracy(Metric):
     def __init__(self, result_key, target_key):
@@ -27,10 +27,10 @@ class Accuracy(Metric):
         self.result_key = result_key
         self.target_key = target_key
 
-    def __call__(self, output, data):
+    def __call__(self, outputs):
 
-        result = output[self.result_key]
-        target = data[self.target_key]
+        result = outputs[self.result_key]
+        target = outputs[self.target_key]
         with torch.no_grad():
             pred = torch.argmax(result, dim=1)
             assert pred.shape[0] == len(target)
@@ -45,10 +45,10 @@ class TopKAccuracy(Metric):
         self.target_key = target_key
         self.k = k
 
-    def __call__(self, output, data):
+    def __call__(self, outputs):
 
-        result = output[self.result_key]
-        target = data[self.target_key]
+        result = outputs[self.result_key]
+        target = outputs[self.target_key]
         with torch.no_grad():
             pred = torch.topk(result, self.k, dim=1)[1]
             assert pred.shape[0] == len(target)
@@ -64,18 +64,18 @@ class MAE(Metric):
         self.target_key = target_key
         self.kernel = torch.nn.L1Loss(reduction=reduction)
 
-    def __call__(self, output, data):
+    def __call__(self, outputs):
             
-        result = output[self.result_key]
-        target = data[self.target_key]
+        result = outputs[self.result_key]
+        target = outputs[self.target_key]
         with torch.no_grad():
             mae = self.kernel(result, target)
             return mae
             
 def track(metric):
     tracker = Tracker()
-    def update(step, output, data):
-        tracker(metric(step, output, data))
+    def update(step, outputs):
+        tracker(metric(step, outputs))
         return (tracker.mean, tracker.stddev)
     return update
 
@@ -84,6 +84,6 @@ class StepSpeed(Metric):
     def __init__(self):
         super().__init__("step_speed")
 
-    def __call__(self, outputs, inputs):
+    def __call__(self, outputs):
         elaspse_time = outputs["this_report_time"] - outputs["last_report_time"]
         return outputs["elaspse_time"] / elaspse_time 

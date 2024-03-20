@@ -5,15 +5,15 @@ import torch
 
 import molpot as mpot
 from molpot import Alias
-from molpot.potentials.base import Potentials
-from molpot.potentials.nnp.layers import CosineCutoff, GaussianRBF
-from molpot.potentials.nnp.readout import Atomwise
+from molpot.potential.base import Potentials
+from molpot.potential.nnp.layers import CosineCutoff, GaussianRBF
+from molpot.potential.nnp.readout import Atomwise
 from molpot.trainer.logger.adapter import ConsoleHandler, TensorBoardHandler
 from molpot.trainer.metric.metrics import Identity
 
 
 def load_rmd17() -> tuple[mpot.DataLoader, mpot.DataLoader]:
-    rmd17_dataset = mpot.dataset.RMD17(save_dir="rmd17", batch_size=64, device="cpu", atom_dress=True, total=1000)
+    rmd17_dataset = mpot.dataset.RMD17(save_dir="rmd17", batch_size=3, device="cpu", atom_dress=True, total=1000)
     dp = rmd17_dataset.prepare()
     dp = dp.atomic_dress(types_list=[1, 6, 8], key=Alias.Z, prop=Alias.rmd17.energy, buffer=1000)
     train, valid = dp.calc_nblist(4.5).random_split(
@@ -31,7 +31,7 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     pp_nodes = [64, 64, 64, 64]
     pi_nodes = [64, 64]
     ii_nodes = [64, 64, 64, 64]
-    arch = mpot.potentials.nnp.PiNet(n_atom_types,
+    arch = mpot.potential.nnp.PiNet(n_atom_types,
         n_atom_basis, 5, GaussianRBF(n_atom_basis, 5), CosineCutoff(5),
         pp_nodes, pi_nodes, ii_nodes
     )

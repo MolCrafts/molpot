@@ -3,9 +3,11 @@
 # date: 2023-12-07
 # version: 0.0.1
 
-from .base import Strategy
-import numpy as np
 import logging
+
+import numpy as np
+
+from .base import Strategy
 
 __all__ = ["Stagnation", "StepCounter"]
 
@@ -18,7 +20,7 @@ class Stagnation(Strategy):
         self.counter = 0
         self.best_loss = np.inf
 
-    def __call__(self, step:int, output, data) -> bool:
+    def __call__(self, step:int, output) -> bool:
         val_loss = output[self.key].mean()
         if self.counter < self.patience:
             delta = val_loss - self.best_loss

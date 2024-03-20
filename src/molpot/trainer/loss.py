@@ -9,15 +9,15 @@ __all__ = ["MultiMSELoss"]
 
 class MultiMSELoss(nn.Module):
 
-    def __init__(self, weights, targets):
+    def __init__(self, multipliers, targets):
         super().__init__()
-        self.weights = weights
+        self.multipliers = multipliers
         self.loss_kernel = nn.MSELoss()
         self.targets = targets
-        assert len(weights) == len(targets)
+        assert len(multipliers) == len(targets)
 
-    def forward(self, output, data):
+    def forward(self, outputs):
         loss = 0
-        for weight, (k1, k2) in zip(self.weights, self.targets):
-            loss += weight * self.loss_kernel(output[k1], data[k2])
+        for m, (output_key, label_key) in zip(self.multipliers, self.targets):
+            loss += m * self.loss_kernel(outputs[output_key], outputs[label_key])
         return loss
