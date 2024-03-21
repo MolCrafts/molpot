@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from molpot.potential.nnp.layers import CosineCutoff, GaussianRBF
+from molpot.potential.nnp.layer import CosineCutoff, GaussianRBF
 
 
 class TestBasisFunction:

@@ -11,6 +11,7 @@ import torch
 from torchdata.datapipes.iter import IterableWrapper, IterDataPipe
 
 from molpot import Alias, Config
+from molpot.statistic.tracker import Tracker
 
 from .process import apply_dress, atomic_dress
 
@@ -83,7 +84,7 @@ class QM9(DataSet):
         super().__init__("QM9", save_dir, total, batch_size, device)
         self.remove_uncharacterized = remove_uncharacterized
         self.atom_ref = atom_ref
-        Alias("qm9")
+        self.alias = Alias("qm9")
         Alias.qm9.set("A", "_A", float, "GHz", "rotational_constant_A")
         Alias.qm9.set("B", "_B", float, "GHz", "rotational_constant_B")
         Alias.qm9.set("C", "_C", float, "GHz", "rotational_constant_C")
@@ -106,37 +107,83 @@ class QM9(DataSet):
 
         cache_dp = (
             IterableWrapper([url])
-            # .on_disk_cache(filepath_fn=self.save_to)
+            .on_disk_cache(filepath_fn=self.save_to)
             .read_from_http()
             .load_from_bz2(length=self.total)
             .load_from_tar(length=self.total)
+            .read_from_stream()
         )
 
-        # cache_dp.end_caching(same_filepath_fn=True)
-        dp = cache_dp.map(read_stream_as_text).read_qm9()
+        cache_dp.end_caching(same_filepath_fn=True)
+        dp = cache_dp.read_qm9()
 
         return super().prepare(dp)
+    
+    @property
+    def Z(self):
+        return torch.tensor([1, 6, 7, 8, 9])
+ 
+    @property
+    def atomrefs(self):
+        lines = self._download_atomrefs()
+        props = [
+            Alias.qm9.zpve,
+            Alias.qm9.U0,
+            Alias.qm9.U,
+            Alias.qm9.H,
+            Alias.qm9.G,
+            Alias.qm9.Cv,
+        ]
+        atref = {z.item():{} for z in self.Z}
+        for z, l in zip([1, 6, 7, 8, 9], lines[5:10]):
+            for i, p in enumerate(props):
+                atref[z][p] = float(l.split()[i + 1])
+        return atref
+    
+    def get_stat(self, prop:str, divide_by_atoms:bool, remove_atomref:bool):
+        dp = self.prepare()
+        # props = torch.concatenate([frame[prop] for frames in dp for frame in frames])
+        tracker = Tracker()
+        props = []
+
+        if not remove_atomref:
+
+            if divide_by_atoms:
+                for frames in dp:
+                    for frame in frames:
+                        tracker(frame[prop] / frame[Alias.n_atoms])
+            else:
+                for frames in dp:
+                    for frame in frames:
+                        # tracker(frame[prop])
+                        props.append(frame[prop])
+
+        else:
+            
+            atomref = torch.tensor([self.atomrefs[z.item()][prop] for z in self.Z])
+
+            if divide_by_atoms:
+                for frames in dp:
+                    for frame in frames:
+                        atomtype_count = torch.eq(frame[Alias.Z], self.Z.unsqueeze(1)).sum(dim=-1, dtype=atomref.dtype)
+                        tracker(frame[prop] - atomtype_count @ atomref / frame[Alias.n_atoms])
+
+            else:
+                for frames in dp:
+                    for frame in frames:
+                        atomtype_count = torch.eq(frame[Alias.Z], self.Z.unsqueeze(1)).sum(dim=-1, dtype=atomref.dtype)
+                        tracker(frame[prop] - atomtype_count @ atomref)
+
+        return tracker.mean, tracker.stddev
+
 
     def _download_atomrefs(self):
-        url = "https://ndownloader.figshare.com/files/3195395"
-        filename = "atomref.txt"
-        atomrefs_path = self.fetch(url, filename, self.data_dir)
-        props = [
-            Alias.QM9.zpve,
-            Alias.QM9.U0,
-            Alias.QM9.U,
-            Alias.QM9.H,
-            Alias.QM9.G,
-            Alias.QM9.Cv,
-        ]
-        atref = {p: np.zeros((100,)) for p in props}
-        with open(atomrefs_path) as f:
-            lines = f.readlines()
-            for z, l in zip([1, 6, 7, 8, 9], lines[5:10]):
-                for i, p in enumerate(props):
-                    atref[p][z] = float(l.split()[i + 1])
-        atref = {k: v.tolist() for k, v in atref.items()}
-        return atref
+        url = IterableWrapper(["https://ndownloader.figshare.com/files/3195395"])
+        dp = url.read_from_http().readlines()
+        lines = []
+        for _, line in (dp):
+            lines.append(line.decode("utf-8"))
+        return lines
 
     def _download_uncharacterized(self):
         at_url = "https://ndownloader.figshare.com/files/3195404"

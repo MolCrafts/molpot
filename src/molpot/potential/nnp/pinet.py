@@ -14,9 +14,7 @@ import molpot as mpot
 from molpot import Alias, Config
 
 from ..base import Potential
-from .layers import Dense, build_mlp
-from .ops import index_add
-from .readout import Atomwise
+from .block import build_mlp
 
 
 class PILayer(nn.Module):

@@ -17,4 +17,4 @@ def create_dataloader(datapipe: IterDataPipe, nworkers: int = 0) -> DataLoader:
         rs = MultiProcessingReadingService(nworkers)
         return DataLoader(datapipe, reading_service=rs)
     else:
-        return DataLoader(datapipe, reading_service=InProcessReadingService())
+        return DataLoader(datapipe, reading_service=None)

@@ -1,3 +1,5 @@
-from .nnp import *
+from . import nnp
+from .base import NNPotential, Potentials
 from .classical import *
-from .base import Potentials, NNPotential
+from .nnp import *
+from .nnp import cutoff, radial, readout

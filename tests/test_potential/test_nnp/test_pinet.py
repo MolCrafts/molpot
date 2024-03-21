@@ -51,7 +51,7 @@ class TestPiNet:
         n_neuraons = [6, 4]
         px = torch.rand(n_atoms, n_dim, n_channels)
 
-        layer = nnp.layers.build_mlp(n_neuraons)
+        layer = nnp.layer.build_mlp(n_neuraons)
         out = layer(px)
         assert out.shape == (n_atoms, n_dim, n_neuraons[-1])
         assert_eqvar(layer, [px], [0])
@@ -167,8 +167,8 @@ class TestPiNet:
         n_basis = 16
         depth = 4
         cutoff = 1.0
-        cutoff_fn = nnp.layers.CosineCutoff(1.0)
-        radial_basis = nnp.layers.GaussianRBF(n_basis, cutoff)
+        cutoff_fn = nnp.layer.CosineCutoff(1.0)
+        radial_basis = nnp.layer.GaussianRBF(n_basis, cutoff)
         pp_nodes = [16, 16]
         pi_nodes = [16, 16]
         ii_nodes = [16, 16]
@@ -235,8 +235,8 @@ class TestPiNet:
         n_basis = 16
         depth = 4
         cutoff = 1.0
-        cutoff_fn = nnp.layers.CosineCutoff(1.0)
-        radial_basis = nnp.layers.GaussianRBF(n_basis, cutoff)
+        cutoff_fn = nnp.layer.CosineCutoff(1.0)
+        radial_basis = nnp.layer.GaussianRBF(n_basis, cutoff)
         pp_nodes = [16, 16]
         pi_nodes = [16, 16]
         ii_nodes = [16, 16]

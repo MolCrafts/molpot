@@ -6,7 +6,7 @@ import torch
 import molpot as mpot
 from molpot import Alias
 from molpot.potential.base import NNPotential
-from molpot.potential.nnp.layers import CosineCutoff, GaussianRBF
+from molpot.potential.nnp.layer import CosineCutoff, GaussianRBF
 from molpot.potential.nnp.readout import Atomwise
 from molpot.trainer.logger.adapter import ConsoleHandler, TensorBoardHandler
 from molpot.trainer.metric.metrics import MAE, Identity
@@ -39,7 +39,7 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     model = NNPotential("PaiNN", arch, readout, derive_energy=False)
     # criterion = mpot.MultiMSELoss([1], targets=[(Alias.energy, Alias.qm9.U0)])
     criterion = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=5e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
     # scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.9)
 
     stagnation = mpot.strategy.Stagnation(Alias.loss, patience=torch.inf)
@@ -80,7 +80,7 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     )
 
 
-    output = trainer.train(1000)
+    output = trainer.train(1)
     print(output[Alias.loss])
     print(output[Alias.painn.p1])
     return "done"

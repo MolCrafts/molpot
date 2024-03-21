@@ -49,8 +49,8 @@ class QM9Reader(IterDataPipe):
 
     def __iter__(self) -> Iterable[dict]:
         qm9_keys = [alias.key for alias in Alias.qm9.values()]
-        for path, text_io_wraqpper in self.source_dp:
-            lines = text_io_wraqpper.readlines()
+        for path, stream in self.source_dp:
+            lines = stream.decode().split('\n')
             frame = dict()
             frame[Alias.n_atoms] = torch.tensor(int(lines[0]), dtype=Config.stype)
             props_line = lines[1].split()[1:]
@@ -62,14 +62,14 @@ class QM9Reader(IterDataPipe):
             frame[Alias.xyz] = torch.tensor(
                 [
                     [float(i.replace("*^", "E")) for i in line.split()[1:4]]
-                    for line in lines[2:-3]
+                    for line in lines[2:2+frame[Alias.n_atoms].item()]
                 ], device=Config.device, requires_grad=True
             )
 
             frame[Alias.Z] = torch.tensor(
                 [
                     mp.Element[line.split()[0]].number
-                    for line in lines[2:-3]
+                    for line in lines[2:2+frame[Alias.n_atoms].item()]
                 ],
                 dtype=Config.stype,
                 device=Config.device,

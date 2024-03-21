@@ -6,7 +6,7 @@ import torch
 import molpot as mpot
 from molpot import Alias
 from molpot.potential.base import Potentials
-from molpot.potential.nnp.layers import CosineCutoff, GaussianRBF
+from molpot.potential.nnp.layer import CosineCutoff, GaussianRBF
 from molpot.potential.nnp.readout import Atomwise
 from molpot.trainer.logger.adapter import ConsoleHandler, TensorBoardHandler
 from molpot.trainer.metric.metrics import Identity

@@ -131,16 +131,9 @@ class Trainer(BaseTrainer):
         outputs["elaspse_time"] = self.config["report_rate"]
         self.model.train()
         _data = []
-        for inputs in self.train_data_loader:
-            _data.append(inputs)
-            print(inputs[Alias.qm9.U0])
-            print(inputs[Alias.idx_m])
-            print(inputs[Alias.n_atoms])
-            print(inputs[Alias.Z])
-            break
         while True:
             # Training
-            for inputs in cycle(_data):
+            for inputs in cycle(self.train_data_loader):
                 self.model.train()
                 self.optimizer.zero_grad()
                 outputs.update(self.model(inputs))
@@ -160,10 +153,10 @@ class Trainer(BaseTrainer):
                 #         _output = self.criterion(outputs)
                     
 
-                # if nstep % self.config["report_rate"] == 0:
-                #     outputs["this_report_time"] = time.time()
-                #     self.logger_adapter(nstep, nepoch, outputs)
-                #     outputs["last_report_time"] = outputs["this_report_time"]
+                if nstep % self.config["report_rate"] == 0:
+                    outputs["this_report_time"] = time.time()
+                    self.logger_adapter(nstep, nepoch, outputs)
+                    outputs["last_report_time"] = outputs["this_report_time"]
 
 
                 if self.strategies(nstep, outputs):
