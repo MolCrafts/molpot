@@ -53,13 +53,20 @@ class DataSet:
     def pre_load(self, dp: IterDataPipe) -> IterDataPipe:
         raise NotImplementedError
 
-    def prepare(self, dp: IterDataPipe) -> IterDataPipe:
-        if self.total > 0:
-            dp = dp.header(self.total).set_length(self.total)
+    def _prepare(self, dp: IterDataPipe) -> IterDataPipe:
+        dp = dp.batch(self.batch_size)
         if self.device == "cuda" or self.device == "gpu":
             dp = dp.pin_memory(device="cuda")
-        return dp.batch(self.batch_size)
+        if self.total > 0:
+            dp = dp.header(self.total).set_length(self.total)
+        return dp
 
+    def __len__(self):
+        return self.total
+
+    @property
+    def labels(self):
+        return [alias.name for alias in self.alias.values()]
 
 def read_stream_as_text(_tuple: tuple[str, bytes]):
     path, stream = _tuple
@@ -107,17 +114,17 @@ class QM9(DataSet):
 
         cache_dp = (
             IterableWrapper([url])
-            .on_disk_cache(filepath_fn=self.save_to)
+            # .on_disk_cache(filepath_fn=self.save_to)
             .read_from_http()
             .load_from_bz2(length=self.total)
             .load_from_tar(length=self.total)
             .read_from_stream()
         )
 
-        cache_dp.end_caching(same_filepath_fn=True)
+        # cache_dp.end_caching(same_filepath_fn=True)
         dp = cache_dp.read_qm9()
 
-        return super().prepare(dp)
+        return self._prepare(dp)
     
     @property
     def Z(self):

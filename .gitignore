@@ -4,6 +4,10 @@ saved/
 data/
 tmp/
 train_*/
+log/
+model/
+qm9/
+rmd17/
 # ide
 .vscode/
 

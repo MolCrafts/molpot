@@ -79,7 +79,7 @@ class Trainer(BaseTrainer):
         strategies=[],
         logger=None,
         config={},
-        hooks=[],
+        train_hooks=[],
     ):
         super().__init__(name, model, config)
 
@@ -91,7 +91,7 @@ class Trainer(BaseTrainer):
         self.train_data_loader = train_data_loader
         self.valid_data_loader = valid_data_loader
 
-        # self.lr_scheduler = lr_scheduler
+        self.lr_scheduler = lr_scheduler
 
         Config.set_device(config["device"])
         self.model = self.model.to(Config.device)
@@ -105,8 +105,8 @@ class Trainer(BaseTrainer):
         self.logger_adapter = LogAdapter(name, **self.log_config)
 
         self.start_step = None
-        self.checkpoint_rate = config.get("checkpoint_rate", 1000)
-        self.hooks = hooks
+        self.checkpoint_rate = config.get("checkpoint_rate", 10000)
+        self.train_hooks = train_hooks
 
         self.start_time = time.time()
         resume = config.get("resume", None)
@@ -130,28 +130,28 @@ class Trainer(BaseTrainer):
         outputs["last_report_time"] = start_time
         outputs["elaspse_time"] = self.config["report_rate"]
         self.model.train()
-        _data = []
+        train_hooks = self.train_hooks
         while True:
             # Training
             for inputs in cycle(self.train_data_loader):
                 self.model.train()
                 self.optimizer.zero_grad()
                 outputs.update(self.model(inputs))
-                loss = self.criterion(outputs[Alias.energy], inputs[Alias.qm9.U0])
+                loss = self.criterion(outputs)
                 loss.backward()
-                # torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.01)
-                # for name, parms in self.model.named_parameters():
-                #     print('-->name:', name, '-->grad_requirs:', parms.requires_grad, '--weight', torch.mean(parms.data), ' -->grad_value:', torch.mean(parms.grad))
+
+                for hook in train_hooks:
+                    hook(nstep, self.model, outputs)
+
                 self.optimizer.step()
                 outputs[Alias.loss] = loss
 
-                # if nstep % self.config["valid_rate"] == 0:
-                #     # Validation
-                #     self.model.eval()
-                #     for inputs in self.valid_data_loader:
-                #         _output = self.model(inputs)
-                #         _output = self.criterion(outputs)
-                    
+                if nstep % self.config["valid_rate"] == 0:
+                    # Validation
+                    self.model.eval()
+                    for inputs in self.valid_data_loader:
+                        _output = self.model(inputs)
+                        _output = self.criterion(outputs)
 
                 if nstep % self.config["report_rate"] == 0:
                     outputs["this_report_time"] = time.time()
@@ -167,15 +167,14 @@ class Trainer(BaseTrainer):
                     self._post_train(outputs)
                     return outputs
                 
-                # if nstep % self.config["modify_lr_rate"] == 0:
-                #     self.lr_scheduler.step()
-                # [hook(inputs) for hook in self.hooks]
+                if nstep % self.config["modify_lr_rate"] == 0:
+                    self.lr_scheduler.step()
 
-                # if nstep % self.checkpoint_rate == 0:
-                #     checkpoint_name = self.checkpoint_dir / f"{self.name}-{nstep}.pt"
-                #     outputs["step"] = nstep
-                #     outputs["epoch"] = nepoch
-                #     self.save_model(checkpoint_name, outputs)
+                if nstep % self.checkpoint_rate == 0:
+                    checkpoint_name = self.checkpoint_dir / f"{self.name}-{nstep}.pt"
+                    outputs["step"] = nstep
+                    outputs["epoch"] = nepoch
+                    self.save_model(checkpoint_name, outputs)
                 nstep += 1
 
             nepoch += 1

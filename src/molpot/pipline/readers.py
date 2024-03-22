@@ -63,7 +63,7 @@ class QM9Reader(IterDataPipe):
                 [
                     [float(i.replace("*^", "E")) for i in line.split()[1:4]]
                     for line in lines[2:2+frame[Alias.n_atoms].item()]
-                ], device=Config.device, requires_grad=True
+                ], device=Config.device
             )
 
             frame[Alias.Z] = torch.tensor(

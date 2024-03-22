@@ -4,6 +4,7 @@
 # version: 0.0.1
 
 from collections import defaultdict
+import functools
 
 import numpy as np
 import torch
@@ -17,22 +18,20 @@ class DataInspector:
 
         self.dataloader = dataloader
 
-    def inspect(self, prop: str, nbatch:int = 0):
+    @functools.lru_cache
+    def inspect(self, prop: str):
 
         data = []
-
-        for i, sample in enumerate(self.dataloader, 1):
+        for sample in self.dataloader:
             data.append(sample[prop])
-            if i == nbatch:
-                break
         return torch.cat(data).flatten()
     
-    def distribute(self, prop: str, nbatch:int = 0):
+    def plot_dist(self, prop: str):
         import matplotlib.pyplot as plt
-        data = self.inspect(prop, nbatch)
+        data = self.inspect(prop)
         d = data.detach().cpu().numpy()
         plt.hist(d, bins=100)
         plt.title(prop)
-        plt.annotate(f"total: {len(d)}\nmean: {torch.mean(d):.3f}\nstd: {torch.std(d):.3f}", xy=(0.7, 0.7), xycoords="axes fraction")
+        plt.annotate(f"total: {len(d)}\nmean: {d.mean():.3f}\nstd: {d.std():.3f}", xy=(0.7, 0.7), xycoords="axes fraction")
 
         plt.show()

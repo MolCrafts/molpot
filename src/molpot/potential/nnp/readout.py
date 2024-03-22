@@ -24,7 +24,7 @@ class Atomwise(nn.Module):
         self,
         n_in: int,
         n_out: int = 1,
-        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_hidden: int|Sequence[int]|None = None,
         n_layers: int = 2,
         activation: Callable = F.silu,
         aggregation_mode: str = "sum",
@@ -46,7 +46,7 @@ class Atomwise(nn.Module):
             output_key: the key under which the result will be stored
             per_atom_output_key: If not None, the key under which the per-atom result will be stored
         """
-        super(Atomwise, self).__init__()
+        super().__init__()
         self.input_key = input_key
         self.output_key = output_key
         self.model_outputs = [output_key]

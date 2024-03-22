@@ -6,11 +6,12 @@
 from collections import defaultdict, deque
 from typing import Sequence
 
+import pint
 import torch
 from torchdata.datapipes import functional_datapipe
 from torchdata.datapipes.iter import IterDataPipe
 
-from molpot import Config
+from molpot import Config, Alias
 from molpot.statistic.tracker import Tracker
 
 __all__ = ["Normalizer"]
@@ -104,3 +105,25 @@ def apply_dress(frame, type_list, key, target, w):
     delta = frame[target] - predict
     frame[target] = delta
     return frame
+
+@functional_datapipe('convert_unit')
+class UnitConverter(IterDataPipe):
+    def __init__(self, source_dp: IterDataPipe, key, unit):
+        self.dp = source_dp
+        self.key = key
+        alias = Alias.get(key)
+        self.from_unit = alias.unit
+        self.to_unit = unit
+        ureg = pint.UnitRegistry()
+        factor = ureg(self.from_unit).to(self.to_unit).magnitude
+        self.factor = factor
+
+    def __iter__(self):
+
+        for batch in self.dp:
+            for sample in batch:
+                sample[self.key] *= self.factor
+            yield batch
+
+    def __len__(self):
+        return len(self.dp)
