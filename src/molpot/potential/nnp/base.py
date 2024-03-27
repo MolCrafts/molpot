@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Union
+from typing import Callable
 
 import torch
 import torch.nn.functional as F
@@ -20,7 +20,7 @@ class Dense(nn.Linear):
         in_features: int,
         out_features: int,
         bias: bool = True,
-        activation: Union[Callable, nn.Module] = None,
+        activation: Callable | nn.Module = None,
         weight_init: Callable = xavier_uniform_,
         bias_init: Callable = zeros_,
     ):

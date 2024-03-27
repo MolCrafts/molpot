@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Optional, Union
+from typing import Callable
 
 import torch
 import torch.nn as nn
@@ -9,7 +9,7 @@ import molpot as mpot
 from molpot import Alias
 
 from .base import Dense
-from .embedding import ElectronicEmbedding, NuclearEmbedding
+from .embedding import ElectronicEmbedding
 from .utils import replicate_module
 
 __all__ = ["PaiNN", "PaiNNInteraction", "PaiNNMixing"]
@@ -137,14 +137,14 @@ class PaiNN(nn.Module):
         n_atom_basis: int,
         n_interactions: int,
         radial_basis: nn.Module,
-        cutoff_fn: Optional[Callable] = None,
-        activation: Optional[Callable] = F.silu,
+        cutoff_fn: Callable | None = None,
+        activation: Callable | None = F.silu,
         max_z: int = 101,
         shared_interactions: bool = False,
         shared_filters: bool = False,
         epsilon: float = 1e-8,
         activate_charge_spin_embedding: bool = False,
-        embedding: Union[Callable, nn.Module] = None,
+        embedding: Callable | nn.Module = None,
     ):
         """
         Args:
@@ -173,9 +173,13 @@ class PaiNN(nn.Module):
         self.radial_basis = radial_basis
         self.activate_charge_spin_embedding = activate_charge_spin_embedding
 
-        self.alias = Alias('painn')
-        Alias.painn.set('scalar', '_painn_scalar', torch.Tensor, None, 'Scalar representation')
-        Alias.painn.set('vector', '_painn_vector', torch.Tensor, None, 'Vector representation')
+        self.alias = Alias("painn")
+        Alias.painn.set(
+            "scalar", "_painn_scalar", torch.Tensor, None, "Scalar representation"
+        )
+        Alias.painn.set(
+            "vector", "_painn_vector", torch.Tensor, None, "Vector representation"
+        )
 
         # initialize nuclear embedding
         self.embedding = embedding
@@ -188,13 +192,15 @@ class PaiNN(nn.Module):
                 self.n_atom_basis,
                 num_residual=1,
                 activation=activation,
-                is_charged=True)
+                is_charged=True,
+            )
             self.spin_embedding = ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
                 activation=activation,
-                is_charged=False)
-        
+                is_charged=False,
+            )
+
         # initialize filter layers
         self.share_filters = shared_filters
         if shared_filters:
@@ -224,7 +230,7 @@ class PaiNN(nn.Module):
             shared_interactions,
         )
 
-    def forward(self, inputs: Dict[str, torch.Tensor]):
+    def forward(self, inputs: dict[str, torch.Tensor]):
         """
         Compute atomic representations/embeddings.
 
@@ -264,9 +270,12 @@ class PaiNN(nn.Module):
 
         # compute initial embeddings
         q = self.embedding(atomic_numbers)[:, None]
-        
+
         # add spin and charge embeddings
-        if hasattr(self, "activate_charge_spin_embedding") and self.activate_charge_spin_embedding:
+        if (
+            hasattr(self, "activate_charge_spin_embedding")
+            and self.activate_charge_spin_embedding
+        ):
             # get tensors from input dictionary
             total_charge = inputs[Alias.total_charge]
             spin = inputs[Alias.spin_multiplicity]
@@ -274,17 +283,14 @@ class PaiNN(nn.Module):
             idx_m = inputs[Alias.idx_m]
 
             charge_embedding = self.charge_embedding(
-                q.squeeze(),
-                total_charge,
-                num_batch,
-                idx_m
+                q.squeeze(), total_charge, num_batch, idx_m
             )[:, None]
-            spin_embedding = self.spin_embedding(
-                q.squeeze(), spin, num_batch, idx_m
-            )[:, None]
+            spin_embedding = self.spin_embedding(q.squeeze(), spin, num_batch, idx_m)[
+                :, None
+            ]
 
             # additive combining of nuclear, charge and spin embedding
-            q = (q + charge_embedding + spin_embedding)
+            q = q + charge_embedding + spin_embedding
 
         # compute interaction blocks and update atomic embeddings
         qs = q.shape

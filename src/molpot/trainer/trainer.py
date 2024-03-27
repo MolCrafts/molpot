@@ -6,11 +6,10 @@ from pathlib import Path
 import torch
 
 from molpot import Alias, Config
+from molpot.potential.base import Potentials
 from molpot.trainer.logger.adapter import LogAdapter
 from molpot.trainer.strategy.base import StrategyManager
 from molpot.trainer.strategy.early_stop import StepCounter
-
-from ..potential import Potentials
 
 
 class BaseTrainer:

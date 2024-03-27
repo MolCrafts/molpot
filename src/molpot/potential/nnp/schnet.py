@@ -1,16 +1,11 @@
-from typing import Callable, Dict, Union
+from typing import Callable
 
 import torch
 from torch import nn
 from torch_scatter import scatter_add
 
 import molpot as mpot
-
-from .activation import shifted_softplus
-from .base import Dense
-from .embedding import ElectronicEmbedding
-# from .scatter import scatter_add
-from .utils import replicate_module
+import molpot.potential.nnp as nnp
 
 __all__ = ["SchNet", "SchNetInteraction"]
 
@@ -23,7 +18,7 @@ class SchNetInteraction(nn.Module):
         n_atom_basis: int,
         n_rbf: int,
         n_filters: int,
-        activation: Callable = shifted_softplus,
+        activation: Callable = nnp.shifted_softplus,
     ):
         """
         Args:
@@ -33,13 +28,13 @@ class SchNetInteraction(nn.Module):
             activation: if None, no activation function is used.
         """
         super(SchNetInteraction, self).__init__()
-        self.in2f = Dense(n_atom_basis, n_filters, bias=False, activation=None)
+        self.in2f = nnp.Dense(n_atom_basis, n_filters, bias=False, activation=None)
         self.f2out = nn.Sequential(
-            Dense(n_filters, n_atom_basis, activation=activation),
-            Dense(n_atom_basis, n_atom_basis, activation=None),
+            nnp.Dense(n_filters, n_atom_basis, activation=activation),
+            nnp.Dense(n_atom_basis, n_atom_basis, activation=None),
         )
         self.filter_network = nn.Sequential(
-            Dense(n_rbf, n_filters, activation=activation), Dense(n_filters, n_filters)
+            nnp.Dense(n_rbf, n_filters, activation=activation), nnp.Dense(n_filters, n_filters)
         )
 
     def forward(
@@ -102,9 +97,9 @@ class SchNet(nn.Module):
         n_filters: int = None,
         shared_interactions: bool = False,
         max_z: int = 101,
-        activation: Union[Callable, nn.Module] = shifted_softplus,
+        activation: Callable | nn.Module = nnp.shifted_softplus,
         activate_charge_spin_embedding: bool = False,
-        embedding: Union[Callable, nn.Module] = None,
+        embedding: Callable | nn.Module = None,
     ):
         """
         Args:
@@ -129,6 +124,9 @@ class SchNet(nn.Module):
         self.cutoff = cutoff_fn.cutoff
         self.activate_charge_spin_embedding = activate_charge_spin_embedding
 
+        self.alias = mpot.Alias('schnet')
+        self.alias.set('scalar', '_schnet_scalar', torch.Tensor, None, 'scalar representation')
+
         # initialize nuclear embedding
         self.embedding = embedding
         if self.embedding is None:
@@ -136,19 +134,19 @@ class SchNet(nn.Module):
 
         # initialize spin and charge embeddings
         if self.activate_charge_spin_embedding:
-            self.charge_embedding = ElectronicEmbedding(
+            self.charge_embedding = nnp.ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
                 activation=activation,
                 is_charged=True)
-            self.spin_embedding = ElectronicEmbedding(
+            self.spin_embedding = nnp.ElectronicEmbedding(
                 self.n_atom_basis,
                 num_residual=1,
                 activation=activation,
                 is_charged=False)
 
         # initialize interaction blocks
-        self.interactions = replicate_module(
+        self.interactions = nnp.replicate_module(
             lambda: SchNetInteraction(
                 n_atom_basis=self.n_atom_basis,
                 n_rbf=self.radial_basis.n_rbf,
@@ -159,7 +157,7 @@ class SchNet(nn.Module):
             shared_interactions,
         )
 
-    def forward(self, inputs: Dict[str, torch.Tensor]):
+    def forward(self, inputs: dict[str, torch.Tensor]):
 
         # get tensors from input dictionary
         atomic_numbers = inputs[mpot.Alias.Z]
@@ -203,6 +201,6 @@ class SchNet(nn.Module):
             x = x + v
 
         # collect results
-        inputs["scalar_representation"] = x
+        inputs[mpot.Alias.schnet.scalar] = x
 
         return inputs

@@ -1,10 +1,10 @@
-from typing import Callable, Optional, Sequence, Union
+from typing import Callable, Sequence
 
-import schnetpack.nn as snn
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from schnetpack.nn.activations import shifted_softplus
+
+import molpot.potential.nnp as nnp
 
 __all__ = ["build_mlp", "build_gated_equivariant_mlp"]
 
@@ -12,7 +12,7 @@ __all__ = ["build_mlp", "build_gated_equivariant_mlp"]
 def build_mlp(
     n_in: int,
     n_out: int,
-    n_hidden: Optional[Union[int, Sequence[int]]] = None,
+    n_hidden: int | Sequence[int] | None = None,
     n_layers: int = 2,
     activation: Callable = F.silu,
     last_bias: bool = True,
@@ -52,14 +52,14 @@ def build_mlp(
 
     # assign a Dense layer (with activation function) to each hidden layer
     layers = [
-        snn.Dense(n_neurons[i], n_neurons[i + 1], activation=activation)
+        nnp.Dense(n_neurons[i], n_neurons[i + 1], activation=activation)
         for i in range(n_layers - 1)
     ]
     # assign a Dense layer (without activation function) to the output layer
 
     if last_zero_init:
         layers.append(
-            snn.Dense(
+            nnp.Dense(
                 n_neurons[-2],
                 n_neurons[-1],
                 activation=None,
@@ -69,7 +69,7 @@ def build_mlp(
         )
     else:
         layers.append(
-            snn.Dense(n_neurons[-2], n_neurons[-1], activation=None, bias=last_bias)
+            nnp.Dense(n_neurons[-2], n_neurons[-1], activation=None, bias=last_bias)
         )
     # put all layers together to make the network
     out_net = nn.Sequential(*layers)
@@ -79,8 +79,8 @@ def build_mlp(
 def build_gated_equivariant_mlp(
     n_in: int,
     n_out: int,
-    n_hidden: Optional[Union[int, Sequence[int]]] = None,
-    n_gating_hidden: Optional[Union[int, Sequence[int]]] = None,
+    n_hidden: int | Sequence[int] | None= None,
+    n_gating_hidden: int | Sequence[int] | None= None,
     n_layers: int = 2,
     activation: Callable = F.silu,
     sactivation: Callable = F.silu,
@@ -127,7 +127,7 @@ def build_gated_equivariant_mlp(
 
     # assign a GatedEquivariantBlock (with activation function) to each hidden layer
     layers = [
-        snn.GatedEquivariantBlock(
+        nnp.GatedEquivariantBlock(
             n_sin=n_neurons[i],
             n_vin=n_neurons[i],
             n_sout=n_neurons[i + 1],
@@ -141,7 +141,7 @@ def build_gated_equivariant_mlp(
     # assign a GatedEquivariantBlock (without scalar activation function)
     # to the output layer
     layers.append(
-        snn.GatedEquivariantBlock(
+        nnp.GatedEquivariantBlock(
             n_sin=n_neurons[-2],
             n_vin=n_neurons[-2],
             n_sout=n_neurons[-1],
@@ -165,7 +165,7 @@ class Residual(nn.Module):
     def __init__(
         self,
         num_features: int,
-        activation: Union[Callable, nn.Module] = None,
+        activation: Callable | nn.Module = None,
         bias: bool = True,
         zero_init: bool = True,
     ) -> None:
@@ -222,7 +222,7 @@ class ResidualStack(nn.Module):
         self,
         num_features: int,
         num_residual: int,
-        activation: Union[Callable, nn.Module],
+        activation: Callable | nn.Module,
         bias: bool = True,
         zero_init: bool = True) -> None:
         """    
@@ -262,7 +262,7 @@ class ResidualMLP(nn.Module):
         self,
         num_features: int,
         num_residual: int,
-        activation: Union[Callable, nn.Module],
+        activation: Callable | nn.Module,
         bias: bool = True,
         zero_init: bool = False):
 

@@ -1,5 +1,5 @@
 import math
-from typing import Callable, Union
+from typing import Callable
 
 import numpy as np
 import torch
@@ -240,7 +240,7 @@ class ElectronicEmbedding(nn.Module):
         self,
         num_features: int,
         num_residual: int,
-        activation: Union[Callable, nn.Module],
+        activation: Callable | nn.Module,
         is_charged: bool = False):
         """
         Args:

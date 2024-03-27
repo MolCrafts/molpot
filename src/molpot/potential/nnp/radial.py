@@ -1,5 +1,3 @@
-from math import pi
-
 import torch
 import torch.nn as nn
 
@@ -99,7 +97,7 @@ class BesselRBF(nn.Module):
         super(BesselRBF, self).__init__()
         self.n_rbf = n_rbf
 
-        freqs = torch.arange(1, n_rbf + 1) * pi / cutoff
+        freqs = torch.arange(1, n_rbf + 1) * torch.pi / cutoff
         self.register_buffer("freqs", freqs)
 
     def forward(self, inputs):

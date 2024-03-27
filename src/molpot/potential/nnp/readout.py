@@ -1,14 +1,15 @@
-from typing import Callable, Dict, Optional, Sequence, Union
+from typing import Callable, Sequence
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch_scatter import scatter_add
 
 from molpot import Alias
 
 from .block import build_gated_equivariant_mlp, build_mlp
-# from torch_scatter import scatter_add
-from .scatter import scatter_add
+
+# from .scatter import scatter_add
 
 __all__ = ["Atomwise", "DipoleMoment", "Polarizability"]
 
@@ -24,13 +25,13 @@ class Atomwise(nn.Module):
         self,
         n_in: int,
         n_out: int = 1,
-        n_hidden: int|Sequence[int]|None = None,
+        n_hidden: int | Sequence[int] | None = None,
         n_layers: int = 2,
         activation: Callable = F.silu,
         aggregation_mode: str = "sum",
         input_key: str = "scalar_representation",
         output_key: str = "y",
-        per_atom_output_key: Optional[str] = None,
+        per_atom_output_key: str | None = None,
     ):
         """
         Args:
@@ -70,7 +71,7 @@ class Atomwise(nn.Module):
         )
         self.aggregation_mode = aggregation_mode
 
-    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         # predict atomwise contributions
         y = self.outnet(inputs[self.input_key])
 
@@ -82,7 +83,7 @@ class Atomwise(nn.Module):
         if self.aggregation_mode is not None:
             idx_m = inputs[Alias.idx_m]
             maxm = int(idx_m[-1]) + 1
-            y = scatter_add(y, idx_m, dim_size=maxm)
+            y = scatter_add(y, idx_m, dim=0, dim_size=maxm)
             y = torch.squeeze(y, -1)
 
             if self.aggregation_mode == "avg":
@@ -113,7 +114,7 @@ class DipoleMoment(nn.Module):
     def __init__(
         self,
         n_in: int,
-        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_hidden: int | Sequence[int] | None = None,
         n_layers: int = 2,
         activation: Callable = F.silu,
         predict_magnitude: bool = False,
@@ -189,7 +190,7 @@ class DipoleMoment(nn.Module):
             atomic_dipoles = 0.0
 
         if self.correct_charges:
-            sum_charge = scatter_add(charges, idx_m, dim_size=maxm)
+            sum_charge = scatter_add(charges, idx_m, dim=0, dim_size=maxm)
 
             if Alias.total_charge in inputs:
                 total_charge = inputs[Alias.total_charge][:, None]
@@ -232,7 +233,7 @@ class Polarizability(nn.Module):
     def __init__(
         self,
         n_in: int,
-        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_hidden: int | Sequence[int] | None = None,
         n_layers: int = 2,
         activation: Callable = F.silu,
         polarizability_key: str = Alias.polarizability,
@@ -291,7 +292,7 @@ class Polarizability(nn.Module):
         # sum over atoms
         idx_m = inputs[Alias.idx_m]
         maxm = int(idx_m[-1]) + 1
-        alpha = scatter_add(alpha, idx_m, dim_size=maxm)
+        alpha = scatter_add(alpha, idx_m, dim=0, dim_size=maxm)
 
         inputs[self.polarizability_key] = alpha
         return inputs
