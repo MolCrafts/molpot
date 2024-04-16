@@ -4,7 +4,7 @@ from pathlib import Path
 
 app = typer.Typer()
 
-@app.command("run")
+@app.command()
 def run(script_path: str, entry_point: str="main"):
     spath = Path(script_path)
     script_name = spath.stem
@@ -18,6 +18,7 @@ def run(script_path: str, entry_point: str="main"):
     result = entry_point()
     typer.echo(result)
 
-@app.command("train")
-def train():
-    pass
+@app.command()
+def welcome():
+    version = "0.0.1"
+    typer.echo(f"Welcome to MolPot {version}")
