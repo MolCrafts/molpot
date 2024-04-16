@@ -5,9 +5,12 @@ dependencies = [
     "numpy",
     "torch_scatter",
     "torchdata",
-    "portalocker"
+    "portalocker",
+    "typer"
 ]
+
 [project.scripts]
+molpot = "molpot.cli:app"
 
 [build-system]
 requires = [
