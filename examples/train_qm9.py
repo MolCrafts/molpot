@@ -49,8 +49,8 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         valid_dataloader,
         strategies=[stagnation],
         logger={
-            "metrics": {
-                "speed": mpot.metric.StepSpeed(),
+            "train_metrics": {
+                # "speed": mpot.metric.StepSpeed(),
                 "loss": Identity(Alias.loss),
                 "energy_mae": mpot.metric.MAE(
                     Alias.energy, Alias.qm9.U0

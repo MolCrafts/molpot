@@ -1,7 +1,8 @@
-import os
-
+import os, sys
 import torch
-
+import torch.distributed as dist
+from collections import defaultdict
+import numpy as np
 
 class Singleton(type):
     _instances = {}
@@ -46,3 +47,24 @@ class Config(metaclass=Singleton):
     def set_environ(cls, **kwargs):
         for k, v in kwargs.items():
             os.environ[k] = v
+
+    @classmethod
+    def get_environ(cls):
+        env_info = {}
+        env_info["sys.platform"] = sys.platform
+        env_info["Python"] = sys.version.replace("\n", "")
+        env_info["Numpy"] = np.__version__
+
+        cuda_available = torch.cuda.is_available()
+        env_info["CUDA available"] = cuda_available
+
+        if cuda_available:
+            devices = defaultdict(list)
+            for k in range(torch.cuda.device_count()):
+                devices[torch.cuda.get_device_name(k)].append(str(k))
+            for name, device_ids in devices.items():
+                env_info["GPU " + ",".join(device_ids)] = name
+
+        env_info["PyTorch"] = torch.__version__
+
+        return env_info

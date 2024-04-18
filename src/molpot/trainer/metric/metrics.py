@@ -12,6 +12,10 @@ class Metric:
     def __call__(self, outputs):
         raise NotImplementedError
     
+    @property
+    def keys(self):
+        return []
+    
 class Identity(Metric):
 
     def __init__(self, key):
@@ -20,6 +24,10 @@ class Identity(Metric):
 
     def __call__(self, outputs):
         return outputs[self.key]
+    
+    @property
+    def keys(self):
+        return [self.key]
 
 class Accuracy(Metric):
     def __init__(self, result_key, target_key):
@@ -37,6 +45,10 @@ class Accuracy(Metric):
             correct = 0
             correct += torch.sum(pred == target).item()
         return correct / len(target)
+    
+    @property
+    def keys(self):
+        return [self.result_key, self.target_key]
     
 class TopKAccuracy(Metric):
     def __init__(self, result_key, target_key, k=3):
@@ -57,6 +69,10 @@ class TopKAccuracy(Metric):
                 correct += torch.sum(pred[:, i] == target).item()
         return correct / len(target)
     
+    @property
+    def keys(self):
+        return [self.result_key, self.target_key]
+    
 class MAE(Metric):
     def __init__(self, result_key, target_key, reduction="mean"):
         super().__init__('mae')
@@ -71,6 +87,10 @@ class MAE(Metric):
         with torch.no_grad():
             mae = self.kernel(result, target)
             return mae
+        
+    @property
+    def keys(self):
+        return [self.result_key, self.target_key]
             
 def track(metric):
     tracker = Tracker()
@@ -87,3 +107,7 @@ class StepSpeed(Metric):
     def __call__(self, outputs):
         elaspse_time = outputs["this_report_time"] - outputs["last_report_time"]
         return outputs["elaspse_time"] / elaspse_time 
+    
+    @property
+    def keys(self):
+        return ["this_report_time", "last_report_time", "elaspse_time"]

@@ -1,207 +1,213 @@
 import logging
-import time
-from itertools import cycle
-from pathlib import Path
-
 import torch
-
-from molpot import Alias, Config
-from molpot.potential.base import Potentials
-from molpot.trainer.logger.adapter import LogAdapter
-from molpot.trainer.strategy.base import StrategyManager
-from molpot.trainer.strategy.early_stop import StepCounter
-
-
-class BaseTrainer:
-    def __init__(self, name, model: Potentials, config: dict):
-        self.name = name
-        self.model = model
-        self.config = config
-
-        self.logger = logging.getLogger(self.__class__.__name__)
-
-    def save_model(self, fpath, train_state: dict):
-        model = self.model.__class__.__name__
-        state = {
-            "name": self.name,
-            "model": {"name": model, "state_dict": self.model.state_dict()},
-            "train_state": train_state,
-        }
-        torch.save(state, fpath)
-
-    def load_model(self, resume_path):
-        resume_path = Path(resume_path)
-        self.logger.info("Loading checkpoint: {} ...".format(resume_path.absolute()))
-        if not resume_path.exists():
-            raise FileNotFoundError(
-                "Checkpoint file not found: {}".format(resume_path.absolute())
-            )
-        state = torch.load(resume_path)
-        train_state = state["train_state"]
-        model = state["model"]
-        self.start_step = train_state["step"] + 1
-        self.start_epoch = train_state["epoch"] + 1
-
-        # load architecture params from checkpoint.
-        if model["name"] != self.model.__class__.__name__:
-            self.logger.warning(
-                "Warning: Architecture configuration given in config file is different from that of "
-                "checkpoint. This may yield an exception while state_dict is being loaded."
-            )
-        self.model.load_state_dict(model["state_dict"])
-
-        # load optimizer state from checkpoint only when optimizer type is not changed.
-        # if train_state["optimizer"]["type"] != self.config["optimizer"]["type"]:
-        #     self.logger.warning(
-        #         "Warning: Optimizer type given in config file is different from that of checkpoint. "
-        #         "Optimizer parameters not being resumed."
-        #     )
-        # else:
-        #     self.optimizer.load_state_dict(train_state["optimizer"])
-        self.optimizer.load_state_dict(train_state["optimizer"])
-
-        self.logger.info(
-            "Checkpoint loaded. Resume training from epoch {}".format(self.start_epoch)
-        )
+from pathlib import Path
+from .distributed import get_world_size, get_rank
+import molpot as mpot
+from .log import setup_logger
+import molpot as mpot
+from enum import Flag, auto
+from .fix.fix import Fix, FixManager
+from torch.cuda.amp import autocast
+import weakref
 
 
-class Trainer(BaseTrainer):
+class Status(Flag):
+    INIT = auto()
+    TRAINING = auto()
+    STOP_EPOCH = auto()
+    STOP_TRAIN = auto()
+    VALIDATING = auto()
+    FINISHED = auto()
+    STOPPED = auto()
+
+
+class Trainer:
+
     def __init__(
         self,
-        name,
-        model,
-        criterion,
-        optimizer,
-        lr_scheduler,
-        train_data_loader,
-        valid_data_loader,
-        strategies=[],
-        logger=None,
-        config={},
-        train_hooks=[],
+        model: mpot.Potential,
+        loss_fn: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        lr_scheduler: torch.optim.lr_scheduler._LRScheduler,
+        data_loader: mpot.DataLoader,
+        work_dir: str | Path,
+        enable_amp: bool = False,
     ):
-        super().__init__(name, model, config)
 
-        self.criterion = criterion
+        self.logger = setup_logger(name="trainer", output_dir=work_dir, rank=get_rank())
+        self.trainer_version = "0.1.0"
+
+        self.model = model
+        self.loss_fn = loss_fn
         self.optimizer = optimizer
-
-        self.save_dir = Path(config["save_dir"])
-
-        self.train_data_loader = train_data_loader
-        self.valid_data_loader = valid_data_loader
-
         self.lr_scheduler = lr_scheduler
+        self.work_dir = Path(work_dir)
+        self.data_loader = data_loader
 
-        Config.set_device(config["device"])
-        self.model = self.model.to(Config.device)
-        if config.get("compile", False):
-            self.logger.info("Compiling model...")
-            self.model = torch.compile(self.model)
+        self.amp_enabled = enable_amp
+        self.fixes = FixManager()
 
-        self.strategies = StrategyManager(strategies)
+        self.status = Status.INIT
 
-        self.log_config = logger
-        self.logger_adapter = LogAdapter(name, **self.log_config)
+        self.logger.info(mpot.Config.get_environ())
 
-        self.start_step = None
-        self.checkpoint_rate = config.get("checkpoint_rate", 10000)
-        self.train_hooks = train_hooks
+        self._grad_scaler = torch.cuda.amp.GradScaler(enabled=self.amp_enabled)
 
-        self.start_time = time.time()
-        resume = config.get("resume", None)
-        if resume:
-            self.load_model(config["resume"])
+        self.ckpt_dir = self.work_dir / "checkpoints"
+        self.ckpt_dir.mkdir(parents=True, exist_ok=True)
+
+    def train(
+        self,
+        steps: int,
+        epochs: int,
+        upto: bool = False,
+    ):
+
+        model = self.model
+        model.train()
+
+        self._apply_fix("before_train")
+
+        length_of_data_loader = len(self.data_loader)
+        total_steps = steps + epochs * length_of_data_loader
+        if upto:
+            self.train_steps = total_steps - self.steps
+            self.train_epochs = epochs - self.epochs
         else:
-            self.checkpoint_dir = Path(
-                config.get("checkpoint_dir", self.save_dir / "checkpoints")
-            )
-            self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+            self.train_steps = total_steps
+            self.train_epochs = epochs
 
-
-    def train(self, nsteps: int):
-
-        outputs = self._pre_train()
-        stepCounter = StepCounter(nsteps)
-        self.strategies.append(stepCounter)
-        nstep = outputs["step"]
-        nepoch = outputs["epoch"]
-        start_time = time.time()
-        outputs["last_report_time"] = start_time
-        outputs["elaspse_time"] = self.config["report_rate"]
-        self.model.train()
-        train_hooks = self.train_hooks
+        self.elasped_epochs = 0
+        self.elasped_steps = 0
         while True:
-            # Training
-            for inputs in cycle(self.train_data_loader):
-                self.model.train()
-                self.optimizer.zero_grad()
-                outputs.update(self.model(inputs))
-                loss = self.criterion(outputs)
-                loss.backward()
+            self._apply_fix("before_epoch")
+            for data in self.data_loader:
+                self._apply_fix("before_iter")
+                self.train_impl(data)
+                self._apply_fix("after_iter")
+                self.elasped_steps += 1
+                if self.status == Status.STOP_EPOCH:
+                    break
 
-                for hook in train_hooks:
-                    hook(nstep, self.model, outputs)
+            if self.status == Status.STOP_TRAIN:
+                break
+            self.elasped_epochs += 1
+            self._apply_fix("after_epoch")
 
-                self.optimizer.step()
-                outputs[Alias.loss] = loss
+        self._apply_fix("after_train")
 
-                if nstep % self.config["valid_rate"] == 0:
-                    # Validation
-                    self.model.eval()
-                    for inputs in self.valid_data_loader:
-                        _output = self.model(inputs)
-                        _output = self.criterion(outputs)
+    def train_impl(self, data):
 
-                if nstep % self.config["report_rate"] == 0:
-                    outputs["this_report_time"] = time.time()
-                    self.logger_adapter(nstep, nepoch, outputs)
-                    outputs["last_report_time"] = outputs["this_report_time"]
+        with autocast(enabled=self.amp_enabled):
+
+            outputs = self.model(data)
+            loss = self.loss_fn(outputs)
+
+        self.optimizer.zero_grad()
+        self._grad_scaler.scale(loss).backward()
+        if self._clip_grad_norm > 0:
+            self._grad_scaler.unscale_(self.optimizer)
+            torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(), self._clip_grad_norm
+            )
+
+        self._grad_scalar.step(self.optimizer)
+        self._grad_scalar.update()
+
+    def _apply_fix(self, stage: str):
+        for fix in self.fixes:
+            getattr(fix, stage)()
+
+    def register_fix(self, fix: mpot.Fix):
+        fix.trainer = weakref.proxy(self)
+        self.fixes.append(fix)
 
 
-                if self.strategies(nstep, outputs):
-                    if nstep < nsteps:
-                        self.logger.warning(
-                            f"Training stopped at step {nstep} due to early stopping."
-                        )
-                    self._post_train(outputs)
-                    return outputs
-                
-                if nstep % self.config["modify_lr_rate"] == 0:
-                    self.lr_scheduler.step()
-
-                if nstep % self.checkpoint_rate == 0:
-                    checkpoint_name = self.checkpoint_dir / f"{self.name}-{nstep}.pt"
-                    outputs["step"] = nstep
-                    outputs["epoch"] = nepoch
-                    self.save_model(checkpoint_name, outputs)
-                nstep += 1
-
-            nepoch += 1
-
-    def _pre_train(self):
-        if self.start_step is None:
-            start_step = 0
-            start_epoch = 0
-        self.logger_adapter.init()
-        outputs = {
-            "step": start_step,
-            "epoch": start_epoch,
-            "finish": False,
+    def save_checkpoint(self, file_name: str|Path)->None:
+        data = {
+            "version": self.trainer_version,
+            "device": get_world_size(),
+            "model": self.model.state_dict(),
             "optimizer": self.optimizer.state_dict(),
+            "lr_scheduler": self.lr_scheduler.state_dict(),
+            "epochs": self.epochs,
+            "steps": self.steps,
+            "fixes": {}
         }
-        return outputs
 
-    def _post_train(self, outputs):
-        final_model = self.save_dir / f"{self.name}.pt"
-        outputs["finish"] = True
-        self.save_model(final_model, outputs)
-        return {}
-    
-    
-class OfflineALTrainer(Trainer):
-    def _post_iter(self, nstep: int, outputs: dict, inputs: dict):
-        return super()._post_iter(outputs)
+        if self.amp_enabled:
+            data["grad_scaler"] = self.grad_scaler.state_dict()
+        
+        for fix in self.fixes:
+            if fix.checkpointable:
+                data["fixes"][fix.name] = fix.state_dict()
 
+        file_path = self.ckpt_dir / Path(file_name)
+        self.logger.info(f"Saving checkpoint to {file_path}")
+        torch.save(data, file_path)
 
-class OnlineALTrainer(Trainer):
-    pass
+    def load_checkpoint(self, file_name: str|Path = Path("latest.pth"))->None:
+        """Load the given checkpoint or resume from the latest checkpoint.
+
+        Args:
+            path (str): Path to the checkpoint to load. If None, load the latest checkpoint.
+        """
+        if file_name is None:
+            path = self.ckpt_dir / file_name
+        else:
+            path = Path(file_name)
+
+        if path.exists():
+            self.logger.info(f"Loading checkpoint from {path} ...")
+            checkpoint = torch.load(path, map_location="cpu")
+        else:
+            raise FileNotFoundError(f"Checkpoint file not found: {path}")
+
+        if self.trainer_version != checkpoint.get("version"):
+            raise SystemError(f"Checkpoint version mismatch: trainer: {self.trainer_version} vs ckpt: {checkpoint.get('version')}")
+
+        # check if the number of GPUs is consistent with the checkpoint
+        num_gpus = get_world_size()
+        ckpt_num_gpus = checkpoint["device"]
+        assert num_gpus == ckpt_num_gpus, (
+            f"You are trying to load a checkpoint trained with {ckpt_num_gpus} GPUs, "
+            f"but currently only have {num_gpus} GPUs.")
+
+        # 1. load epoch / iteration
+        self.epochs = checkpoint["epoch"]
+        self.steps = checkpoint["steps"]
+
+        # 2. load model
+        self.model.load_state_dict(checkpoint["model"])
+
+        # # 3. load metric_storage
+        # self.metric_storage = checkpoint["metric_storage"]
+
+        # 4. load optimizer
+        self.optimizer.load_state_dict(checkpoint["optimizer"])
+
+        # 5. load lr_scheduler
+        self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+
+        # 6. load grad scaler
+        consistent_amp = not (self.amp_enabled ^ ("grad_scaler" in checkpoint))
+        assert consistent_amp, "Found inconsistent AMP training setting when loading checkpoint."
+        if self.amp_enabled:
+            self._grad_scaler.load_state_dict(checkpoint["grad_scaler"])
+
+        # 7. load hooks
+        fix_states = checkpoint.get("fixes", {})
+        fix_names = [fix.name for fix in self.fixes if fix.checkpointable]
+        missing_keys = [name for name in fix_names if name not in fix_states]
+        unexpected_keys = [key for key in fix_states if key not in fix_names]
+        if missing_keys:
+            self.logger.warning(f"Encounter missing keys when loading fix state dict:\n{missing_keys}")
+        if unexpected_keys:
+            self.logger.warning(
+                f"Encounter unexpected keys when loading fix state dict:\n{unexpected_keys}")
+
+        for key, value in fix_states.items():
+            for fix in self.fixes:
+                if fix.name == key and fix.checkpointable:
+                    fix.load_state_dict(value)
+                    break

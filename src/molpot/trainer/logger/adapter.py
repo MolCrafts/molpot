@@ -24,6 +24,9 @@ class LogAdapter:
         for handler in self.handlers:
             handler(nstep, nepoch, result)
 
+    def get_fields(self):
+        return list(self.metrics.keys())
+
 class ConsoleHandler:
     def __init__(self):
         pass
