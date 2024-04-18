@@ -1,10 +1,17 @@
-import torch
 from typing import TypeVar
+
+import torch
+
 number = TypeVar('number', int, float)
 
 class Tracker:
-
+    """
+    https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
+    """
     def __init__(self):
+        self.reset()
+
+    def reset(self):
         self._mean = 0
         self._stddev = 0
         self._count = 0
@@ -12,6 +19,15 @@ class Tracker:
 
     def __call__(self, new: number | torch.Tensor):
 
+        self.update(new)
+
+    def update(self, new: number | torch.Tensor):
+        """
+        update tracker with a new scalar or a tensor of scalars
+
+        Args:
+            new (number | torch.Tensor): new scalar or tensor of scalars
+        """
         new = torch.atleast_1d(new)
         n = len(new)
 
@@ -30,5 +46,5 @@ class Tracker:
         return self._M2 / self._count
     
     @property
-    def stddev(self):
-        return self.variance ** 0.5
+    def sample_variance(self):
+        return self._M2 / (self._count - 1) if self._count > 1 else 0

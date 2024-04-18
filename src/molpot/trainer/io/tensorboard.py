@@ -1,4 +1,5 @@
-from .fix import Fix
+from ..fix import Fix
+
 
 class TensorBoardFix(Fix):
 

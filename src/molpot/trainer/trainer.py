@@ -1,28 +1,29 @@
-import logging
-import torch
-from pathlib import Path
-from .distributed import get_world_size, get_rank
-import molpot as mpot
-from .log import setup_logger
-import molpot as mpot
-from enum import Flag, auto
-from .fix.fix import Fix, FixManager
-from torch.cuda.amp import autocast
 import weakref
+from collections import defaultdict
+from enum import Flag, auto
+from pathlib import Path
 
+import torch
+from torch.cuda.amp import autocast
 
-class Status(Flag):
-    INIT = auto()
-    TRAINING = auto()
-    STOP_EPOCH = auto()
-    STOP_TRAIN = auto()
-    VALIDATING = auto()
-    FINISHED = auto()
-    STOPPED = auto()
+import molpot as mpot
+
+from .distributed import get_rank, get_world_size
+from .fix import FixManager
+from .log import setup_logger
 
 
 class Trainer:
 
+    class Status(Flag):
+        INIT = auto()
+        TRAINING = auto()
+        STOP_EPOCH = auto()
+        STOP_TRAIN = auto()
+        VALIDATING = auto()
+        FINISHED = auto()
+        STOPPED = auto()
+        
     def __init__(
         self,
         model: mpot.Potential,
@@ -47,7 +48,7 @@ class Trainer:
         self.amp_enabled = enable_amp
         self.fixes = FixManager()
 
-        self.status = Status.INIT
+        self.status = Trainer.Status.INIT
 
         self.logger.info(mpot.Config.get_environ())
 
@@ -55,6 +56,8 @@ class Trainer:
 
         self.ckpt_dir = self.work_dir / "checkpoints"
         self.ckpt_dir.mkdir(parents=True, exist_ok=True)
+
+        self.metrics = {}
 
     def train(
         self,
@@ -81,15 +84,15 @@ class Trainer:
         self.elasped_steps = 0
         while True:
             self._apply_fix("before_epoch")
-            for data in self.data_loader:
+            for self.train_data in self.data_loader:
                 self._apply_fix("before_iter")
-                self.train_impl(data)
+                self.train_impl(self.train_data)
                 self._apply_fix("after_iter")
                 self.elasped_steps += 1
-                if self.status == Status.STOP_EPOCH:
+                if self.status == Trainer.Status.STOP_EPOCH:
                     break
 
-            if self.status == Status.STOP_TRAIN:
+            if self.status == Trainer.Status.STOP_TRAIN:
                 break
             self.elasped_epochs += 1
             self._apply_fix("after_epoch")
@@ -105,14 +108,12 @@ class Trainer:
 
         self.optimizer.zero_grad()
         self._grad_scaler.scale(loss).backward()
-        if self._clip_grad_norm > 0:
-            self._grad_scaler.unscale_(self.optimizer)
-            torch.nn.utils.clip_grad_norm_(
-                self.model.parameters(), self._clip_grad_norm
-            )
 
-        self._grad_scalar.step(self.optimizer)
-        self._grad_scalar.update()
+        self._grad_scaler.step(self.optimizer)
+        self._grad_scaler.update()
+
+        self.train_outputs = outputs
+        self.train_loss = loss
 
     def _apply_fix(self, stage: str):
         for fix in self.fixes:

@@ -1,4 +1,3 @@
-
 class Fix:
     """Base class for fix.
 

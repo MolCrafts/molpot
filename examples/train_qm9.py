@@ -7,8 +7,6 @@ import molpot as mpot
 from molpot import Alias
 from molpot.potential.base import NNPotential
 from molpot.potential.nnp.readout import Atomwise
-from molpot.trainer.logger.adapter import ConsoleHandler, TensorBoardHandler
-from molpot.trainer.metric.metrics import MAE, Identity
 
 
 def load_qm9() -> tuple[mpot.DataLoader, mpot.DataLoader]:
@@ -37,7 +35,9 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.9)
 
-    stagnation = mpot.strategy.Stagnation(Alias.loss, patience=torch.inf)
+    early_stop = mpot.trainer.strategy.EarlyStop(Alias.loss, patience=torch.inf)
+    tb_writer = mpot.trainer.io.TensorBoard()
+    energy_mae = mpot.trainer.metric.MAE(1000, Alias.energy, Alias.qm9.U0)
 
     trainer = mpot.Trainer(
         "painn-qm9",

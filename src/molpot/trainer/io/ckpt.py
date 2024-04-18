@@ -1,5 +1,6 @@
-from .fix import Fix
 from pathlib import Path
+
+from ..fix import Fix
 
 
 class CheckPointFix(Fix):
