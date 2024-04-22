@@ -26,23 +26,27 @@ class Trainer:
         
     def __init__(
         self,
+        name: str,
         model: mpot.Potential,
         loss_fn: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         lr_scheduler: torch.optim.lr_scheduler._LRScheduler,
         data_loader: mpot.DataLoader,
-        work_dir: str | Path,
-        enable_amp: bool = False,
+        root_dir: str | Path = Path.cwd(),
+        enable_amp: bool = False
     ):
 
-        self.logger = setup_logger(name="trainer", output_dir=work_dir, rank=get_rank())
         self.trainer_version = "0.1.0"
 
+        self.name = name
         self.model = model
         self.loss_fn = loss_fn
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
-        self.work_dir = Path(work_dir)
+        self.root_dir = Path(root_dir)
+        self.work_dir = self.root_dir / name
+        self.work_dir.mkdir(parents=True, exist_ok=True)
+        self.logger = setup_logger(name="trainer", output_dir=self.work_dir, rank=get_rank())
         self.data_loader = data_loader
 
         self.amp_enabled = enable_amp
@@ -51,14 +55,17 @@ class Trainer:
 
         self.status = Trainer.Status.INIT
 
-        self.logger.info(mpot.Config.get_environ())
+        if get_rank() == 0:
+            self.logger.info(mpot.Config.get_environ())
 
         self._grad_scaler = torch.cuda.amp.GradScaler(enabled=self.amp_enabled)
-
         self.ckpt_dir = self.work_dir / "checkpoints"
         self.ckpt_dir.mkdir(parents=True, exist_ok=True)
 
         self.metrics = {}
+
+        self.steps = 1  # total steps for training this model
+        self.epochs = 1  # total epochs for training this model
 
     def train(
         self,
@@ -69,6 +76,10 @@ class Trainer:
 
         model = self.model
         model.train()
+
+        self.register_fix(
+            mpot.trainer.strategy.StepCounter()
+        )
 
         self._apply_fix("before_train")
         try:
@@ -81,11 +92,11 @@ class Trainer:
             self.train_steps = total_steps - self.steps
             self.train_epochs = epochs - self.epochs
         else:
-            self.train_steps = total_steps
-            self.train_epochs = epochs
+            self.train_steps = total_steps  # steps to be trained in this run
+            self.train_epochs = epochs  # epochs to be trained in this run
 
-        self.elasped_epochs = 0
-        self.elasped_steps = 0
+        self.elasped_epochs = 1  # epoch since this training session
+        self.elasped_steps = 1  # step this training session
         while True:
             self._apply_fix("before_epoch")
             for self.train_data in self.data_loader:
@@ -93,7 +104,7 @@ class Trainer:
                 self.train_impl(self.train_data)
                 self._apply_fix("after_iter")
                 self.elasped_steps += 1
-                if self.status == Trainer.Status.STOP_EPOCH:
+                if self.status == Trainer.Status.STOP_EPOCH or self.status == Trainer.Status.STOP_TRAIN:
                     break
 
             if self.status == Trainer.Status.STOP_TRAIN:
@@ -116,8 +127,9 @@ class Trainer:
         self._grad_scaler.step(self.optimizer)
         self._grad_scaler.update()
 
-        self.train_outputs = outputs
-        self.train_loss = loss
+        self.train_result = {}
+        self.train_result.update(outputs)
+        self.train_result.update({'loss': loss.item()})
 
     def _apply_fix(self, stage: str):
         for fix in self.fixes:

@@ -1,3 +1,5 @@
+import logging
+
 class Fix:
     """Base class for fix.
 
@@ -35,6 +37,7 @@ class Fix:
 
         self._every_n_steps = every_n_steps
         self._every_n_epochs = every_n_epochs
+        self.logger = logging.getLogger(__name__)
 
         assert self._every_n_steps >= 0 and self._every_n_epochs >= 0, "interval must be positive."
 
@@ -79,16 +82,16 @@ class Fix:
 
     # belows are some helper functions that are often used in fix
     def every_n_epochs(self, n: int) -> bool:
-        return (self.trainer.elasped_epochs + 1) % n == 0 if n > 0 else False
+        return (self.trainer.elasped_epochs) % n == 0 if n > 0 else False
 
     def every_n_steps(self, n: int) -> bool:
-        return (self.trainer.elasped_steps + 1) % n == 0 if n > 0 else False
+        return (self.trainer.elasped_steps) % n == 0 if n > 0 else False
 
     def is_last_epoch(self) -> bool:
-        return self.trainer.elasped_epochs == self.trainer.train_epochs - 1
+        return self.trainer.elasped_epochs == self.trainer.train_epochs
 
     def is_last_iter(self) -> bool:
-        return self.trainer.elasped_steps == self.trainer.train_iters - 1
+        return self.trainer.elasped_steps == self.trainer.train_steps
     
 
 class FixManager(list):

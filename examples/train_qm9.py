@@ -5,7 +5,6 @@ import torch
 
 import molpot as mpot
 from molpot import Alias
-from molpot.potential.base import NNPotential
 from molpot.potential.nnp.readout import Atomwise
 
 
@@ -30,53 +29,33 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         n_atom_basis, 4, mpot.nnp.GaussianRBF(n_atom_basis, 5), mpot.nnp.CosineCutoff(5)
     )
     readout = Atomwise(n_atom_basis, 1, input_key=Alias.painn.scalar, output_key=Alias.energy, aggregation_mode='add')
-    model = NNPotential("PaiNN", arch, readout, derive_energy=False)
-    criterion = mpot.loss.MultiMSELoss([1], targets=[(Alias.energy, Alias.qm9.U0)])
+    model = mpot.PotentialSeq(arch, readout)
+    criterion = mpot.trainer.loss.multi_targets(torch.nn.MSELoss(), [1], [(Alias.energy, Alias.qm9.U0)])
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.9)
 
-    early_stop = mpot.trainer.strategy.EarlyStop(Alias.loss, patience=torch.inf)
-    tb_writer = mpot.trainer.io.TensorBoard()
-    energy_mae = mpot.trainer.metric.MAE(1000, Alias.energy, Alias.qm9.U0)
-
     trainer = mpot.Trainer(
-        "painn-qm9",
+        "train_qm9",
         model,
         criterion,
         optimizer,
         scheduler,
         train_dataloader,
-        valid_dataloader,
-        strategies=[stagnation],
-        logger={
-            "train_metrics": {
-                # "speed": mpot.metric.StepSpeed(),
-                "loss": Identity(Alias.loss),
-                "energy_mae": mpot.metric.MAE(
-                    Alias.energy, Alias.qm9.U0
-                ),
-            },
-            "handlers": [ConsoleHandler(), TensorBoardHandler()],
-            "save_dir": "./log",
-        },
-        config={
-            "save_dir": "model",
-            "device": {"type": "gpu"},
-            "compile": True,
-            "report_rate": 5,
-            "valid_rate": 1000,
-            "modify_lr_rate": 1000,
-            "checkpoint_rate": 1000,
-        },
+        enable_amp=False
+    )
+    trainer.register_fix(
+        mpot.trainer.io.CheckPointFix(50, 0, 5)
+    )
+    trainer.register_fix(
+        mpot.trainer.io.TensorBoardFix(50, 0, tb_log_dir="tb_log")
+    )
+    trainer.register_fix(
+        mpot.trainer.metric.MAE(10, mpot.Alias.energy, mpot.Alias.qm9.U0)
     )
 
-
-    output = trainer.train(1000)
+    output = trainer.train(100)
     return "done"
 
 
 if __name__ == "__main__":
-    proj_dir = Path.cwd() / "train_qm9"
-    proj_dir.mkdir(exist_ok=True)
-    os.chdir(proj_dir)
     train_qm9(load_qm9())

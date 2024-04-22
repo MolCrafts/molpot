@@ -9,8 +9,8 @@ class Metric(Fix):
 
     
 class MAE(Metric):
-    def __init__(self, every_n_step:int, result_key, target_key, reduction="mean"):
-        super().__init__(every_n_step, every_n_epoch=0)
+    def __init__(self, every_n_steps:int, result_key, target_key, reduction="mean"):
+        super().__init__(every_n_steps, every_n_epochs=0)
         self.result_key = result_key
         self.target_key = target_key
         self.kernel = torch.nn.L1Loss(reduction=reduction)
@@ -18,8 +18,8 @@ class MAE(Metric):
     def after_iter(self) -> None:
         
         if self.every_n_steps(self._every_n_steps) or self.is_last_iter():
-            result = self.trainer.train_outputs[self.result_key]
-            target = self.trainer.data[self.target_key]
+            result = self.trainer.train_result[self.result_key]
+            target = self.trainer.train_data[self.target_key]
             loss = self.kernel(result, target)
             self.trainer.metrics["mae"] = loss
 

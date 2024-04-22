@@ -4,15 +4,12 @@ import molpot as mp
 
 class Potential(nn.Module):
 
-    def forward(self, inputs:dict, forces:bool=False, stress:bool=False) -> dict:
-        pass
+    pass
     
 class PotentialDict(nn.ModuleDict):
 
-    def forward(self, inputs:dict, forces:bool=False, stress:bool=False) -> dict:
-        pass
+    pass
     
 class PotentialSeq(nn.Sequential):
 
-    def forward(self, inputs:dict, forces:bool=False, stress:bool=False) -> dict:
-        pass
+    pass

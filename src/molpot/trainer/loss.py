@@ -5,19 +5,10 @@
 
 from torch import nn
 
-__all__ = ["MultiMSELoss"]
-
-class MultiMSELoss(nn.Module):
-
-    def __init__(self, multipliers, targets):
-        super().__init__()
-        self.multipliers = multipliers
-        self.loss_kernel = nn.MSELoss()
-        self.targets = targets
-        assert len(multipliers) == len(targets)
-
-    def forward(self, outputs):
+def multi_targets(loss_fn, weights, targets):
+    def multi_traget_loss_fn(input, target):
         loss = 0
-        for m, (output_key, label_key) in zip(self.multipliers, self.targets):
-            loss += m * self.loss_kernel(outputs[output_key], outputs[label_key])
+        for weight, (output, label) in zip(weights, targets):
+            loss += weight * loss_fn(input[output], target[label])
         return loss
+    return multi_traget_loss_fn

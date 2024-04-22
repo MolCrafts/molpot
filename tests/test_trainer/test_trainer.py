@@ -9,7 +9,7 @@ from torchdata.dataloader2 import DataLoader2
 import molpy as mp
 
 
-def test_trainer():
+def test_classical_trainer():
 
     frame = mp.Frame()
     spec, ff = mp.structure.h2o.spc_fw().values()
