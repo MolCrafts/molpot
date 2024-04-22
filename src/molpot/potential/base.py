@@ -3,10 +3,16 @@ import torch.nn as nn
 import molpot as mp
 
 class Potential(nn.Module):
-    pass
 
-class NNPotential(nn.Sequential):
-    pass
+    def forward(self, inputs:dict, forces:bool=False, stress:bool=False) -> dict:
+        pass
+    
+class PotentialDict(nn.ModuleDict):
 
-class Block(nn.Module):
-    pass
+    def forward(self, inputs:dict, forces:bool=False, stress:bool=False) -> dict:
+        pass
+    
+class PotentialSeq(nn.Sequential):
+
+    def forward(self, inputs:dict, forces:bool=False, stress:bool=False) -> dict:
+        pass

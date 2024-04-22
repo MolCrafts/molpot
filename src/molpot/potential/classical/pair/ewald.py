@@ -1,12 +1,10 @@
 import torch
 import torch.nn as nn
-from molpot import kw
 from typing import Optional
 import numpy as np
+from molpot import Alias
 
-kw.set("Eewald", "_mpot_Eewald_", "Ha", "Ewald energy")
-
-class EnergyEwald(torch.nn.Module):
+class Ewald(torch.nn.Module):
     """
     Compute the Coulomb energy of a set of point charges inside a periodic box.
     Only works for periodic boundary conditions in all three spatial directions and orthorhombic boxes.
@@ -29,12 +27,11 @@ class EnergyEwald(torch.nn.Module):
         use_long_range_nblist: bool = True,
         screening_fn: Optional[nn.Module] = None,
     ):
-        super(EnergyEwald, self).__init__()
+        super().__init__()
 
         # Get the appropriate Coulomb constant
         # ke is convert unit for Ha * Bohr
         self.register_buffer("ke", torch.Tensor([1]))
-        self.output_key = kw.Eewald
         self.use_long_range_nblist = use_long_range_nblist
 
         self.screening_fn = screening_fn
@@ -74,23 +71,23 @@ class EnergyEwald(torch.nn.Module):
         Returns:
             dict(str, torch.Tensor): results with Coulomb energy.
         """
-        q = inputs[kw.charge].squeeze(-1)
-        idx_m = inputs[kw.idx_m]
+        q = inputs[Alias.charge].squeeze(-1)
+        idx_m = inputs[Alias.idx_m]
 
         # Use long range neighbor list if requested
         if self.use_long_range_nblist:
-            r_ij = inputs[kw.Rij_lr]
-            idx_i = inputs[kw.idx_i_lr]
-            idx_j = inputs[kw.idx_j_lr]
+            r_ij = inputs[Alias.Rij_lr]
+            idx_i = inputs[Alias.idx_i_lr]
+            idx_j = inputs[Alias.idx_j_lr]
         else:
-            r_ij = inputs[kw.Rij]
-            idx_i = inputs[kw.idx_i]
-            idx_j = inputs[kw.idx_j]
+            r_ij = inputs[Alias.Rij]
+            idx_i = inputs[Alias.idx_i]
+            idx_j = inputs[Alias.idx_j]
 
         d_ij = torch.norm(r_ij, dim=1)
 
-        positions = inputs[kw.R]
-        box = inputs[kw.box]
+        positions = inputs[Alias.R]
+        box = inputs[Alias.box]
 
         n_atoms = q.shape[0]
         n_molecules = int(idx_m[-1]) + 1

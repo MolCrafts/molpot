@@ -90,7 +90,7 @@ class Atomwise(nn.Module):
                 y = y / inputs[Alias.n_atoms]
 
         inputs[self.output_key] = y
-        return inputs
+        return y
 
 
 class DipoleMoment(nn.Module):

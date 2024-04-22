@@ -9,7 +9,7 @@ from torch.cuda.amp import autocast
 import molpot as mpot
 
 from .distributed import get_rank, get_world_size
-from .fix import FixManager
+from .fix import FixManager, Fix
 from .log import setup_logger
 
 
@@ -48,6 +48,7 @@ class Trainer:
         self.amp_enabled = enable_amp
         self.fixes = FixManager()
 
+
         self.status = Trainer.Status.INIT
 
         self.logger.info(mpot.Config.get_environ())
@@ -62,7 +63,7 @@ class Trainer:
     def train(
         self,
         steps: int,
-        epochs: int,
+        epochs: int = 0,
         upto: bool = False,
     ):
 
@@ -70,9 +71,12 @@ class Trainer:
         model.train()
 
         self._apply_fix("before_train")
+        try:
+            length_of_data_loader = len(self.data_loader)
+            total_steps = steps + epochs * length_of_data_loader
+        except TypeError:
+            total_steps = steps
 
-        length_of_data_loader = len(self.data_loader)
-        total_steps = steps + epochs * length_of_data_loader
         if upto:
             self.train_steps = total_steps - self.steps
             self.train_epochs = epochs - self.epochs
@@ -104,7 +108,7 @@ class Trainer:
         with autocast(enabled=self.amp_enabled):
 
             outputs = self.model(data)
-            loss = self.loss_fn(outputs)
+            loss = self.loss_fn(outputs, data)
 
         self.optimizer.zero_grad()
         self._grad_scaler.scale(loss).backward()
@@ -119,7 +123,7 @@ class Trainer:
         for fix in self.fixes:
             getattr(fix, stage)()
 
-    def register_fix(self, fix: mpot.Fix):
+    def register_fix(self, fix: Fix):
         fix.trainer = weakref.proxy(self)
         self.fixes.append(fix)
 

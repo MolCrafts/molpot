@@ -4,8 +4,6 @@ import torch
 
 from ..fix import Fix
 
-__all__ = ["Accuracy", "TopKAccuracy", "MAE", "Identity", "StepSpeed"]
-
 class Metric(Fix):
     pass
 
