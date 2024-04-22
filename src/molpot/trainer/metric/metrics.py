@@ -4,6 +4,7 @@ import torch
 
 from ..fix import Fix
 
+
 class Metric(Fix):
     pass
 
@@ -16,12 +17,12 @@ class MAE(Metric):
         self.kernel = torch.nn.L1Loss(reduction=reduction)
 
     def after_iter(self) -> None:
-        
-        if self.every_n_steps(self._every_n_steps) or self.is_last_iter():
-            result = self.trainer.train_result[self.result_key]
-            target = self.trainer.train_data[self.target_key]
-            loss = self.kernel(result, target)
-            self.trainer.metrics["mae"] = loss
+
+        result = self.trainer.train_result[self.result_key]
+        target = self.trainer.train_data[self.target_key]
+        mae = self.kernel(result, target)
+        self.trainer.metrics["mae"] = mae
+        print(self.trainer.steps, mae)
 
 class StepSpeed(Metric):
 
@@ -30,19 +31,17 @@ class StepSpeed(Metric):
         super().__init__(every_n_step, every_n_epoch)
 
     def before_epoch(self) -> None:
-        if self._every_n_epochs and self.every_n_epochs(self._every_n_epochs):
-            self._epoch_start_time = time.perf_counter()
+
+        self._epoch_start_time = time.perf_counter()
         
     def after_epoch(self) -> None:
-        if self._every_n_epochs and self.every_n_epochs(self._every_n_epochs):
-            epoch_time = time.perf_counter() - self._epoch_start_time
-            self.trainer.metrics["epoch_time"] = epoch_time / self._every_n_epochs
+
+        epoch_time = time.perf_counter() - self._epoch_start_time
+        self.trainer.metrics["epoch_time"] = epoch_time / self._every_n_epochs
 
     def before_iter(self) -> None:
-        if self._every_n_steps and self.every_n_steps(self._every_n_steps):
-            self._iter_start_time = time.perf_counter()
+        self._iter_start_time = time.perf_counter()
 
     def after_iter(self) -> None:
-        if self._every_n_steps and self.every_n_steps(self._every_n_steps):
-            iter_time = time.perf_counter() - self._iter_start_time
-            self.trainer.metrics["iter_time"] = iter_time / self._every_n_steps
+        iter_time = time.perf_counter() - self._iter_start_time
+        self.trainer.metrics["iter_time"] = iter_time / self._every_n_steps

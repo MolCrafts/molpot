@@ -47,10 +47,10 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         mpot.trainer.io.CheckPointFix(50, 0, 5)
     )
     trainer.register_fix(
-        mpot.trainer.io.TensorBoardFix(50, 0, tb_log_dir="tb_log")
+        mpot.trainer.io.TensorBoardFix(20, 0, tb_log_dir="tb_log")
     )
     trainer.register_fix(
-        mpot.trainer.metric.MAE(10, mpot.Alias.energy, mpot.Alias.qm9.U0)
+        mpot.trainer.metric.MAE(20, mpot.Alias.energy, mpot.Alias.qm9.U0)
     )
 
     output = trainer.train(100)

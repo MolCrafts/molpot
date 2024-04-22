@@ -42,7 +42,7 @@ class EarlyStop(Strategy):
 class StepCounter(Strategy):
 
     def __init__(self, ):
-        super().__init__(0, 0)
+        super().__init__(1, 0)
         
     def before_iter(self) -> bool:
         if self.trainer.elasped_steps > self.trainer.train_steps:

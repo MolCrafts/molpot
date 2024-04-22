@@ -1,5 +1,6 @@
 import logging
 
+
 class Fix:
     """Base class for fix.
 
@@ -33,36 +34,58 @@ class Fix:
     trainer: "Trainer" = None
     priority: int = 5
 
-    def __init__(self, every_n_steps:int, every_n_epochs:int) -> None:
+    def __init__(self, every_n_steps:int, every_n_epochs:int=0) -> None:
 
-        self._every_n_steps = every_n_steps
-        self._every_n_epochs = every_n_epochs
+        self.every_n_steps = every_n_steps
+        self.every_n_epochs = every_n_epochs
         self.logger = logging.getLogger(__name__)
 
-        assert self._every_n_steps >= 0 and self._every_n_epochs >= 0, "interval must be positive."
+        assert self.every_n_steps >= 0 and self.every_n_epochs >= 0, "interval must be positive."
 
-    def before_train(self) -> None:
+    def do_before_train(self) -> None:
         """Called before the first epoch."""
-        pass
+        self.before_train()
 
-    def after_train(self) -> None:
+    def do_after_train(self) -> None:
         """Called after the last epoch."""
-        pass
+        self.after_train()
 
-    def before_epoch(self) -> None:
+    def do_before_epoch(self) -> None:
         """Called before each epoch."""
-        pass
+        if self.is_every_n_epochs() or self.is_last_epoch():
+            self.before_epoch()
 
-    def after_epoch(self) -> None:
+    def do_after_epoch(self) -> None:
         """Called after each epoch."""
-        pass
+        if self.is_every_n_epochs() or self.is_last_epoch():
+            self.before_epoch()
 
-    def before_iter(self) -> None:
+    def do_before_iter(self) -> None:
         """Called before each iteration."""
+        if self.is_every_n_steps() or self.is_last_iter():
+            self.before_iter()
+
+    def do_after_iter(self) -> None:
+        """Called after each iteration."""
+        if self.is_every_n_steps() or self.is_last_iter():
+            self.after_iter()
+
+    def before_train(self):
         pass
 
-    def after_iter(self) -> None:
-        """Called after each iteration."""
+    def after_train(self):
+        pass
+
+    def before_epoch(self):
+        pass
+
+    def after_epoch(self):
+        pass
+
+    def before_iter(self):
+        pass
+
+    def after_iter(self):
         pass
 
     @property
@@ -81,11 +104,11 @@ class Fix:
         self.trainer.log(*args, **kwargs)
 
     # belows are some helper functions that are often used in fix
-    def every_n_epochs(self, n: int) -> bool:
-        return (self.trainer.elasped_epochs) % n == 0 if n > 0 else False
+    def is_every_n_epochs(self) -> bool:
+        return (self.trainer.elasped_epochs) % self.every_n_epochs == 0 if self.every_n_epochs > 0 else False
 
-    def every_n_steps(self, n: int) -> bool:
-        return (self.trainer.elasped_steps) % n == 0 if n > 0 else False
+    def is_every_n_steps(self) -> bool:
+        return (self.trainer.elasped_steps) % self.every_n_steps == 0 if self.every_n_steps > 0 else False
 
     def is_last_epoch(self) -> bool:
         return self.trainer.elasped_epochs == self.trainer.train_epochs

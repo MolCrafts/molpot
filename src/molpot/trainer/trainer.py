@@ -9,7 +9,7 @@ from torch.cuda.amp import autocast
 import molpot as mpot
 
 from .distributed import get_rank, get_world_size
-from .fix import FixManager, Fix
+from .fix import Fix, FixManager
 from .log import setup_logger
 
 
@@ -31,7 +31,7 @@ class Trainer:
         loss_fn: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         lr_scheduler: torch.optim.lr_scheduler._LRScheduler,
-        data_loader: mpot.DataLoader,
+        dataloader: mpot.DataLoader,
         root_dir: str | Path = Path.cwd(),
         enable_amp: bool = False
     ):
@@ -47,7 +47,7 @@ class Trainer:
         self.work_dir = self.root_dir / name
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.logger = setup_logger(name="trainer", output_dir=self.work_dir, rank=get_rank())
-        self.data_loader = data_loader
+        self.dataloader = dataloader
 
         self.amp_enabled = enable_amp
         self.fixes = FixManager()
@@ -64,8 +64,16 @@ class Trainer:
 
         self.metrics = {}
 
-        self.steps = 1  # total steps for training this model
-        self.epochs = 1  # total epochs for training this model
+        self.start_steps = 0
+        self.start_epochs = 0
+
+    @property
+    def steps(self)->int:
+        return self.elasped_steps + self.start_steps
+    
+    @property
+    def epochs(self)->int:
+        return self.elasped_epochs + self.start_epochs
 
     def train(
         self,
@@ -81,9 +89,9 @@ class Trainer:
             mpot.trainer.strategy.StepCounter()
         )
 
-        self._apply_fix("before_train")
+        self._apply_fix("do_before_train")
         try:
-            length_of_data_loader = len(self.data_loader)
+            length_of_data_loader = len(self.dataloader)
             total_steps = steps + epochs * length_of_data_loader
         except TypeError:
             total_steps = steps
@@ -92,27 +100,27 @@ class Trainer:
             self.train_steps = total_steps - self.steps
             self.train_epochs = epochs - self.epochs
         else:
-            self.train_steps = total_steps  # steps to be trained in this run
-            self.train_epochs = epochs  # epochs to be trained in this run
+            self.train_steps = total_steps  # steps to run in this run
+            self.train_epochs = epochs  # epochs to run in this run
 
-        self.elasped_epochs = 1  # epoch since this training session
-        self.elasped_steps = 1  # step this training session
+        self.elasped_epochs = 0  # epoch since this training session
+        self.elasped_steps = 0  # step this training session
         while True:
-            self._apply_fix("before_epoch")
-            for self.train_data in self.data_loader:
-                self._apply_fix("before_iter")
-                self.train_impl(self.train_data)
-                self._apply_fix("after_iter")
-                self.elasped_steps += 1
-                if self.status == Trainer.Status.STOP_EPOCH or self.status == Trainer.Status.STOP_TRAIN:
-                    break
-
             if self.status == Trainer.Status.STOP_TRAIN:
                 break
-            self.elasped_epochs += 1
-            self._apply_fix("after_epoch")
+            self._apply_fix("do_before_epoch")
+            for self.train_data in self.dataloader:
+                if self.status == Trainer.Status.STOP_EPOCH or self.status == Trainer.Status.STOP_TRAIN:
+                    break
+                self._apply_fix("do_before_iter")
+                self.train_impl(self.train_data)
+                self._apply_fix("do_after_iter")
+                self.elasped_steps += 1
 
-        self._apply_fix("after_train")
+            self.elasped_epochs += 1
+            self._apply_fix("do_after_epoch")
+
+        self._apply_fix("do_after_train")
 
     def train_impl(self, data):
 
@@ -191,8 +199,8 @@ class Trainer:
             f"but currently only have {num_gpus} GPUs.")
 
         # 1. load epoch / iteration
-        self.epochs = checkpoint["epoch"]
-        self.steps = checkpoint["steps"]
+        self.start_epochs = checkpoint["epoch"]
+        self.start_steps = checkpoint["steps"]
 
         # 2. load model
         self.model.load_state_dict(checkpoint["model"])

@@ -14,21 +14,19 @@ class CheckPointFix(Fix):
 
     def after_iter(self) -> None:
         
-        if self.every_n_steps(self._every_n_steps) or self.is_last_iter():
-            step = self.trainer.elasped_steps
-            ckpt_name = f"step_{step}.pth"
-            self.trainer.save_checkpoint(ckpt_name)
-            self.recent_ckpts.append(ckpt_name)
-            self._delete_old_ckpts()
+        step = self.trainer.steps
+        ckpt_name = f"step_{step}.pth"
+        self.trainer.save_checkpoint(ckpt_name)
+        self.recent_ckpts.append(ckpt_name)
+        self._delete_old_ckpts()
 
     def after_epoch(self) -> None:
         
-        if self.every_n_epochs(self._every_n_epochs) or self.is_last_epoch():
-            epoch = self.trainer.elasped_epochs
-            ckpt_name = f"epoch_{epoch}.pth"
-            self.trainer.save_checkpoint(ckpt_name)
-            self.recent_ckpts.append(ckpt_name)
-            self._delete_old_ckpts()
+        epoch = self.trainer.elasped_epochs
+        ckpt_name = f"epoch_{epoch}.pth"
+        self.trainer.save_checkpoint(ckpt_name)
+        self.recent_ckpts.append(ckpt_name)
+        self._delete_old_ckpts()
 
     def _delete_old_ckpts(self):
 
