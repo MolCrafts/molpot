@@ -11,6 +11,7 @@ class CheckPointFix(Fix):
 
         self.max_to_keep = max_to_keep
         self.recent_ckpts = list()
+        self.priority = 10
 
     def after_iter(self) -> None:
         
@@ -19,6 +20,10 @@ class CheckPointFix(Fix):
         self.trainer.save_checkpoint(ckpt_name)
         self.recent_ckpts.append(ckpt_name)
         self._delete_old_ckpts()
+        # create a new link to the latest checkpoint
+        latest_ckpt = self.trainer.ckpt_dir / Path("latest.pth")
+        latest_ckpt.unlink(missing_ok=True)
+        latest_ckpt.symlink_to(ckpt_name)
 
     def after_epoch(self) -> None:
         
@@ -34,5 +39,5 @@ class CheckPointFix(Fix):
             ckpt_to_delete = self.recent_ckpts.pop(0)
             ckpt_path = self.trainer.ckpt_dir / Path(ckpt_to_delete)
             ckpt_path.unlink()
-            self.trainer.logger.info(f"Checkpoint {ckpt_to_delete} has been deleted.")
+            # self.trainer.logger.info(f"Checkpoint {ckpt_to_delete} has been deleted.")
 

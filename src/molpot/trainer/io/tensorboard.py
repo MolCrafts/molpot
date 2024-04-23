@@ -11,6 +11,7 @@ class ConsoloLogFix(Fix):
     def __init__(self, every_n_steps:int, every_n_epochs:int=0, **kwargs) -> None:
 
         super().__init__(every_n_steps, every_n_epochs)
+        self.priority = 10
 
     def before_train(self) -> None:
         self.train_start_time = time.perf_counter()
@@ -21,12 +22,9 @@ class ConsoloLogFix(Fix):
         
         print(f"Total training time: {total_train_time}")
 
-    def before_iter(self) -> None:
-        self.iter_start_time = time.perf_counter()
-
     def after_iter(self) -> None:
-        self.iter_time = (time.perf_counter() - self.iter_start_time) / self.every_n_steps
-        print(f"Step: {self.trainer.steps} Epoch: {self.trainer.epochs} Speed: {self.iter_time}")
+        msg = " ".join([f"{key}: {value:.4f}" for key, value in self.trainer.metrics.items()])
+        print(msg)
 
 class TensorBoardFix(Fix):
 
@@ -35,6 +33,7 @@ class TensorBoardFix(Fix):
         super().__init__(every_n_steps, every_n_epochs)
         self.tb_log_dir = tb_log_dir
         self.kwargs = kwargs
+        self.priority = 10
 
     def before_train(self) -> None:
         from torch.utils.tensorboard import SummaryWriter
@@ -45,10 +44,8 @@ class TensorBoardFix(Fix):
 
     def _write_tensorboard(self) -> None:
         for key, value in self.trainer.metrics.items():
-            # if key not in self._last_write or iter > self._last_write[key]:
             self._tb_writer.add_scalar(key, value, self.trainer.steps)
-            print(key, value, self.trainer.steps)
-                # self._last_write[key] = iter
+
 
     def after_iter(self) -> None:
         self._write_tensorboard()

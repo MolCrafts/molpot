@@ -28,9 +28,17 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     arch = mpot.potential.nnp.PaiNN(
         n_atom_basis, 4, mpot.nnp.GaussianRBF(n_atom_basis, 5), mpot.nnp.CosineCutoff(5)
     )
-    readout = Atomwise(n_atom_basis, 1, input_key=Alias.painn.scalar, output_key=Alias.energy, aggregation_mode='add')
+    readout = Atomwise(
+        n_atom_basis,
+        1,
+        input_key=Alias.painn.scalar,
+        output_key=Alias.energy,
+        aggregation_mode="add",
+    )
     model = mpot.PotentialSeq(arch, readout)
-    criterion = mpot.trainer.loss.multi_targets(torch.nn.MSELoss(), [1], [(Alias.energy, Alias.qm9.U0)])
+    criterion = mpot.trainer.loss.multi_targets(
+        torch.nn.MSELoss(), [1], [(Alias.energy, Alias.qm9.U0)]
+    )
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.9)
 
@@ -41,16 +49,12 @@ def train_qm9(load_qm9: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
         optimizer,
         scheduler,
         train_dataloader,
-        enable_amp=False
+        enable_amp=False,
     )
+    trainer.register_fix(mpot.trainer.io.CheckPointFix(50, 0, 5))
+    trainer.register_fix(mpot.trainer.io.TensorBoardFix(20, 0, tb_log_dir="tb_log"))
     trainer.register_fix(
-        mpot.trainer.io.CheckPointFix(50, 0, 5)
-    )
-    trainer.register_fix(
-        mpot.trainer.io.TensorBoardFix(20, 0, tb_log_dir="tb_log")
-    )
-    trainer.register_fix(
-        mpot.trainer.metric.MAE(20, mpot.Alias.energy, mpot.Alias.qm9.U0)
+        mpot.trainer.metric.MAE("energy", 20, mpot.Alias.energy, mpot.Alias.qm9.U0)
     )
 
     output = trainer.train(100)

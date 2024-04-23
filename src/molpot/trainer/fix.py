@@ -39,7 +39,7 @@ class Fix:
         self.every_n_steps = every_n_steps
         self.every_n_epochs = every_n_epochs
         self.logger = logging.getLogger(__name__)
-
+        self._name = self.__class__.__name__
         assert self.every_n_steps >= 0 and self.every_n_epochs >= 0, "interval must be positive."
 
     def do_before_train(self) -> None:
@@ -98,7 +98,11 @@ class Fix:
     @property
     def name(self) -> str:
         """The class name of the fix."""
-        return self.__class__.__name__
+        return self._name
+    
+    @name.setter
+    def name(self, name:str):
+        self._name = name
 
     def log(self, *args, **kwargs) -> None:
         self.trainer.log(*args, **kwargs)
@@ -130,5 +134,8 @@ class FixManager(list):
                 break
         if not inserted:
             self.insert(0, fix)
+
+    def append(self, fix:Fix):
+        self.add_fix(fix)
 
     

@@ -47,3 +47,12 @@ class StepCounter(Strategy):
     def before_iter(self) -> bool:
         if self.trainer.elasped_steps > self.trainer.train_steps:
             self.trainer.status = self.trainer.Status.STOP_TRAIN
+
+class EpochCounter(Strategy):
+
+    def __init__(self, ):
+        super().__init__(0, 1)
+        
+    def before_epoch(self) -> bool:
+        if self.trainer.elasped_epochs > self.trainer.train_epochs:
+            self.trainer.status = self.trainer.Status.STOP_TRAIN
