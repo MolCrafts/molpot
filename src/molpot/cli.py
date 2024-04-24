@@ -1,6 +1,7 @@
-import typer
 import importlib
 from pathlib import Path
+
+import typer
 
 app = typer.Typer()
 
@@ -22,3 +23,11 @@ def run(script_path: str, entry_point: str="main"):
 def welcome():
     version = "0.0.1"
     typer.echo(f"Welcome to MolPot {version}")
+
+@app.command()
+def monitor(path: str):
+    """
+    use tensorboard to monitor the training process
+    """
+    import subprocess
+    subprocess.run(["tensorboard", "--logdir", path])
