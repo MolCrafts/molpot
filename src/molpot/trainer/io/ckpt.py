@@ -5,7 +5,9 @@ from ..fix import Fix
 
 class CheckPointFix(Fix):
 
-    def __init__(self, every_n_steps:int, every_n_epochs:int, max_to_keep:int|None=None) -> None:
+    def __init__(
+        self, every_n_steps: int, every_n_epochs: int, max_to_keep: int | None = None
+    ) -> None:
 
         super().__init__(every_n_steps, every_n_epochs)
 
@@ -14,7 +16,7 @@ class CheckPointFix(Fix):
         self.priority = 10
 
     def after_iter(self) -> None:
-        
+
         step = self.trainer.steps
         ckpt_name = f"step_{step}.pth"
         self.trainer.save_checkpoint(ckpt_name)
@@ -26,7 +28,7 @@ class CheckPointFix(Fix):
         latest_ckpt.symlink_to(ckpt_name)
 
     def after_epoch(self) -> None:
-        
+
         epoch = self.trainer.elasped_epochs
         ckpt_name = f"epoch_{epoch}.pth"
         self.trainer.save_checkpoint(ckpt_name)
@@ -39,5 +41,4 @@ class CheckPointFix(Fix):
             ckpt_to_delete = self.recent_ckpts.pop(0)
             ckpt_path = self.trainer.ckpt_dir / Path(ckpt_to_delete)
             ckpt_path.unlink()
-            # self.trainer.logger.info(f"Checkpoint {ckpt_to_delete} has been deleted.")
-
+            self.trainer.logger.debug(f"Checkpoint {ckpt_to_delete} has been deleted.")

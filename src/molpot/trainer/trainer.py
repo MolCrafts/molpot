@@ -1,5 +1,4 @@
 import weakref
-from collections import defaultdict
 from enum import Flag, auto
 from pathlib import Path
 
@@ -10,7 +9,7 @@ import molpot as mpot
 
 from .distributed import get_rank, get_world_size
 from .fix import Fix, FixManager
-from .log import setup_logger
+from ..log import setup_logger
 
 
 class Trainer:
@@ -63,17 +62,21 @@ class Trainer:
         self.ckpt_dir = self.work_dir / "checkpoints"
         self.ckpt_dir.mkdir(parents=True, exist_ok=True)
 
-        self.metrics = {}
+        self.metrics = {
+            "loss": 0.0,
+        }
 
         self.start_steps = 0
         self.start_epochs = 0
 
     @property
     def steps(self) -> int:
+        """Total number of steps since the beginning of training the model."""
         return self.elasped_steps + self.start_steps
 
     @property
     def epochs(self) -> int:
+        """Total number of epochs since the beginning of training the model."""
         return self.elasped_epochs + self.start_epochs
 
     def train(
@@ -81,7 +84,7 @@ class Trainer:
         steps: int,
         epochs: int = 0,
         upto: bool = False,
-        resume: str | Path | bool = True,
+        resume: str | Path | bool = False,
     ):
 
         if resume:
@@ -106,23 +109,23 @@ class Trainer:
             self.train_steps = total_steps - self.steps
             self.train_epochs = epochs - self.epochs
         else:
-            self.train_steps = total_steps  # steps to run in this run
-            self.train_epochs = epochs  # epochs to run in this run
+            self.train_steps = total_steps  # steps to run in this session
+            self.train_epochs = epochs  # epochs to run in this session
 
         self.elasped_epochs = 0  # epoch since this training session
-        self.elasped_steps = 0  # step this training session
+        self.elasped_steps = 0  # step since this training session
         while True:
             if self.status == Trainer.Status.STOP_TRAIN:
                 break
             self._apply_fix("do_before_epoch")
-            for self.train_data in self.dataloader:
+            for self.data in self.dataloader:
                 if (
                     self.status == Trainer.Status.STOP_EPOCH
                     or self.status == Trainer.Status.STOP_TRAIN
                 ):
                     break
                 self._apply_fix("do_before_iter")
-                self.train_impl(self.train_data)
+                self.train_impl(self.data)
                 self._apply_fix("do_after_iter")
                 self.elasped_steps += 1
 
@@ -135,8 +138,8 @@ class Trainer:
 
         with autocast(enabled=self.amp_enabled):
 
-            outputs = self.model(data)
-            loss = self.loss_fn(outputs, data)
+            self.outputs = self.model(data)
+            loss = self.loss_fn(self.outputs, data)
 
         self.optimizer.zero_grad()
         self._grad_scaler.scale(loss).backward()
@@ -144,9 +147,7 @@ class Trainer:
         self._grad_scaler.step(self.optimizer)
         self._grad_scaler.update()
 
-        self.train_result = {}
-        self.train_result.update(outputs)
-        self.train_result.update({"loss": loss.item()})
+        self.metrics["loss"] = loss.item()
 
     def _apply_fix(self, stage: str):
         for fix in self.fixes:
@@ -176,7 +177,7 @@ class Trainer:
                 data["fixes"][fix.name] = fix.state_dict()
 
         file_path = self.ckpt_dir / Path(file_name)
-        self.logger.info(f"Saving checkpoint to {file_path}")
+        self.logger.debug(f"Saving checkpoint to {file_path}")
         torch.save(data, file_path)
 
     def load_checkpoint(self, file_name: str | Path = Path("latest.pth")) -> None:

@@ -1,5 +1,5 @@
 import logging
-
+from copy import deepcopy
 
 class Fix:
     """Base class for fix.
@@ -119,6 +119,13 @@ class Fix:
 
     def is_last_iter(self) -> bool:
         return self.trainer.elasped_steps == self.trainer.train_steps
+    
+    def copy(self):
+        trainer = self.trainer
+        self.trainer = None
+        new_fix = deepcopy(self)
+        self.trainer = trainer
+        return new_fix
     
 
 class FixManager(list):

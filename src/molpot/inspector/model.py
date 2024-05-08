@@ -1,12 +1,30 @@
-import torchviz, torchinfo
+import torchview, torchinfo
+import torch
+
 
 class ModelInspector:
 
     def __init__(self, model):
         self.model = model
 
-    def summary(self):
-        torchinfo.summary(self.model)
+    def summary(
+        self,
+        input_szie: tuple[int] | None = None,
+        input_data: torch.Tensor | None = None,
+        batch_dim: int | None = None,
+    ):
+        return torchinfo.summary(
+            self.model,
+            input_size=input_szie,
+            input_data=input_data,
+            batch_dim=batch_dim,
+        )
 
-    def visualize(self, data):
-        torchviz.make_dot(self.model(data)).render(self.model.name, format="png", cleanup=True)
+    def visualize(self, data, filename: str | None = None):
+        if filename is None:
+            if hasattr(self.model, "name"):
+                filename = self.model.name
+            else:
+                filename = self.model.__class__.__name__
+
+        return torchview.draw_graph(self.model, input_data=data, filename=filename).visual_graph

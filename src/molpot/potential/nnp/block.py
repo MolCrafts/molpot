@@ -15,6 +15,7 @@ def build_mlp(
     n_hidden: int | Sequence[int] | None = None,
     n_layers: int = 2,
     activation: Callable = F.silu,
+    use_bias: bool = True,
     last_bias: bool = True,
     last_zero_init: bool = False,
 ) -> nn.Module:
@@ -48,11 +49,12 @@ def build_mlp(
             n_hidden = [n_hidden] * (n_layers - 1)
         else:
             n_hidden = list(n_hidden)
+            n_layers = len(n_hidden) + 1
         n_neurons = [n_in] + n_hidden + [n_out]
 
     # assign a Dense layer (with activation function) to each hidden layer
     layers = [
-        nnp.Dense(n_neurons[i], n_neurons[i + 1], activation=activation)
+        nnp.Dense(n_neurons[i], n_neurons[i + 1], activation=activation, bias=use_bias)
         for i in range(n_layers - 1)
     ]
     # assign a Dense layer (without activation function) to the output layer

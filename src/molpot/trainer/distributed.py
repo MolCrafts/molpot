@@ -19,8 +19,6 @@ __all__ = [
     "get_rank", "is_main_process", "init_distributed"
 ]
 
-logger = logging.getLogger(__name__)
-
 
 @functools.lru_cache()
 def _get_global_gloo_group() -> ProcessGroup:

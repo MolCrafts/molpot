@@ -8,7 +8,7 @@ from torch_scatter import scatter_add
 from molpot import Alias
 
 from .block import build_gated_equivariant_mlp, build_mlp
-
+from torch.autograd import grad
 # from .scatter import scatter_add
 
 __all__ = ["Atomwise", "DipoleMoment", "Polarizability"]
@@ -84,12 +84,38 @@ class Atomwise(nn.Module):
             idx_m = inputs[Alias.idx_m]
             maxm = int(idx_m[-1]) + 1
             y = scatter_add(y, idx_m, dim=0, dim_size=maxm)
-            y = torch.squeeze(y, -1)
+            # y = torch.squeeze(y, -1)
+            y = torch.squeeze(y)
 
             if self.aggregation_mode == "avg":
                 y = y / inputs[Alias.n_atoms]
 
         inputs[self.output_key] = y
+        return inputs
+    
+class Derivative(nn.Module):
+
+    def __init__(self, fx_key, dx_key, output_key, create_graph=False, retain_graph=False):
+        super().__init__()
+        self.fx_key = fx_key
+        self.dx_key = dx_key
+        self.output_key = output_key
+        self.create_graph = create_graph
+        self.retain_graph = retain_graph
+
+    def forward(self, inputs):
+        fx = inputs[self.fx_key]
+        dx = inputs[self.dx_key]
+
+        dfdx = grad(
+            fx,
+            dx,
+            torch.ones_like(fx),
+            create_graph=self.create_graph,
+            retain_graph=self.retain_graph,
+        )[0]
+
+        inputs[self.output_key] = dfdx
         return inputs
 
 

@@ -3,6 +3,7 @@ import torch
 import torch.distributed as dist
 from collections import defaultdict
 import numpy as np
+import logging
 
 class Singleton(type):
     _instances = {}
@@ -20,6 +21,8 @@ class Config(metaclass=Singleton):
     ftype: torch.dtype = torch.float32
     stype: torch.dtype = torch.int32
     itype: torch.dtype = torch.complex64
+
+    log_level: int = logging.INFO
 
     def __init__(self):
         # 0 = all messages are logged (default behavior)
@@ -68,3 +71,14 @@ class Config(metaclass=Singleton):
         env_info["PyTorch"] = torch.__version__
 
         return env_info
+    
+    @classmethod
+    def set_seed(cls, seed:int):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+
+    @classmethod
+    def set_log_level(cls, level:int):
+        cls.log_level = level

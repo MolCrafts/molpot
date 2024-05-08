@@ -251,11 +251,6 @@ class PaiNN(nn.Module):
         r_ij = R[idx_j] - R[idx_i] + offsets
         n_atoms = atomic_numbers.shape[0]
 
-        # r_ij = inputs[Alias.Rij]
-        # idx_i = inputs[Alias.idx_i]
-        # idx_j = inputs[Alias.idx_j]
-        # n_atoms = atomic_numbers.shape[0]
-
         # compute atom and pair features
         d_ij = torch.norm(r_ij, dim=1, keepdim=True)
         dir_ij = r_ij / d_ij
