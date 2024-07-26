@@ -25,8 +25,8 @@ class Atomwise(nn.Module):
         n_layers: int = 2,
         activation: Callable = F.silu,
         aggregation_mode: str = "sum",
-        input_key: str = "scalar_representation",
-        output_key: str = "y",
+        from_key: str = "scalar_representation",
+        to_key: str = "y",
         per_atom_output_key: str | None = None,
     ):
         """
@@ -40,13 +40,13 @@ class Atomwise(nn.Module):
                 n_in resulting in a pyramidal network.
             n_layers: number of layers.
             aggregation_mode: one of {sum, avg} (default: sum)
-            output_key: the key under which the result will be stored
+            to_key: the key under which the result will be stored
             per_atom_output_key: If not None, the key under which the per-atom result will be stored
         """
         super().__init__()
-        self.input_key = input_key
-        self.output_key = output_key
-        self.model_outputs = [output_key]
+        self.from_key = from_key
+        self.to_key = to_key
+        self.model_outputs = [to_key]
         self.per_atom_output_key = per_atom_output_key
         if self.per_atom_output_key is not None:
             self.model_outputs.append(self.per_atom_output_key)
@@ -67,9 +67,9 @@ class Atomwise(nn.Module):
         )
         self.aggregation_mode = aggregation_mode
 
-    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    def forward(self, inputs: dict[str, torch.Tensor], outputs: dict[str, torch.Tensor]) -> tuple[dict, dict]:
         # predict atomwise contributions
-        y = self.outnet(inputs[self.input_key])
+        y = self.outnet(outputs[self.from_key])
 
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:
@@ -86,16 +86,16 @@ class Atomwise(nn.Module):
             if self.aggregation_mode == "avg":
                 y = y / inputs[n_atoms]
 
-        inputs[self.output_key] = y
-        return inputs
+        outputs[self.to_key] = y
+        return inputs, outputs
     
 class Derivative(nn.Module):
 
-    def __init__(self, fx_key, dx_key, output_key, create_graph=False, retain_graph=False):
+    def __init__(self, fx_key, dx_key, to_key, create_graph=False, retain_graph=False):
         super().__init__()
         self.fx_key = fx_key
         self.dx_key = dx_key
-        self.output_key = output_key
+        self.to_key = to_key
         self.create_graph = create_graph
         self.retain_graph = retain_graph
 
@@ -111,7 +111,7 @@ class Derivative(nn.Module):
             retain_graph=self.retain_graph,
         )[0]
 
-        inputs[self.output_key] = dfdx
+        inputs[self.to_key] = dfdx
         return inputs
 
 

@@ -45,7 +45,7 @@ class QM9Reader(IterDataPipe):
     def __iter__(self) -> Iterable[dict]:
 
         qm9_ns = mpot.NameSpace("QM9")
-        qm9_keys = [alias.key for alias in qm9_ns.values()]
+        qm9_keys = [alias for alias in qm9_ns.values()]
         for path, stream in self.source_dp:
             lines = stream.decode().split('\n')
             frame = dict()
@@ -74,7 +74,6 @@ class QM9Reader(IterDataPipe):
 
             frame[cell] = torch.zeros((3, 3), device=Config.device)
             frame[pbc] = torch.tensor([False, False, False], device=Config.device)
-
             yield frame
 
 

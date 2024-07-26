@@ -4,12 +4,21 @@ import molpot as mp
 
 class Potential(nn.Module):
 
-    pass
+    def __init__(self, name):
+        super().__init__()
+        self.name = name
     
-class PotentialDict(nn.ModuleDict):
+class PotentialDict(nn.ModuleDict, Potential):
 
     pass
     
-class PotentialSeq(nn.Sequential):
+class PotentialSeq(Potential):
 
-    pass
+    def __init__(self, name, *modules):
+        super().__init__(name)
+        self.seq = nn.Sequential(*modules)
+
+    def forward(self, inputs, outputs):
+        for module in self.seq:
+            inputs, outputs = module(inputs, outputs)
+        return inputs, outputs

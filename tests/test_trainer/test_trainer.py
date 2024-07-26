@@ -63,6 +63,6 @@ def test_classical_trainer():
 
     trainer = mpot.Trainer(model, loss_fn, optimizer, lr_scheduler, dl, work_dir)
 
-    trainer.register_fix(mpot.trainer.strategy.StepCounter())
+    trainer.register_fix(mpot.trainer.fix.StepCounter())
 
     trainer.train(10)

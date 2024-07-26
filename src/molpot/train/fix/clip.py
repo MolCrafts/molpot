@@ -1,9 +1,7 @@
 import torch
+from .base import Fix
 
-from .early_stop import Strategy
-
-
-class ClipNorm(Strategy):
+class ClipNorm(Fix):
     def __init__(self, max_norm=1.0):
         self.max_norm = max_norm
 

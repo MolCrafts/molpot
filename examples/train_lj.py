@@ -8,8 +8,8 @@ import torch
 import molpot as mpot
 from molpot import Alias
 from molpot.pipline.dataloaders import DataLoader
-from molpot.trainer.logger.adapter import ConsoleHandler
-from molpot.trainer.metric.metrics import MAE, Identity
+from molpot.train.logger.adapter import ConsoleHandler
+from molpot.train.fix.metrics import MAE, Identity
 
 
 def gen_lj()->None:
@@ -75,7 +75,7 @@ def train_lj(load_lj: tuple[DataLoader, DataLoader]) -> str:
     optimizer = torch.optim.Adam(pot.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.99)
 
-    stagnation = mpot.strategy.Stagnation(Alias.loss, patience=torch.inf)
+    stagnation = mpot.fix.Stagnation(Alias.loss, patience=torch.inf)
 
     mae = mpot.metric.MAE("energy_mae", Alias.ti, Alias.energy)
     trainer = mpot.Trainer(

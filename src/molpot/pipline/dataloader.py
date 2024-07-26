@@ -1,4 +1,4 @@
-from torch.utils.data import DataLoader
+from torchdata.dataloader2 import DataLoader2
 
-class DataLoader(DataLoader):
+class DataLoader(DataLoader2):
     pass

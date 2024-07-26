@@ -3,7 +3,7 @@ import time
 
 import torch
 
-from ..fix import Fix
+from . import Fix
 
 
 class ConsoloLogFix(Fix):

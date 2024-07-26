@@ -8,8 +8,8 @@ from molpot import Alias
 from molpot.potential.base import Potentials
 from molpot.potential.nnp.layer import CosineCutoff, GaussianRBF
 from molpot.potential.nnp.readout import Atomwise
-from molpot.trainer.logger.adapter import ConsoleHandler, TensorBoardHandler
-from molpot.trainer.metric.metrics import Identity
+from molpot.train.logger.adapter import ConsoleHandler, TensorBoardHandler
+from molpot.train.fix.metrics import Identity
 
 
 def load_rmd17() -> tuple[mpot.DataLoader, mpot.DataLoader]:
@@ -51,7 +51,7 @@ def train_rmd17(load_rmd17: tuple[mpot.DataLoader, mpot.DataLoader]) -> str:
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.994)
 
-    stagnation = mpot.strategy.Stagnation(Alias.loss, patience=torch.inf)
+    stagnation = mpot.fix.Stagnation(Alias.loss, patience=torch.inf)
 
     trainer = mpot.Trainer(
         "pinet-rmd17",

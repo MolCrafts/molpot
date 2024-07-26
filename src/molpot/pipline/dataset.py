@@ -1,18 +1,12 @@
 import logging
 import tempfile
-from functools import partial
 from io import BytesIO, TextIOWrapper
-from itertools import islice
 from pathlib import Path
 
-import molpy as mp
-import numpy as np
 import torch
 
 from torch.utils.data import IterableDataset as BaseDataset
 from torchdata.datapipes.iter import IterDataPipe, IterableWrapper
-from molpot.statistic.tracker import Tracker
-
 from .process import apply_dress, atomic_dress
 from molpot.alias import Alias, NameSpace
 
@@ -35,6 +29,7 @@ class DataSet(BaseDataset):
         save_dir: None | Path | str,
         total: int,
         batch_size: int,
+        split: dict|None = None,
         device: str = "cpu",
     ):
         self.name = name
@@ -55,6 +50,7 @@ class DataSet(BaseDataset):
 
     def __len__(self):
         return self.total
+    
 
 def read_stream_as_text(_tuple: tuple[str, bytes]):
     path, stream = _tuple
@@ -73,29 +69,35 @@ class QM9(DataSet):
         total: int = 0,
         batch_size: int = 1,
         device: str = "cpu",
+        split: dict | None = None,
         atom_ref: bool = True,
         remove_uncharacterized: bool = True,
     ):
         super().__init__("QM9", save_dir, total, batch_size, device)
+        self.split = split
         self.remove_uncharacterized = remove_uncharacterized
         self.atom_ref = atom_ref
-        self.labels.set("A", float, "GHz", "rotational_constant_A")
-        self.labels.set("B", float, "GHz", "rotational_constant_B")
-        self.labels.set("C", float, "GHz", "rotational_constant_C")
-        self.labels.set("mu",  float, "Debye", "dipole_moment")
-        self.labels.set("alpha", float, "a0 a0 a0", "isotropic_polarizability")
-        self.labels.set("homo", float, "hartree", "homo")
-        self.labels.set("lumo", float, "hartree", "lump")
-        self.labels.set("gap", float, "hartree", "gap")
-        self.labels.set("r2", float, "a0 a0", "electronic_spatial_extent")
-        self.labels.set("zpve", float, "hartree", "zpve")
-        self.labels.set("U0", float, "hartree", "_energy_U0")
-        self.labels.set("U", float, "hartree", "_energy_U")
-        self.labels.set("H", float, "hartree", "_enthalpy_H")
-        self.labels.set("G", float, "hartree", "_free_energy")
-        self.labels.set("Cv", float, "cal/mol/K", "_heat_capacity")
+        self.labels.set("A", float, "GHz", "rotational_constant_A", shape=())
+        self.labels.set("B", float, "GHz", "rotational_constant_B", shape=())
+        self.labels.set("C", float, "GHz", "rotational_constant_C", shape=())
+        self.labels.set("mu", float, "Debye", "dipole_moment", shape=())
+        self.labels.set("alpha", float, "a0", "isotropic_polarizability", shape=())
+        self.labels.set("homo", float, "hartree", "homo", shape=())
+        self.labels.set("lumo", float, "hartree", "lump", shape=())
+        self.labels.set("gap", float, "hartree", "gap", shape=())
+        self.labels.set("r2", float, "a0", "electronic_spatial_extent", shape=())
+        self.labels.set("zpve", float, "hartree", "zpve", shape=())
+        self.labels.set("U0", float, "hartree", "energy_U0", shape=())
+        self.labels.set("U", float, "hartree", "energy_U", shape=())
+        self.labels.set("H", float, "hartree", "enthalpy_H", shape=())
+        self.labels.set("G", float, "hartree", "free_energy", shape=())
+        self.labels.set("Cv", float, "cal/mol/K", "heat_capacity", shape=())
 
-    def get_pipline(self) -> IterDataPipe:
+    def calc_nblist(self, max_cutoff, shorter_cutoff=None):
+        self.max_cutoff = max_cutoff
+        self.shorter_cutoff = shorter_cutoff
+
+    def get_pipeline(self) -> IterDataPipe:
 
         url = "https://ndownloader.figshare.com/files/3195389"  # tar.bz2
 
@@ -105,17 +107,21 @@ class QM9(DataSet):
             .load_from_bz2(length=self.total)
             .load_from_tar(length=self.total)
             .read_from_stream()
-            .set_length(self.total)
-            .header(self.total)
             .read_qm9()
-            .batch(self.batch_size)
-            # .collate_data()
-            .in_memory_cache()
         )
-        if self.device == 'cuda':
+        if self.total > 0:
+            dp = dp.header(self.total).set_length(self.total)
+        if self.max_cutoff:
+            dp = dp.calc_nblist(self.max_cutoff).calc_dist()
+        if self.shorter_cutoff:
+            dp = dp.filter_dist(self.shorter_cutoff)
+        dp = dp.batch(self.batch_size).collate_data().in_memory_cache()
+        if self.device == "cuda":
             dp = dp.pin_memory(device=self.device)
+        if self.split:
+            return dp.random_split(weights=self.split, seed=0)
         return dp
-    
+
     def __iter__(self):
         dp = self.get_pipline()
         for d in dp:
@@ -123,34 +129,33 @@ class QM9(DataSet):
 
     def __len__(self):
         return self.total
-    
+
     @property
     def Z(self):
         return torch.tensor([1, 6, 7, 8, 9])
- 
+
     @property
     def atomrefs(self):
         lines = self._download_atomrefs()
         props = [
-            self.labels['zpve'],
-            self.labels['U0'],
-            self.labels['U'],
-            self.labels['H'],
-            self.labels['G'],
-            self.labels['Cv']
+            self.labels["zpve"],
+            self.labels["U0"],
+            self.labels["U"],
+            self.labels["H"],
+            self.labels["G"],
+            self.labels["Cv"],
         ]
-        atref = {z.item():{} for z in self.Z}
+        atref = {z.item(): {} for z in self.Z}
         for z, l in zip([1, 6, 7, 8, 9], lines[5:10]):
             for i, p in enumerate(props):
                 atref[z][p] = float(l.split()[i + 1])
         return atref
 
-
     def _download_atomrefs(self):
         url = IterableWrapper(["https://ndownloader.figshare.com/files/3195395"])
         dp = url.read_from_http().readlines()
         lines = []
-        for _, line in (dp):
+        for _, line in dp:
             lines.append(line.decode("utf-8"))
         return lines
 
@@ -213,7 +218,7 @@ class QM9(DataSet):
 #             dp = dp.map(partial(apply_dress, type_list=self.Z, key=Alias.Z, target=Alias.rmd17.energy, w=self.w))
 
 #         return super().prepare(dp)
-    
+
 #     def _pre_load(self, dp: IterDataPipe) -> IterDataPipe:
 
 #         frames = []

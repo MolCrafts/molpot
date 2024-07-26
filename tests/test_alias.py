@@ -8,11 +8,17 @@ class TestAlias:
         return mpot.Alias("test", int, "unit", "comment")
     
     @pytest.fixture(name="namespace", scope="class")
-    def test_namespace(self):
-        return mpot.NameSpace("Test")
+    def test_namespace(self, alias):
+        ns = mpot.NameSpace("Test")
+        ns.add(alias)
+        return ns
+    
+    def test_alias_eq(self, alias):
+        assert alias == "test"
+        assert alias == alias
     
     def test_in_namespace(self, alias, namespace):
-
+        print(namespace.keys())
         expected_alias1 = namespace[alias]
         expected_alias2 = namespace[alias.name]
 
@@ -26,5 +32,3 @@ class TestAlias:
 
         alias = ns["test"]
         assert alias.name == "test"
-
-        mpot.Config()

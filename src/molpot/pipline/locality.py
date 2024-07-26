@@ -1,13 +1,17 @@
+# author: Roy Kid
+# contact: lijichen365@126.com
+# date: 2023-12-11
+# version: 0.0.1
+
+from torchdata.datapipes.iter import IterDataPipe
+from torchdata.datapipes import functional_datapipe
+from molpot import Config
+
 import numpy as np
 import torch
 from torch import nn
 
-from molpot import Alias, Config
-
-__all__ = [
-    "TorchNeighborList",
-]   
-
+from molpot import alias
 class TorchNeighborList(nn.Module):
     """
     Environment provider making use of neighbor lists as implemented in TorchAni
@@ -33,16 +37,16 @@ class TorchNeighborList(nn.Module):
         self,
         inputs: dict,
     ) -> dict:
-        R = inputs[Alias.R]
-        cell = inputs[Alias.cell]
-        pbc = inputs[Alias.pbc]
+        xyz = inputs[alias.xyz]
+        cell = inputs[alias.cell]
+        pbc = inputs[alias.pbc]
 
-        idx_i, idx_j, offset = self._build_neighbor_list(
-            R, cell, pbc, self._cutoff
+        pair_i, pair_j, offset = self._build_neighbor_list(
+            xyz, cell, pbc, self._cutoff
         )
-        inputs[Alias.idx_i] = idx_i.detach()
-        inputs[Alias.idx_j] = idx_j.detach()
-        inputs[Alias.offsets] = offset
+        inputs[alias.pair_i] = pair_i.detach()
+        inputs[alias.pair_j] = pair_j.detach()
+        inputs[alias.offsets] = offset
 
         return inputs
 
@@ -52,24 +56,24 @@ class TorchNeighborList(nn.Module):
             shifts = torch.zeros(0, 3, device=cell.device, dtype=torch.long)
         else:
             shifts = self._get_shifts(cell, pbc, cutoff)
-        idx_i, idx_j, offset = self._get_neighbor_pairs(
+        pair_i, pair_j, offset = self._get_neighbor_pairs(
             positions, cell, shifts, cutoff
         )
 
         # Create bidirectional id arrays, similar to what the ASE neighbor_list returns
-        bi_idx_i = torch.cat((idx_i, idx_j), dim=0)
-        bi_idx_j = torch.cat((idx_j, idx_i), dim=0)
+        bi_idx_i = torch.cat((pair_i, pair_j), dim=0)
+        bi_idx_j = torch.cat((pair_j, pair_i), dim=0)
 
         # Sort along first dimension (necessary for atom-wise pooling)
         sorted_idx = torch.argsort(bi_idx_i)
-        idx_i = bi_idx_i[sorted_idx]
-        idx_j = bi_idx_j[sorted_idx]
+        pair_i = bi_idx_i[sorted_idx]
+        pair_j = bi_idx_j[sorted_idx]
 
         bi_offset = torch.cat((-offset, offset), dim=0)
         offset = bi_offset[sorted_idx]
         offset = torch.mm(offset.to(cell.dtype), cell)
 
-        return idx_i, idx_j, offset
+        return pair_i, pair_j, offset
 
     def _get_neighbor_pairs(self, positions, cell, shifts, cutoff):
         """Compute pairs of atoms that are neighbors
@@ -166,6 +170,54 @@ class TorchNeighborList(nn.Module):
             ]
         )
 
+class PairwiseDistances(nn.Module):
+    """
+    Compute pair-wise distances from indices provided by a neighbor list transform.
+    """
+
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        xyz = inputs[alias.xyz]
+        offsets = inputs[alias.offsets]
+        pair_i = inputs[alias.pair_i]
+        pair_j = inputs[alias.pair_j]
+
+        # To avoid error in Windows OS
+        pair_i = pair_i.long()
+        pair_j = pair_j.long()
+
+        inputs[alias.d_ij] = xyz[pair_j] - xyz[pair_i] + offsets
+        return inputs
+
+
+class FilterShortRange(nn.Module):
+    """
+    Separate short-range from all supplied distances.
+
+    The short-range distances will be stored under the original keys (dl_ij,
+    pair_i, pair_j), while the original distances can be accessed for long-range terms via
+    (dl_ij, pair_i, idx_j_lr).
+    """
+
+    def __init__(self, short_range_cutoff: float):
+        super().__init__()
+        self.short_range_cutoff = short_range_cutoff
+
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        pair_i = inputs[pair_i]
+        pair_j = inputs[pair_j]
+        Rij = inputs[Rij]
+
+        rij = torch.norm(Rij, dim=-1)
+        cidx = torch.nonzero(rij <= self.short_range_cutoff).squeeze(-1)
+
+        inputs[alias.dl_ij] = Rij
+        inputs[alias.pair_i_lr] = pair_i
+        inputs[alias.pair_j_lr] = pair_j
+
+        inputs[alias.Rij] = Rij[alias.cidx]
+        inputs[alias.pair_i] = pair_i[alias.cidx]
+        inputs[alias.pair_j] = pair_j[alias.cidx]
+        return inputs
 
 class NeighborsFilter(nn.Module):
     """
@@ -187,18 +239,18 @@ class NeighborsFilter(nn.Module):
         inputs: dict[str, torch.Tensor],
     ) -> dict[str, torch.Tensor]:
 
-        n_neighbors = inputs[Alias.idx_i].shape[0]
+        n_neighbors = inputs[alias.pair_i].shape[0]
         slab_indices = inputs[self.selection_name].tolist()
         kept_nbh_indices = []
         for nbh_idx in range(n_neighbors):
-            i = inputs[Alias.idx_i][nbh_idx].item()
-            j = inputs[Alias.idx_j][nbh_idx].item()
+            i = inputs[alias.pair_i][nbh_idx].item()
+            j = inputs[alias.pair_j][nbh_idx].item()
             if i not in slab_indices or j not in slab_indices:
                 kept_nbh_indices.append(nbh_idx)
 
-        inputs[Alias.idx_i] = inputs[Alias.idx_i][kept_nbh_indices]
-        inputs[Alias.idx_j] = inputs[Alias.idx_j][kept_nbh_indices]
-        inputs[Alias.offsets] = inputs[Alias.offsets][kept_nbh_indices]
+        inputs[alias.pair_i] = inputs[alias.pair_i][kept_nbh_indices]
+        inputs[alias.pair_j] = inputs[alias.pair_j][kept_nbh_indices]
+        inputs[alias.offsets] = inputs[alias.offsets][kept_nbh_indices]
 
         return inputs
 
@@ -221,14 +273,14 @@ class TripleGenerator(nn.Module):
         these arrays generate the indices involved in the atom triples.
 
         Example:
-            idx_j[idx_j_triples] -> j atom in triple
-            idx_j[idx_k_triples] -> k atom in triple
+            pair_j[idx_j_triples] -> j atom in triple
+            pair_j[idx_k_triples] -> k atom in triple
             Rij[idx_j_triples] -> Rij vector in triple
             Rij[idx_k_triples] -> Rik vector in triple
         """
-        idx_i = inputs[Alias.idx_i]
+        pair_i = inputs[pair_i]
 
-        _, n_neighbors = torch.unique_consecutive(idx_i, return_counts=True)
+        _, n_neighbors = torch.unique_consecutive(pair_i, return_counts=True)
 
         offset = 0
         idx_i_triples = ()
@@ -246,9 +298,9 @@ class TripleGenerator(nn.Module):
         idx_jk_triples = torch.cat(idx_jk_triples)
         idx_j_triples, idx_k_triples = idx_jk_triples.split(1, dim=-1)
 
-        inputs[Alias.idx_i_triples] = idx_i_triples
-        inputs[Alias.idx_j_triples] = idx_j_triples.squeeze(-1)
-        inputs[Alias.idx_k_triples] = idx_k_triples.squeeze(-1)
+        inputs[idx_i_triples] = idx_i_triples
+        inputs[idx_j_triples] = idx_j_triples.squeeze(-1)
+        inputs[idx_k_triples] = idx_k_triples.squeeze(-1)
         return inputs
 
 
@@ -264,7 +316,7 @@ class NeighborsCounter(nn.Module):
         """
         Args:
             sorted: Set to false if chosen neighbor list yields unsorted center indices
-                (idx_i).
+                (pair_i).
         """
         super(NeighborsCounter, self).__init__()
         self.sorted = sorted
@@ -273,14 +325,14 @@ class NeighborsCounter(nn.Module):
         self,
         inputs: dict[str, torch.Tensor],
     ) -> dict[str, torch.Tensor]:
-        idx_i = inputs[Alias.idx_i]
+        pair_i = inputs[pair_i]
 
         if self.sorted:
-            _, n_nbh = torch.unique_consecutive(idx_i, return_counts=True)
+            _, n_nbh = torch.unique_consecutive(pair_i, return_counts=True)
         else:
-            _, n_nbh = torch.unique(idx_i, return_counts=True)
+            _, n_nbh = torch.unique(pair_i, return_counts=True)
 
-        inputs[Alias.n_nbh] = n_nbh
+        inputs[n_nbh] = n_nbh
         return inputs
 
 
@@ -305,12 +357,12 @@ class PositionWrapper(nn.Module):
         self,
         inputs: dict[str, torch.Tensor],
     ) -> dict[str, torch.Tensor]:
-        R = inputs[Alias.R]
-        cell = inputs[Alias.cell].view(3, 3)
-        pbc = inputs[Alias.pbc]
+        xyz = inputs[xyz]
+        cell = inputs[cell].view(3, 3)
+        pbc = inputs[pbc]
 
         inverse_cell = torch.inverse(cell)
-        inv_positions = torch.sum(R[..., None] * inverse_cell[None, ...], dim=1)
+        inv_positions = torch.sum(xyz[..., None] * inverse_cell[None, ...], dim=1)
 
         periodic = torch.masked_select(inv_positions, pbc[None, ...])
 
@@ -325,6 +377,52 @@ class PositionWrapper(nn.Module):
         # Convert to positions
         R_wrapped = torch.sum(inv_positions[..., None] * cell[None, ...], dim=1)
 
-        inputs[Alias.R] = R_wrapped
+        inputs[xyz] = R_wrapped
 
         return inputs
+
+
+
+@functional_datapipe("calc_nblist")
+class CalcNBList(IterDataPipe):
+
+    def __init__(self, source_dp: IterDataPipe, cutoff: float):
+        self.dp = source_dp
+        self.cutoff = cutoff
+        self.kernel = TorchNeighborList(cutoff).to(Config.device)
+
+    def __iter__(self):
+        for d in self.dp:
+            yield self.kernel(d)
+
+    def __len__(self):
+        return len(self.dp)
+
+@functional_datapipe("calc_dist")
+class CalcDist(IterDataPipe):
+
+    def __init__(self, source_dp: IterDataPipe):
+        self.dp = source_dp
+        self.kernel = PairwiseDistances().to(Config.device)
+
+    def __iter__(self):
+        for d in self.dp:
+            yield self.kernel(d)
+
+    def __len__(self):
+        return len(self.dp)
+
+@functional_datapipe("filter_dist")
+class FilterDist(IterDataPipe):
+
+    def __init__(self, source_dp: IterDataPipe, short_cutoff: float):
+        self.dp = source_dp
+        self.short_cutoff = short_cutoff
+        self.kernel = FilterShortRange(short_cutoff).to(Config.device)
+
+    def __iter__(self):
+        for d in self.dp:
+            yield [self.kernel(dd) for dd in d]
+
+    def __len__(self):
+        return len(self.dp)
