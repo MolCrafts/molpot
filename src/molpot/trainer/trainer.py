@@ -10,6 +10,7 @@ import molpot as mpot
 from .distributed import get_rank, get_world_size
 from .fix import Fix, FixManager
 from ..log import setup_logger
+import torch.nn as nn
 
 
 class Trainer:
@@ -26,7 +27,7 @@ class Trainer:
     def __init__(
         self,
         name: str,
-        model: mpot.Potential,
+        model: nn.Module,
         loss_fn: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         lr_scheduler: torch.optim.lr_scheduler._LRScheduler,

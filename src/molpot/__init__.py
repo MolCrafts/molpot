@@ -1,10 +1,10 @@
-from ._alias import Alias
-from ._config import Config
+from . import alias, inspector
+from .alias import Alias, NameSpace
+from .config import Config
 
 Config()
 
-from . import inspector
-from .pipline import DataLoader, create_dataloader, dataset
+from .pipline import DataLoader, dataset
 from .potential import classical, nnp
 from .potential.base import Potential, PotentialDict, PotentialSeq
 from .statistic import Tracker

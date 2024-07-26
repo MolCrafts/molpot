@@ -1,6 +1,4 @@
-import torchview, torchinfo
 import torch
-
 
 class ModelInspector:
 
@@ -13,6 +11,7 @@ class ModelInspector:
         input_data: torch.Tensor | None = None,
         batch_dim: int | None = None,
     ):
+        import torchinfo
         return torchinfo.summary(
             self.model,
             input_size=input_szie,
@@ -26,5 +25,5 @@ class ModelInspector:
                 filename = self.model.name
             else:
                 filename = self.model.__class__.__name__
-
+        import torchview
         return torchview.draw_graph(self.model, input_data=data, filename=filename).visual_graph

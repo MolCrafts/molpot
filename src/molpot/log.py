@@ -1,7 +1,7 @@
 import logging
 import sys
 from pathlib import Path
-from ._config import Config
+from .config import Config
 
 logger_initialized = {}
 

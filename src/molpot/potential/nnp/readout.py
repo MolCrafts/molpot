@@ -5,14 +5,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_add
 
-from molpot import Alias
-
+from molpot.alias import *
 from .block import build_gated_equivariant_mlp, build_mlp
 from torch.autograd import grad
 # from .scatter import scatter_add
-
-__all__ = ["Atomwise", "DipoleMoment", "Polarizability"]
-
 
 class Atomwise(nn.Module):
     """
@@ -81,14 +77,14 @@ class Atomwise(nn.Module):
 
         # aggregate
         if self.aggregation_mode is not None:
-            idx_m = inputs[Alias.idx_m]
+            idx_m = inputs[molid]
             maxm = int(idx_m[-1]) + 1
             y = scatter_add(y, idx_m, dim=0, dim_size=maxm)
             # y = torch.squeeze(y, -1)
             y = torch.squeeze(y)
 
             if self.aggregation_mode == "avg":
-                y = y / inputs[Alias.n_atoms]
+                y = y / inputs[n_atoms]
 
         inputs[self.output_key] = y
         return inputs
@@ -119,206 +115,206 @@ class Derivative(nn.Module):
         return inputs
 
 
-class DipoleMoment(nn.Module):
-    """
-    Predicts dipole moments from latent partial charges and (optionally) local, atomic dipoles.
-    The latter requires a representation supplying (equivariant) vector features.
+# class DipoleMoment(nn.Module):
+#     """
+#     Predicts dipole moments from latent partial charges and (optionally) local, atomic dipoles.
+#     The latter requires a representation supplying (equivariant) vector features.
 
-    References:
+#     References:
 
-    .. [#painn1] Schütt, Unke, Gastegger.
-       Equivariant message passing for the prediction of tensorial Alias and molecular spectra.
-       ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
-    .. [#irspec] Gastegger, Behler, Marquetand.
-       Machine learning molecular dynamics for the simulation of infrared spectra.
-       Chemical science 8.10 (2017): 6924-6935.
-    .. [#dipole] Veit et al.
-       Predicting molecular dipole moments by combining atomic partial charges and atomic dipoles.
-       The Journal of Chemical Physics 153.2 (2020): 024113.
-    """
+#     .. [#painn1] Schütt, Unke, Gastegger.
+#        Equivariant message passing for the prediction of tensorial Alias and molecular spectra.
+#        ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
+#     .. [#irspec] Gastegger, Behler, Marquetand.
+#        Machine learning molecular dynamics for the simulation of infrared spectra.
+#        Chemical science 8.10 (2017): 6924-6935.
+#     .. [#dipole] Veit et al.
+#        Predicting molecular dipole moments by combining atomic partial charges and atomic dipoles.
+#        The Journal of Chemical Physics 153.2 (2020): 024113.
+#     """
 
-    def __init__(
-        self,
-        n_in: int,
-        n_hidden: int | Sequence[int] | None = None,
-        n_layers: int = 2,
-        activation: Callable = F.silu,
-        predict_magnitude: bool = False,
-        return_charges: bool = False,
-        dipole_key: str = Alias.dipole_moment,
-        charges_key: str = Alias.partial_charges,
-        correct_charges: bool = True,
-        use_vector_representation: bool = False,
-    ):
-        """
-        Args:
-            n_in: input dimension of representation
-            n_hidden: size of hidden layers.
-                If an integer, same number of node is used for all hidden layers
-                resulting in a rectangular network.
-                If None, the number of neurons is divided by two after each layer
-                starting n_in resulting in a pyramidal network.
-            n_layers: number of layers.
-            activation: activation function
-            predict_magnitude: If true, calculate magnitude of dipole
-            return_charges: If true, return latent partial charges
-            dipole_key: the key under which the dipoles will be stored
-            charges_key: the key under which partial charges will be stored
-            correct_charges: If true, forces the sum of partial charges to be the total
-                charge, if provided, and zero otherwise.
-            use_vector_representation: If true, use vector representation to predict
-                local, atomic dipoles.
-        """
-        super().__init__()
+#     def __init__(
+#         self,
+#         n_in: int,
+#         n_hidden: int | Sequence[int] | None = None,
+#         n_layers: int = 2,
+#         activation: Callable = F.silu,
+#         predict_magnitude: bool = False,
+#         return_charges: bool = False,
+#         dipole_key: str = Alias.dipole_moment,
+#         charges_key: str = Alias.partial_charges,
+#         correct_charges: bool = True,
+#         use_vector_representation: bool = False,
+#     ):
+#         """
+#         Args:
+#             n_in: input dimension of representation
+#             n_hidden: size of hidden layers.
+#                 If an integer, same number of node is used for all hidden layers
+#                 resulting in a rectangular network.
+#                 If None, the number of neurons is divided by two after each layer
+#                 starting n_in resulting in a pyramidal network.
+#             n_layers: number of layers.
+#             activation: activation function
+#             predict_magnitude: If true, calculate magnitude of dipole
+#             return_charges: If true, return latent partial charges
+#             dipole_key: the key under which the dipoles will be stored
+#             charges_key: the key under which partial charges will be stored
+#             correct_charges: If true, forces the sum of partial charges to be the total
+#                 charge, if provided, and zero otherwise.
+#             use_vector_representation: If true, use vector representation to predict
+#                 local, atomic dipoles.
+#         """
+#         super().__init__()
 
-        self.dipole_key = dipole_key
-        self.charges_key = charges_key
-        self.return_charges = return_charges
-        self.model_outputs = [dipole_key]
-        if self.return_charges:
-            self.model_outputs.append(charges_key)
+#         self.dipole_key = dipole_key
+#         self.charges_key = charges_key
+#         self.return_charges = return_charges
+#         self.model_outputs = [dipole_key]
+#         if self.return_charges:
+#             self.model_outputs.append(charges_key)
 
-        self.predict_magnitude = predict_magnitude
-        self.use_vector_representation = use_vector_representation
-        self.correct_charges = correct_charges
+#         self.predict_magnitude = predict_magnitude
+#         self.use_vector_representation = use_vector_representation
+#         self.correct_charges = correct_charges
 
-        if use_vector_representation:
-            self.outnet = build_gated_equivariant_mlp(
-                n_in=n_in,
-                n_out=1,
-                n_hidden=n_hidden,
-                n_layers=n_layers,
-                activation=activation,
-                sactivation=activation,
-            )
-        else:
-            self.outnet = build_mlp(
-                n_in=n_in,
-                n_out=1,
-                n_hidden=n_hidden,
-                n_layers=n_layers,
-                activation=activation,
-            )
+#         if use_vector_representation:
+#             self.outnet = build_gated_equivariant_mlp(
+#                 n_in=n_in,
+#                 n_out=1,
+#                 n_hidden=n_hidden,
+#                 n_layers=n_layers,
+#                 activation=activation,
+#                 sactivation=activation,
+#             )
+#         else:
+#             self.outnet = build_mlp(
+#                 n_in=n_in,
+#                 n_out=1,
+#                 n_hidden=n_hidden,
+#                 n_layers=n_layers,
+#                 activation=activation,
+#             )
 
-    def forward(self, inputs):
-        positions = inputs[Alias.R]
-        l0 = inputs["scalar_representation"]
-        natoms = inputs[Alias.n_atoms]
-        idx_m = inputs[Alias.idx_m]
-        maxm = int(idx_m[-1]) + 1
+#     def forward(self, inputs):
+#         positions = inputs[Alias.R]
+#         l0 = inputs["scalar_representation"]
+#         natoms = inputs[Alias.n_atoms]
+#         idx_m = inputs[Alias.idx_m]
+#         maxm = int(idx_m[-1]) + 1
 
-        if self.use_vector_representation:
-            l1 = inputs["vector_representation"]
-            charges, atomic_dipoles = self.outnet((l0, l1))
-            atomic_dipoles = torch.squeeze(atomic_dipoles, -1)
-        else:
-            charges = self.outnet(l0)
-            atomic_dipoles = 0.0
+#         if self.use_vector_representation:
+#             l1 = inputs["vector_representation"]
+#             charges, atomic_dipoles = self.outnet((l0, l1))
+#             atomic_dipoles = torch.squeeze(atomic_dipoles, -1)
+#         else:
+#             charges = self.outnet(l0)
+#             atomic_dipoles = 0.0
 
-        if self.correct_charges:
-            sum_charge = scatter_add(charges, idx_m, dim=0, dim_size=maxm)
+#         if self.correct_charges:
+#             sum_charge = scatter_add(charges, idx_m, dim=0, dim_size=maxm)
 
-            if Alias.total_charge in inputs:
-                total_charge = inputs[Alias.total_charge][:, None]
-            else:
-                total_charge = torch.zeros_like(sum_charge)
+#             if Alias.total_charge in inputs:
+#                 total_charge = inputs[Alias.total_charge][:, None]
+#             else:
+#                 total_charge = torch.zeros_like(sum_charge)
 
-            charge_correction = (total_charge - sum_charge) / natoms.unsqueeze(-1)
-            charge_correction = charge_correction[idx_m]
-            charges = charges + charge_correction
+#             charge_correction = (total_charge - sum_charge) / natoms.unsqueeze(-1)
+#             charge_correction = charge_correction[idx_m]
+#             charges = charges + charge_correction
 
-        if self.return_charges:
-            inputs[self.charges_key] = charges
+#         if self.return_charges:
+#             inputs[self.charges_key] = charges
 
-        y = positions * charges
-        if self.use_vector_representation:
-            y = y + atomic_dipoles
+#         y = positions * charges
+#         if self.use_vector_representation:
+#             y = y + atomic_dipoles
 
-        # sum over atoms
-        y = scatter_add(y, idx_m, dim_size=maxm)
+#         # sum over atoms
+#         y = scatter_add(y, idx_m, dim_size=maxm)
 
-        if self.predict_magnitude:
-            y = torch.norm(y, dim=1, keepdim=False)
+#         if self.predict_magnitude:
+#             y = torch.norm(y, dim=1, keepdim=False)
 
-        inputs[self.dipole_key] = y
-        return inputs
+#         inputs[self.dipole_key] = y
+#         return inputs
 
 
-class Polarizability(nn.Module):
-    """
-    Predicts polarizability tensor using tensor rank factorization.
-    This requires an equivariant representation, e.g. PaiNN, that provides both scalar and vectorial features.
+# class Polarizability(nn.Module):
+#     """
+#     Predicts polarizability tensor using tensor rank factorization.
+#     This requires an equivariant representation, e.g. PaiNN, that provides both scalar and vectorial features.
 
-    References:
+#     References:
 
-    .. [#painn1a] Schütt, Unke, Gastegger:
-       Equivariant message passing for the prediction of tensorial Alias and molecular spectra.
-       ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
-    """
+#     .. [#painn1a] Schütt, Unke, Gastegger:
+#        Equivariant message passing for the prediction of tensorial Alias and molecular spectra.
+#        ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
+#     """
 
-    def __init__(
-        self,
-        n_in: int,
-        n_hidden: int | Sequence[int] | None = None,
-        n_layers: int = 2,
-        activation: Callable = F.silu,
-        polarizability_key: str = Alias.polarizability,
-    ):
-        """
-        Args:
-            n_in: input dimension of representation
-            n_hidden: size of hidden layers.
-                If an integer, same number of node is used for all hidden layers resulting
-                in a rectangular network.
-                If None, the number of neurons is divided by two after each layer starting
-                n_in resulting in a pyramidal network.
-            n_layers: number of layers.
-            activation: activation function
-            polarizability_key: the key under which the predicted polarizability will be stored
-        """
-        super(Polarizability, self).__init__()
-        self.n_in = n_in
-        self.n_layers = n_layers
-        self.n_hidden = n_hidden
-        self.polarizability_key = polarizability_key
-        self.model_outputs = [polarizability_key]
+#     def __init__(
+#         self,
+#         n_in: int,
+#         n_hidden: int | Sequence[int] | None = None,
+#         n_layers: int = 2,
+#         activation: Callable = F.silu,
+#         polarizability_key: str = Alias.polarizability,
+#     ):
+#         """
+#         Args:
+#             n_in: input dimension of representation
+#             n_hidden: size of hidden layers.
+#                 If an integer, same number of node is used for all hidden layers resulting
+#                 in a rectangular network.
+#                 If None, the number of neurons is divided by two after each layer starting
+#                 n_in resulting in a pyramidal network.
+#             n_layers: number of layers.
+#             activation: activation function
+#             polarizability_key: the key under which the predicted polarizability will be stored
+#         """
+#         super(Polarizability, self).__init__()
+#         self.n_in = n_in
+#         self.n_layers = n_layers
+#         self.n_hidden = n_hidden
+#         self.polarizability_key = polarizability_key
+#         self.model_outputs = [polarizability_key]
 
-        self.outnet = build_gated_equivariant_mlp(
-            n_in=n_in,
-            n_out=1,
-            n_hidden=n_hidden,
-            n_layers=n_layers,
-            activation=activation,
-            sactivation=activation,
-        )
+#         self.outnet = build_gated_equivariant_mlp(
+#             n_in=n_in,
+#             n_out=1,
+#             n_hidden=n_hidden,
+#             n_layers=n_layers,
+#             activation=activation,
+#             sactivation=activation,
+#         )
 
-        self.requires_dr = False
-        self.requires_stress = False
+#         self.requires_dr = False
+#         self.requires_stress = False
 
-    def forward(self, inputs):
-        positions = inputs[Alias.R]
-        l0 = inputs["scalar_representation"]
-        l1 = inputs["vector_representation"]
-        dim = l1.shape[-2]
+#     def forward(self, inputs):
+#         positions = inputs[Alias.R]
+#         l0 = inputs["scalar_representation"]
+#         l1 = inputs["vector_representation"]
+#         dim = l1.shape[-2]
 
-        l0, l1 = self.outnet((l0, l1))
+#         l0, l1 = self.outnet((l0, l1))
 
-        # isotropic on diagonal
-        alpha = l0[..., 0:1]
-        size = list(alpha.shape)
-        size[-1] = dim
-        alpha = alpha.expand(*size)
-        alpha = torch.diag_embed(alpha)
+#         # isotropic on diagonal
+#         alpha = l0[..., 0:1]
+#         size = list(alpha.shape)
+#         size[-1] = dim
+#         alpha = alpha.expand(*size)
+#         alpha = torch.diag_embed(alpha)
 
-        # add anisotropic components
-        mur = l1[..., None, 0] * positions[..., None, :]
-        alpha_c = mur + mur.transpose(-2, -1)
-        alpha = alpha + alpha_c
+#         # add anisotropic components
+#         mur = l1[..., None, 0] * positions[..., None, :]
+#         alpha_c = mur + mur.transpose(-2, -1)
+#         alpha = alpha + alpha_c
 
-        # sum over atoms
-        idx_m = inputs[Alias.idx_m]
-        maxm = int(idx_m[-1]) + 1
-        alpha = scatter_add(alpha, idx_m, dim=0, dim_size=maxm)
+#         # sum over atoms
+#         idx_m = inputs[Alias.idx_m]
+#         maxm = int(idx_m[-1]) + 1
+#         alpha = scatter_add(alpha, idx_m, dim=0, dim_size=maxm)
 
-        inputs[self.polarizability_key] = alpha
-        return inputs
+#         inputs[self.polarizability_key] = alpha
+#         return inputs

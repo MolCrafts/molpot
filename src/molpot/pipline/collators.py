@@ -11,7 +11,8 @@ from torchdata.datapipes import functional_datapipe
 from torchdata.datapipes.iter import Collator
 
 import molpot as mpot
-from molpot import Alias, Config
+from molpot import Config
+from molpot import alias
 
 
 def _collate_dict(batch: Sequence[dict]):
@@ -24,19 +25,19 @@ def _collate_dict(batch: Sequence[dict]):
 
     idx_m = torch.repeat_interleave(
         torch.arange(len(batch), device=Config.device),
-        repeats=coll_batch[mpot.Alias.n_atoms],
+        repeats=coll_batch[alias.n_atoms],
         dim=0,
     )
-    coll_batch[mpot.Alias.idx_m] = idx_m
+    coll_batch[alias.molid] = idx_m
     
-    to_be_offset_keys = [Alias.idx_i, Alias.idx_j]
+    to_be_offset_keys = [alias.pair_i, alias.pair_j]
     offset_keys = []
     for key in to_be_offset_keys:
         if key in coll_batch:
             offset_keys.append(key)
 
     if offset_keys:
-        seg_m = torch.cumsum(coll_batch[mpot.Alias.n_atoms], dim=0)
+        seg_m = torch.cumsum(coll_batch[alias.n_atoms], dim=0)
         seg_m = torch.cat(
             [torch.zeros((1,), dtype=seg_m.dtype, device=Config.device), seg_m], dim=0
         )  # prepend 0 to seg_m

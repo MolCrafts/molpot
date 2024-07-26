@@ -18,7 +18,9 @@ dependencies = [
     "torchdata",
     "portalocker",
     "typer",
-    "molpy"
+    "molpy",
+    "torchview",
+    "torchinfo"
 ]
 
 [project.urls]
