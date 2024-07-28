@@ -67,9 +67,45 @@ class PILayer(nn.Module):
         prop_i = prop[idx_i]
         prop_j = prop[idx_j]
 
-        inter = prop_i + basis + prop_j
+        inter = prop_i + prop_j
         inter = self.mlp(inter)
-        return inter
+        inter = torch.einsum(
+            "pcb, pb->pc", inter.reshape(-1, prop_i.shape[-1], basis.shape[-1]), basis
+        )  # (n_atoms, n_channels)
+        return inter[:, None, :]  # (n_atoms, 1, n_channels)
+
+
+class PIXLayer(nn.Module):
+
+    def __init__(
+        self,
+        n_in: int,
+        n_out: int,
+        n_hidden: list[int],
+        activation: Callable | None = F.tanh,
+    ):
+        super().__init__()
+        self.wi = build_mlp(
+            n_in,
+            n_out,
+            n_hidden,
+            use_bias=False,
+            activation=activation,
+        )
+        self.wj = build_mlp(
+            n_in,
+            n_out,
+            n_hidden,
+            use_bias=False,
+            activation=activation,
+        )
+
+    def forward(self, prop, idx_i, idx_j):
+
+        prop_i = prop[idx_i]
+        prop_j = prop[idx_j]
+
+        return self.wi(prop_i) + self.wj(prop_j)
 
 
 class IPLayer(nn.Module):
@@ -101,8 +137,8 @@ class InvarLayer(nn.Module):
 
         p1 = self.pp_layer(p1)
         i1 = self.pi_layer(p1, idx_i, idx_j, basis)
-        ii = self.ii_layer(i1)
-        p1 = self.ip_layer(idx_i, ii)
+        i1 = self.ii_layer(i1)
+        p1 = self.ip_layer(idx_i, i1)
 
         return p1, i1
 
@@ -112,16 +148,16 @@ class EqvarLayer(nn.Module):
     def __init__(self, n_nodes: list[int]):
         super().__init__()
         self.pp_layer = PPLayer(n_nodes[0], n_nodes[-1], activation=None)
-        self.pi_layer = PILayer(n_nodes[0], n_nodes[-1], activation=None)
+        self.pi_layer = PIXLayer(n_nodes[0], n_nodes[-1], activation=None)
         self.ii_layer = IILayer(n_nodes[0], n_nodes[-1], activation=None)
         self.ip_layer = IPLayer()
 
         self.scale_layer = ScaleLayer()
 
-    def forward(self, idx_i, idx_j, px, basis, diff):
+    def forward(self, idx_i, idx_j, px, diff):
 
         px = self.pp_layer(px)
-        ix = self.pi_layer(px, idx_i, idx_j, basis)
+        ix = self.pi_layer(px, idx_i, idx_j)
         ix = self.scale_layer(ix, diff)
         ix = self.ii_layer(ix)
         px = self.ip_layer(idx_i, ix)
@@ -200,7 +236,6 @@ class PiNet(nn.Module):
 
     def __init__(
         self,
-        n_atom_basis: int,
         depth: int,
         basis_fn: Callable | None = None,
         cutoff_fn: Callable | None = None,
@@ -208,36 +243,49 @@ class PiNet(nn.Module):
         pi_nodes: int = [16, 16],
         ii_nodes: int = [16, 16],
         activation: Callable | None = F.tanh,
-        max_z: int = 101,
+        max_atomtypes: int = 100,
         rank: int = 1,
     ):
         super().__init__()
 
         self.labels = NameSpace("pinet")
         self.labels.set(
-            "p1", torch.Tensor, "unit", "scalar property", (None, 1, n_atom_basis)
+            "p1",
+            torch.Tensor,
+            "unit",
+            "scalar property",
+            ("n_atoms", "n_components", "n_channels"),
         )
         self.labels.set(
-            "p3", torch.Tensor, "unit", "vectorial property", (None, 3, n_atom_basis)
+            "p3",
+            torch.Tensor,
+            "unit",
+            "vectorial property",
+            ("n_atoms", "n_components", "n_channels"),
         )
         self.labels.set(
-            "p5", torch.Tensor, "unit", "tensorial property", (None, 5, n_atom_basis)
+            "p5",
+            torch.Tensor,
+            "unit",
+            "tensorial property",
+            ("n_atoms", "n_components", "n_channels"),
         )
 
         self.rank = rank
-        self.n_atom_basis = n_atom_basis
-
         self.depth = depth
         self.basis_fn = basis_fn
         self.cutoff_fn = cutoff_fn
+        self.n_basis = self.basis_fn.n_rbf
 
-        assert basis_fn.n_rbf == pp_nodes[0]
+        self.embedding = nn.Embedding(max_atomtypes, max_atomtypes, padding_idx=0)
 
-        pp_nodes = [n_atom_basis] + pp_nodes
-        ii_nodes = ii_nodes + [n_atom_basis]
+        pp_nodes = [ii_nodes[-1], *pp_nodes]
+        pi_nodes = [pp_nodes[-1], *pi_nodes]
+        ii_nodes = [pi_nodes[-1], *ii_nodes]
 
-        self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
-        # self.basis_transformation = nn.Linear(basis_fn.n_rbf, n_atom_basis)
+        pi_nodes[-1] *= self.n_basis
+
+        self.before_gc_block_layer = nn.Linear(max_atomtypes, pp_nodes[0])
 
         self.gc_blocks = nn.ModuleList(
             [
@@ -260,17 +308,21 @@ class PiNet(nn.Module):
         idx_j = inputs[alias.pair_j]
         offsets = inputs[alias.offsets]
         r_ij = xyz[idx_j] - xyz[idx_i] + offsets
-        d_ij = torch.norm(r_ij, dim=-1, keepdim=True)
+        d_ij = torch.norm(r_ij, dim=-1)
 
         basis = self.basis_fn(d_ij)
         fc = self.cutoff_fn(d_ij)
-        # inputs["basis"] = self.basis_transformation(basis * fc[..., None])
+
         inputs["basis"] = basis * fc[..., None]
         inputs["p1"] = self.embedding(atomic_numbers)[:, None, :]
+        n_channels = inputs["p1"].shape[-1]
+
+        inputs["p1"] = self.before_gc_block_layer(inputs["p1"])
+
         if self.rank >= 3:
-            inputs["p3"] = torch.zeros([n_atoms, 3, self.n_atom_basis])
+            inputs["p3"] = torch.zeros([n_atoms, 3, n_channels])
         if self.rank >= 5:
-            inputs["p5"] = torch.zeros([n_atoms, 5, self.n_atom_basis])
+            inputs["p5"] = torch.zeros([n_atoms, 5, n_channels])
 
         inputs["diff_p5"] = d_ij
         x = r_ij[:, 0]
@@ -292,6 +344,7 @@ class PiNet(nn.Module):
 
         for i in range(self.depth):
             inputs, outputs = self.gc_blocks[i](inputs, outputs)
+
             outputs["p1"] = self.res_update(outputs["p1"], inputs["p1"])
             if self.rank >= 3:
                 outputs["p3"] = self.res_update(outputs["p3"], inputs["p3"])

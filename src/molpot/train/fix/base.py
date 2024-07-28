@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 class Fix(ABC):
 
     def __init__(self, priority: int = 5):
-        assert priority >= 0 and priority < 10
+        assert priority >= 0
         self.priority = priority
 
     @abstractmethod

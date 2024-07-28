@@ -28,7 +28,8 @@ class Tracker:
         Args:
             new (number | torch.Tensor): new scalar or tensor of scalars
         """
-        new = torch.atleast_1d(new)
+        if not torch.is_tensor(new):
+            new = torch.atleast_1d(torch.tensor(new))
         n = len(new)
 
         self._count += n

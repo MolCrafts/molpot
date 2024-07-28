@@ -26,6 +26,13 @@ class Trainer(ABC):
         FINISHED = 3
         ERROR = 4
 
+    def __init__(self):
+        self._fix = FixManager(self.Stage)
+
+    @property
+    def fix(self) -> FixManager:
+        return self._fix
+
     @abstractmethod
     def save_ckpt(self, path: str | Path) -> None:
         pass
@@ -71,7 +78,7 @@ class PotentialTrainer(Trainer):
         self.logger = setup_logger(name=self.name, output_dir=self.work_dir)
         self.amp_enabled = enable_amp
 
-        self.fixes = FixManager(self.Stage)
+        self._fix = FixManager(self.Stage)
         # TODO: amp
 
     def train(
@@ -83,11 +90,11 @@ class PotentialTrainer(Trainer):
     ) -> dict:
 
         step_to_run = steps
-        self.fixes.register(
+        self._fix.register(
             self.Stage.before_iter, mpot.train.fix.StepCounter(step_to_run)
         )
         if self.valid_dataloader is not None:
-            self.fixes.register(
+            self._fix.register(
                 self.Stage.after_epoch, mpot.train.fix.Validation(every_n_epoch=1)
             )
 
@@ -95,6 +102,7 @@ class PotentialTrainer(Trainer):
             "current_step": 0,
             "current_epoch": 0,
             "flag": self.Status.INIT,
+            "metrices": {}
         }
 
         inputs = {}
@@ -103,14 +111,14 @@ class PotentialTrainer(Trainer):
         }
 
         self.before_train(status, inputs, outputs)
-        self.fixes.apply(self.Stage.before_train, self, status, inputs, outputs)
+        self._fix.apply(self.Stage.before_train, self, status, inputs, outputs)
         if status['flag'] > self.Status.STOPPING:
             return status, outputs
 
         while True:
 
             self.before_epoch(status, inputs, outputs)
-            self.fixes.apply(self.Stage.before_epoch, self, status, inputs, outputs)
+            self._fix.apply(self.Stage.before_epoch, self, status, inputs, outputs)
             if status['flag'] > self.Status.STOPPING:
                 break
 
@@ -119,21 +127,21 @@ class PotentialTrainer(Trainer):
                 inputs |= data
 
                 self.before_iter(status, inputs, outputs)
-                self.fixes.apply(self.Stage.before_iter, self, status, inputs, outputs)
+                self._fix.apply(self.Stage.before_iter, self, status, inputs, outputs)
                 if status['flag'] > self.Status.STOPPING:
                     break
 
                 self.train_impl(status, inputs, outputs)
                 status['current_step'] += 1
                 self.after_iter(status, inputs, outputs)
-                self.fixes.apply(self.Stage.after_iter, self, status, inputs, outputs)
+                self._fix.apply(self.Stage.after_iter, self, status, inputs, outputs)
 
             self.after_epoch(status, inputs, outputs)
-            self.fixes.apply(self.Stage.after_epoch, self, status, inputs, outputs)
+            self._fix.apply(self.Stage.after_epoch, self, status, inputs, outputs)
             status['current_epoch'] += 1
 
         self.after_train(status, inputs, outputs)
-        self.fixes.apply(self.Stage.after_iter, self, status, inputs, outputs)
+        self._fix.apply(self.Stage.after_iter, self, status, inputs, outputs)
 
         return status, outputs
 
@@ -161,8 +169,7 @@ class PotentialTrainer(Trainer):
         optimizer.step()
         if lr_scheduler is not None:
             lr_scheduler.step()
-        status['loss'] = loss.item()
-        outputs['loss_list'].append(loss.item())
+        status['metrices']['loss'] = loss.item()
 
     def after_iter(self, status: dict, inputs: dict, outputs: dict) -> None:
         pass

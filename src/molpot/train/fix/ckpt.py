@@ -1,44 +1,40 @@
 from pathlib import Path
 
 from . import Fix
+from collections import deque
 
 
-class CheckPointFix(Fix):
+class SaveCheckPoint(Fix):
 
     def __init__(
         self, every_n_steps: int, every_n_epochs: int, max_to_keep: int | None = None
     ) -> None:
 
-        super().__init__(every_n_steps, every_n_epochs)
+        super().__init__(priority=9)
 
         self.max_to_keep = max_to_keep
-        self.recent_ckpts = list()
-        self.priority = 10
+        self.every_n_steps = every_n_steps
+        self.every_n_epochs = every_n_epochs
+        self.recent_ckpts = deque(maxlen=max_to_keep)
 
-    def after_iter(self) -> None:
+    def __call__(self, trainer, status, inputs, outputs) -> None:
 
-        step = self.trainer.steps
-        ckpt_name = f"step_{step}.pth"
-        self.trainer.save_checkpoint(ckpt_name)
-        self.recent_ckpts.append(ckpt_name)
-        self._delete_old_ckpts()
-        # create a new link to the latest checkpoint
-        latest_ckpt = self.trainer.ckpt_dir / Path("latest.pth")
-        latest_ckpt.unlink(missing_ok=True)
-        latest_ckpt.symlink_to(ckpt_name)
+        step = status["current_step"]
+        epoch = status["current_epoch"]
+        if step % self.every_n_steps == 0 or epoch % self.every_n_epochs == 0:
+            name = f"step_{step}_epoch_{epoch}.pth"
+            self.save_ckpt(name, trainer, status, inputs, outputs)
 
-    def after_epoch(self) -> None:
+            if len(self.recent_ckpts) == self.max_to_keep:
+                to_delete = self.recent_ckpts.popleft()
+                self._delete_ckpt(to_delete)
 
-        epoch = self.trainer.elasped_epochs
-        ckpt_name = f"epoch_{epoch}.pth"
-        self.trainer.save_checkpoint(ckpt_name)
-        self.recent_ckpts.append(ckpt_name)
-        self._delete_old_ckpts()
+            self.recent_ckpts.append(name)
 
-    def _delete_old_ckpts(self):
+    def save_ckpt(self, name, train, status, inputs, outputs) -> None:
 
-        if len(self.recent_ckpts) > self.max_to_keep:
-            ckpt_to_delete = self.recent_ckpts.pop(0)
-            ckpt_path = self.trainer.ckpt_dir / Path(ckpt_to_delete)
-            ckpt_path.unlink()
-            self.trainer.logger.debug(f"Checkpoint {ckpt_to_delete} has been deleted.")
+        print(f"Saving checkpoint {name}")
+
+    def _delete_ckpt(self, name) -> None:
+
+        print(f"Deleting checkpoint {name}")

@@ -1,64 +1,50 @@
 import datetime
 import time
-
-import torch
-
-from . import Fix
+from .base import Fix
 
 
 class ConsoloLogFix(Fix):
+    pass
 
-    def __init__(self, every_n_steps:int, every_n_epochs:int=0, separator: str= " | ", **kwargs) -> None:
-
-        super().__init__(every_n_steps, every_n_epochs)
-        self.priority = 10
-        self.separator = separator
-
-    def before_train(self) -> None:
-        keys = ["  steps "] + [f"{key:^12}" for key in self.trainer.metrics.keys()]
-        if hasattr(self.trainer, "valid_results"):
-            keys += ["{:^12}".format(f"valid_{key}") for key in self.trainer.metrics.keys()]
-        print(f"Start training at {datetime.datetime.now()}")
-        print(self.separator.join(keys))
-        self.train_start_time = time.perf_counter()
-
-    def after_train(self) -> None:
-        
-        total_train_time = time.perf_counter() - self.train_start_time
-        
-        print(f"Total training time: {total_train_time:.2f} seconds")
-
-    def after_iter(self) -> None:
-        values = [f"{self.trainer.steps:>8}"] + [f"{v:>12.2f}" for v in self.trainer.metrics.values()]
-        if hasattr(self.trainer, "valid_results"):
-            values += [f"{v:>12.2f}" for v in self.trainer.valid_results.values()]
-
-        msg = self.separator.join(values)
-        print(msg)
 
 class TensorBoardFix(Fix):
 
-    def __init__(self, every_n_steps:int, every_n_epochs:int, tb_log_dir:str = "tb_log", **kwargs) -> None:
+    def __init__(
+        self,
+        every_n_steps: int,
+        every_n_epochs: int = 1,
+        log_dir: str = "tb_log",
+        outputs=[],
+        **kwargs,
+    ) -> None:
 
-        super().__init__(every_n_steps, every_n_epochs)
-        self.tb_log_dir = tb_log_dir
+        super().__init__(priority=9)
+        self.log_dir = log_dir
         self.kwargs = kwargs
-        self.priority = 10
-
-    def before_train(self) -> None:
+        self.every_n_steps = every_n_steps
+        self.every_n_epochs = every_n_epochs
+        self.outputs = outputs
+        print(self.outputs)
         from torch.utils.tensorboard import SummaryWriter
-        self._tb_writer = SummaryWriter(self.trainer.work_dir / self.tb_log_dir, **self.kwargs)
 
-    def after_train(self) -> None:
-        self._tb_writer.close()
+        self._tb_writer = SummaryWriter(log_dir, **self.kwargs)
 
-    def _write_tensorboard(self) -> None:
-        for key, value in self.trainer.metrics.items():
-            self._tb_writer.add_scalar(key, value, self.trainer.steps)
-        if hasattr(self.trainer, "valid_results"):
-            for key, value in self.trainer.valid_results.items():
-                self._tb_writer.add_scalar(key, value, self.trainer.steps)
+    def __call__(self, trainer, status, inputs, outputs) -> None:
 
+        step = status["current_step"]
 
-    def after_iter(self) -> None:
-        self._write_tensorboard()
+        if step % self.every_n_steps == 0:
+
+            for key in self.outputs:
+                if key in status['metrices']:
+                    self._write_scalar(step, key, status['metrices'][key])
+                else:
+                    Warning(f"Key {key} not found in status['metrices']")
+
+    def __del__(self) -> None:
+        writer = getattr(self, "_tb_writer", None)
+        if writer is not None:
+            self._tb_writer.close()
+
+    def _write_scalar(self, step: int, key, value, tag='metrices') -> None:
+        self._tb_writer.add_scalar(f'{tag}/{key}', value, step, new_style=True)

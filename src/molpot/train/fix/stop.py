@@ -21,37 +21,37 @@ class EarlyStop(Fix):
         self.counter = 0
         self.best_loss = np.inf
 
-    def __call__(self, trainer: Trainer, status:dict, inputs: dict, outputs: dict):
+    def __call__(self, trainer: Trainer, status: dict, inputs: dict, outputs: dict):
 
         val_loss = outputs[self.key]
         if self.counter < self.patience:
             delta = val_loss - self.best_loss
             if delta > self.min_delta:
-                self.counter +=1
+                self.counter += 1
             else:
                 self.counter = 0
-                self.best_loss = min(val_loss, self.best_loss)                
+                self.best_loss = min(val_loss, self.best_loss)
 
         else:
             status = trainer.Status.STOPPING
 
+
 class StepCounter(Fix):
 
-    def __init__(self, stop_step:int):
+    def __init__(self, stop_step: int):
         super().__init__(priority=0)
         self.stop_step = stop_step
-        
-    def __call__(self, trainer: Trainer, status:dict, inputs: dict, outputs: dict):
-        if status['current_step'] > self.stop_step:
-            status['flag'] = trainer.Status.FINISHED
 
+    def __call__(self, trainer: Trainer, status: dict, inputs: dict, outputs: dict):
+        if status["current_step"] > self.stop_step:
+            status["flag"] = trainer.Status.FINISHED
 
 
 class EpochCounter(Fix):
 
     def __init__(self):
         super().__init__(priority=0)
-        
-    def __call__(self, trainer: Trainer, status:dict, inputs: dict, outputs: dict):
-        if status['current_epoch'] > status['epoch_to_run']:
-            status['flag'] = trainer.Status.FINISHED
+
+    def __call__(self, trainer: Trainer, status: dict, inputs: dict, outputs: dict):
+        if status["current_epoch"] > status["epoch_to_run"]:
+            status["flag"] = trainer.Status.FINISHED

@@ -78,8 +78,9 @@ class Atomwise(nn.Module):
         # aggregate
         if self.aggregation_mode is not None:
             idx_m = inputs[molid]
-            maxm = int(idx_m[-1]) + 1
-            y = scatter_add(y, idx_m, dim=0, dim_size=maxm)
+            # maxm = int(idx_m[-1]) + 1
+            # y = scatter_add(y, idx_m, dim=0, dim_size=maxm)
+            y = scatter_add(y, idx_m, dim=0)
             # y = torch.squeeze(y, -1)
             y = torch.squeeze(y)
 
