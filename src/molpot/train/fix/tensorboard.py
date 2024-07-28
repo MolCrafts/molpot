@@ -24,7 +24,6 @@ class TensorBoardFix(Fix):
         self.every_n_steps = every_n_steps
         self.every_n_epochs = every_n_epochs
         self.outputs = outputs
-        print(self.outputs)
         from torch.utils.tensorboard import SummaryWriter
 
         self._tb_writer = SummaryWriter(log_dir, **self.kwargs)
