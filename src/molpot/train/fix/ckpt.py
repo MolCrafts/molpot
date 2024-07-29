@@ -1,7 +1,9 @@
+from collections import deque
 from pathlib import Path
 
+import torch
+
 from . import Fix
-from collections import deque
 
 
 class SaveCheckPoint(Fix):
@@ -33,8 +35,53 @@ class SaveCheckPoint(Fix):
 
     def save_ckpt(self, name, train, status, inputs, outputs) -> None:
 
-        print(f"Saving checkpoint {name}")
+        data = {
+            "model": train.model.state_dict(),
+            "optimizer": train.optimizer.state_dict(),
+            "lr_scheduler": train.lr_scheduler.state_dict(),
+            "status": status,
+            "fix": train.fixes.state_dict(),
+        }
+        torch.save(data, Path(train.work_dir) / name)
 
     def _delete_ckpt(self, name) -> None:
 
-        print(f"Deleting checkpoint {name}")
+        path = Path(self.work_dir) / name
+        if path.exists():
+            path.unlink()
+
+
+class LoadCheckPoint(Fix):
+
+    def __init__(self, every_n_steps: int, every_n_epochs: int, name:str|None = None) -> None:
+
+        super().__init__(priority=0)
+
+        self.every_n_steps = every_n_steps
+        self.every_n_epochs = every_n_epochs
+        self.name = name
+
+    def __call__(self, trainer, status, inputs, outputs) -> None:
+
+        step = status["current_step"]
+        epoch = status["current_epoch"]
+        if step % self.every_n_steps == 0 or epoch % self.every_n_epochs == 0:
+            self.load_ckpt(trainer, status, inputs, outputs)
+
+    def load_ckpt(self, train, status, inputs, outputs) -> None:
+
+        if self.name is None:
+            ckpt = Path(train.work_dir) / "latest.pth"
+
+        else:
+            ckpt = Path(train.work_dir) / f"step_{status["current_step"]}_epoch_{status["current_epoch"]}.pth"
+
+        assert ckpt.exists(), FileNotFoundError(f"Checkpoint {ckpt} not found.")
+        
+        if ckpt is not None:
+            data = torch.load(ckpt)
+            train.model.load_state_dict(data["model"])
+            train.optimizer.load_state_dict(data["optimizer"])
+            train.lr_scheduler.load_state_dict(data["lr_scheduler"])
+            status.update(data["status"])
+            train.fixes.load_state_dict(data["fix"])

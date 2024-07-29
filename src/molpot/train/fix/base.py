@@ -3,6 +3,7 @@ from typing import Type, TypeVar
 from abc import ABC, abstractmethod
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from molpot.train.trainer import Trainer
 
@@ -14,7 +15,7 @@ class Fix(ABC):
         self.priority = priority
 
     @abstractmethod
-    def __call__(self, trainer: Trainer, status:dict, inputs: dict, outputs: dict):
+    def __call__(self, trainer: Trainer, status: dict, inputs: dict, outputs: dict):
         pass
 
     def __repr__(self):
@@ -23,6 +24,12 @@ class Fix(ABC):
     @property
     def name(self):
         return self.__class__.__name__
+
+    def state_dict(self) -> dict:
+        return {
+            'input': {},
+            'state': {},
+        }
 
 
 class FixManager:
@@ -40,7 +47,24 @@ class FixManager:
         self.fixes[stage].sort(key=lambda x: x.priority)
 
     def apply(
-        self, which_stage: Trainer.Stage, trainer: Trainer, status:dict, inputs: dict, outputs: dict
+        self,
+        which_stage: Trainer.Stage,
+        trainer: Trainer,
+        status: dict,
+        inputs: dict,
+        outputs: dict,
     ):
         for fix in self.fixes[which_stage]:
             fix(trainer, status, inputs, outputs)
+
+    def __repr__(self):
+        return f"<FixManager: {self.fixes}>"
+
+    def state_dict(self) -> dict:
+        data = {}
+        for stage_name, stage in self.fixes.items():
+            data[stage_name] = {}
+            for fix_name, fix in stage.items():
+                data[stage_name][fix_name] = fix.state_dict()
+
+        return data

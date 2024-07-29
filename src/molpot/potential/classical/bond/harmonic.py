@@ -1,13 +1,17 @@
-from molpy.potential.angle import Harmonic as _Harmonic
+import torch
+from molpot.potential.base import Potential
 
-class Harmonic(_Harmonic):
+class Harmonic(Potential):
 
-    def forward(self, inputs:dict)->dict:
-        pos = inputs['_xyz']
-        idx_i = inputs['bond_i']
-        idx_j = inputs['bond_j']
-        energy = self.energy(pos, idx_i, idx_j)
-        inputs['_energy'] = energy
-        force = self.force(pos, idx_i, idx_j)
-        inputs['_force'] = force
-        return inputs
+    def __init__(self, r0, k):
+        super().__init__('harmonic')
+        self.r0 = r0
+        self.k = k
+
+    def forward(self, inputs, outputs):
+
+        bond_dist = inputs['bond_dist']
+        inputs["bond_harmonic_energy"] = 0.5 * self.k * torch.square(bond_dist - self.r0)
+
+        return inputs, outputs
+    

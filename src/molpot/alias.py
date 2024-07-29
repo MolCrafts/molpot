@@ -3,10 +3,6 @@ import torch
 
 class Alias:
 
-    @staticmethod
-    def name2key(name: str) -> str:
-        return f"_{name}"
-
     def __init__(self, name: str, type: type, unit: str, comment: str, shape: tuple=(), namespace: str = "default") -> None:
         self.name = name
         self.type = type
@@ -60,15 +56,12 @@ Z = Alias("Z", int, "unit", "atomic number")
 pbc = Alias("pbc", torch.Tensor, "unit", "periodic boundary condition")
 cell = Alias("cell", torch.Tensor, "unit", "cell matrix")
 molid = Alias("molid", int, "unit", "molecule index")
-long_pair_i = Alias("long_pair_i", int, "unit", "long-range pair atom index i")
-long_pair_j = Alias("long_pair_j", int, "unit", "long-range pair atom index j")
-R = Alias("R", torch.Tensor, "angstrom", "atomic coordinates")
 offsets = Alias("offsets", torch.Tensor, "unit", "offsets")
 pair_i = Alias("pair_i", int, "unit", "pair atom index i")
 pair_j = Alias("pair_j", int, "unit", "pair atom index j")
-pair_i_lr = Alias("pair_i_lr", int, "unit", "long-range pair atom index i")
-pair_j_lr = Alias("pair_j_lr", int, "unit", "long-range pair atom index j")
-d_ij = Alias("d_ij", torch.Tensor, "angstrom", "pair displacement")
-dl_ij = Alias("dl_ij", torch.Tensor, "angstrom", "long-range pair displacement")
-r_ij = Alias("r_ij", torch.Tensor, "angstrom", "pair distance")
-rl_ij = Alias("rl_ij", torch.Tensor, "angstrom", "long-range pair distance")
+pair_diff = Alias("pair_diff", torch.Tensor, "angstrom", "pair displacement")
+pair_dist = Alias("pair_dist", torch.Tensor, "angstrom", "pair distance")
+bond_i = Alias("bond_i", int, "unit", "bond atom index i")
+bond_j = Alias("bond_j", int, "unit", "bond atom index j")
+bond_diff = Alias("bond_diff", torch.Tensor, "angstrom", "bond displacement")
+bond_dist = Alias("bond_dist", torch.Tensor, "angstrom", "bond distance")

@@ -1,19 +1,20 @@
 import torch
-import torch.nn as nn
-from molpy.potential.pair import LJ126
+from molpot.potential.base import Potential
 
-class LJ126(nn.Module, LJ126):
+class LJ126(Potential):
 
-    def __init__(self, epsilon:float, sigma:float, cutoff:float):
-        super().__init__()
-        self.register_parameter("epsilon", nn.Parameter(torch.tensor(epsilon)))
-        self.register_parameter("sigma", nn.Parameter(torch.tensor(sigma)))
-        self.register_parameter("cutoff", nn.Parameter(torch.tensor(cutoff)))
+    def __init__(self, sig, eps):
+        super().__init__('lj126')
+        self.eps = eps
+        self.sig = sig
 
-    def forward(self, inputs:dict):
-        energy = self.energy(inputs)
-        forces = self.forces(inputs)
-        inputs["energy"] = energy
-        inputs["forces"] = forces
-        return inputs
-    
+    def forward(self, inputs, outputs):
+
+        d_ij = inputs['d_ij']
+
+        power_6 = torch.pow(self.sig / d_ij, 6)
+        power_12 = torch.square(power_6)
+
+        outputs['lj126_energy'] = 4 * self.eps * (power_12 - power_6)
+
+        return inputs, outputs

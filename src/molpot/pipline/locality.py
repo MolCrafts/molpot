@@ -185,201 +185,214 @@ class PairwiseDistances(nn.Module):
         pair_i = pair_i.long()
         pair_j = pair_j.long()
 
-        inputs[alias.d_ij] = xyz[pair_j] - xyz[pair_i] + offsets
-        return inputs
+        pairs = torch.cat((pair_i, pair_j), dim=-1)
+        pairs = torch.sort(pairs, dim=-1)[0]
 
+        inputs[alias.pair_diff] = xyz[pair_j] - xyz[pair_i] + offsets
+        inputs[alias.pair_dist] = torch.norm(inputs[alias.pair_diff], dim=-1)
 
-class FilterShortRange(nn.Module):
-    """
-    Separate short-range from all supplied distances.
+        bond_i = inputs[alias.bond_i]
+        bond_j = inputs[alias.bond_j]
+        bonds = torch.cat((bond_i, bond_j), dim=-1)
 
-    The short-range distances will be stored under the original keys (dl_ij,
-    pair_i, pair_j), while the original distances can be accessed for long-range terms via
-    (dl_ij, pair_i, idx_j_lr).
-    """
-
-    def __init__(self, short_range_cutoff: float):
-        super().__init__()
-        self.short_range_cutoff = short_range_cutoff
-
-    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-        pair_i = inputs[pair_i]
-        pair_j = inputs[pair_j]
-        Rij = inputs[Rij]
-
-        rij = torch.norm(Rij, dim=-1)
-        cidx = torch.nonzero(rij <= self.short_range_cutoff).squeeze(-1)
-
-        inputs[alias.dl_ij] = Rij
-        inputs[alias.pair_i_lr] = pair_i
-        inputs[alias.pair_j_lr] = pair_j
-
-        inputs[alias.Rij] = Rij[alias.cidx]
-        inputs[alias.pair_i] = pair_i[alias.cidx]
-        inputs[alias.pair_j] = pair_j[alias.cidx]
-        return inputs
-
-class NeighborsFilter(nn.Module):
-    """
-    Filter out all neighbor list indices corresponding to interactions between a set of
-    atoms. This set of atoms must be specified in the input data.
-    """
-
-    def __init__(self, selection_name: str):
-        """
-        Args:
-            selection_name (str): key in the input data corresponding to the set of
-                atoms between which no interactions should be considered.
-        """
-        self.selection_name = selection_name
-        super().__init__()
-
-    def forward(
-        self,
-        inputs: dict[str, torch.Tensor],
-    ) -> dict[str, torch.Tensor]:
-
-        n_neighbors = inputs[alias.pair_i].shape[0]
-        slab_indices = inputs[self.selection_name].tolist()
-        kept_nbh_indices = []
-        for nbh_idx in range(n_neighbors):
-            i = inputs[alias.pair_i][nbh_idx].item()
-            j = inputs[alias.pair_j][nbh_idx].item()
-            if i not in slab_indices or j not in slab_indices:
-                kept_nbh_indices.append(nbh_idx)
-
-        inputs[alias.pair_i] = inputs[alias.pair_i][kept_nbh_indices]
-        inputs[alias.pair_j] = inputs[alias.pair_j][kept_nbh_indices]
-        inputs[alias.offsets] = inputs[alias.offsets][kept_nbh_indices]
+        neighbor_bond_mask = torch.all(pairs == bonds, dim=-1)
+        inputs[alias.bond_diff] = inputs[alias.pair_diff][neighbor_bond_mask]
+        inputs[alias.bond_dist] = inputs[alias.pair_dist][neighbor_bond_mask]
 
         return inputs
 
 
-class TripleGenerator(nn.Module):
-    """
-    Generate the index tensors for all triples between atoms within the cutoff shell.
-    """
+# class FilterShortRange(nn.Module):
+#     """
+#     Separate short-range from all supplied distances.
 
-    is_preprocessor: bool = True
-    is_postprocessor: bool = False
+#     The short-range distances will be stored under the original keys (dl_ij,
+#     pair_i, pair_j), while the original distances can be accessed for long-range terms via
+#     (dl_ij, pair_i, idx_j_lr).
+#     """
 
-    def forward(
-        self,
-        inputs: dict[str, torch.Tensor],
-    ) -> dict[str, torch.Tensor]:
-        """
-        Using the neighbors contained within the cutoff shell, generate all unique pairs
-        of neighbors and convert them to index arrays. Applied to the neighbor arrays,
-        these arrays generate the indices involved in the atom triples.
+#     def __init__(self, short_range_cutoff: float):
+#         super().__init__()
+#         self.short_range_cutoff = short_range_cutoff
 
-        Example:
-            pair_j[idx_j_triples] -> j atom in triple
-            pair_j[idx_k_triples] -> k atom in triple
-            Rij[idx_j_triples] -> Rij vector in triple
-            Rij[idx_k_triples] -> Rik vector in triple
-        """
-        pair_i = inputs[pair_i]
+#     def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+#         pair_i = inputs[pair_i]
+#         pair_j = inputs[pair_j]
+#         Rij = inputs[Rij]
 
-        _, n_neighbors = torch.unique_consecutive(pair_i, return_counts=True)
+#         rij = torch.norm(Rij, dim=-1)
+#         cidx = torch.nonzero(rij <= self.short_range_cutoff).squeeze(-1)
 
-        offset = 0
-        idx_i_triples = ()
-        idx_jk_triples = ()
-        for idx in range(n_neighbors.shape[0]):
-            triples = torch.combinations(
-                torch.arange(offset, offset + n_neighbors[idx]), r=2
-            )
-            idx_i_triples += (torch.ones(triples.shape[0], dtype=torch.long) * idx,)
-            idx_jk_triples += (triples,)
-            offset += n_neighbors[idx]
+#         inputs[alias.dl_ij] = Rij
+#         inputs[alias.pair_i_lr] = pair_i
+#         inputs[alias.pair_j_lr] = pair_j
 
-        idx_i_triples = torch.cat(idx_i_triples)
+#         inputs[alias.Rij] = Rij[alias.cidx]
+#         inputs[alias.pair_i] = pair_i[alias.cidx]
+#         inputs[alias.pair_j] = pair_j[alias.cidx]
+#         return inputs
 
-        idx_jk_triples = torch.cat(idx_jk_triples)
-        idx_j_triples, idx_k_triples = idx_jk_triples.split(1, dim=-1)
+# class NeighborsFilter(nn.Module):
+#     """
+#     Filter out all neighbor list indices corresponding to interactions between a set of
+#     atoms. This set of atoms must be specified in the input data.
+#     """
 
-        inputs[idx_i_triples] = idx_i_triples
-        inputs[idx_j_triples] = idx_j_triples.squeeze(-1)
-        inputs[idx_k_triples] = idx_k_triples.squeeze(-1)
-        return inputs
+#     def __init__(self, selection_name: str):
+#         """
+#         Args:
+#             selection_name (str): key in the input data corresponding to the set of
+#                 atoms between which no interactions should be considered.
+#         """
+#         self.selection_name = selection_name
+#         super().__init__()
 
+#     def forward(
+#         self,
+#         inputs: dict[str, torch.Tensor],
+#     ) -> dict[str, torch.Tensor]:
 
-class NeighborsCounter(nn.Module):
-    """
-    Store the number of neighbors for each atom
-    """
+#         n_neighbors = inputs[alias.pair_i].shape[0]
+#         slab_indices = inputs[self.selection_name].tolist()
+#         kept_nbh_indices = []
+#         for nbh_idx in range(n_neighbors):
+#             i = inputs[alias.pair_i][nbh_idx].item()
+#             j = inputs[alias.pair_j][nbh_idx].item()
+#             if i not in slab_indices or j not in slab_indices:
+#                 kept_nbh_indices.append(nbh_idx)
 
-    is_preprocessor: bool = True
-    is_postprocessor: bool = False
+#         inputs[alias.pair_i] = inputs[alias.pair_i][kept_nbh_indices]
+#         inputs[alias.pair_j] = inputs[alias.pair_j][kept_nbh_indices]
+#         inputs[alias.offsets] = inputs[alias.offsets][kept_nbh_indices]
 
-    def __init__(self, sorted: bool = True):
-        """
-        Args:
-            sorted: Set to false if chosen neighbor list yields unsorted center indices
-                (pair_i).
-        """
-        super(NeighborsCounter, self).__init__()
-        self.sorted = sorted
-
-    def forward(
-        self,
-        inputs: dict[str, torch.Tensor],
-    ) -> dict[str, torch.Tensor]:
-        pair_i = inputs[pair_i]
-
-        if self.sorted:
-            _, n_nbh = torch.unique_consecutive(pair_i, return_counts=True)
-        else:
-            _, n_nbh = torch.unique(pair_i, return_counts=True)
-
-        inputs[n_nbh] = n_nbh
-        return inputs
+#         return inputs
 
 
-class PositionWrapper(nn.Module):
-    """
-    Wrap atom positions into periodic cell. This routine requires a non-zero cell.
-    The cell center of the inverse cell is set to (0.5, 0.5, 0.5).
-    """
+# class TripleGenerator(nn.Module):
+#     """
+#     Generate the index tensors for all triples between atoms within the cutoff shell.
+#     """
 
-    is_preprocessor: bool = True
-    is_postprocessor: bool = False
+#     is_preprocessor: bool = True
+#     is_postprocessor: bool = False
 
-    def __init__(self, eps: float = 1e-6):
-        """
-        Args:
-            eps (float): small offset for numerical stability.
-        """
-        super().__init__()
-        self.eps = eps
+#     def forward(
+#         self,
+#         inputs: dict[str, torch.Tensor],
+#     ) -> dict[str, torch.Tensor]:
+#         """
+#         Using the neighbors contained within the cutoff shell, generate all unique pairs
+#         of neighbors and convert them to index arrays. Applied to the neighbor arrays,
+#         these arrays generate the indices involved in the atom triples.
 
-    def forward(
-        self,
-        inputs: dict[str, torch.Tensor],
-    ) -> dict[str, torch.Tensor]:
-        xyz = inputs[xyz]
-        cell = inputs[cell].view(3, 3)
-        pbc = inputs[pbc]
+#         Example:
+#             pair_j[idx_j_triples] -> j atom in triple
+#             pair_j[idx_k_triples] -> k atom in triple
+#             Rij[idx_j_triples] -> Rij vector in triple
+#             Rij[idx_k_triples] -> Rik vector in triple
+#         """
+#         pair_i = inputs[pair_i]
 
-        inverse_cell = torch.inverse(cell)
-        inv_positions = torch.sum(xyz[..., None] * inverse_cell[None, ...], dim=1)
+#         _, n_neighbors = torch.unique_consecutive(pair_i, return_counts=True)
 
-        periodic = torch.masked_select(inv_positions, pbc[None, ...])
+#         offset = 0
+#         idx_i_triples = ()
+#         idx_jk_triples = ()
+#         for idx in range(n_neighbors.shape[0]):
+#             triples = torch.combinations(
+#                 torch.arange(offset, offset + n_neighbors[idx]), r=2
+#             )
+#             idx_i_triples += (torch.ones(triples.shape[0], dtype=torch.long) * idx,)
+#             idx_jk_triples += (triples,)
+#             offset += n_neighbors[idx]
 
-        # Apply periodic boundary conditions (with small buffer)
-        periodic = periodic + self.eps
-        periodic = periodic % 1.0
-        periodic = periodic - self.eps
+#         idx_i_triples = torch.cat(idx_i_triples)
 
-        # Update fractional coordinates
-        inv_positions.masked_scatter_(pbc[None, ...], periodic)
+#         idx_jk_triples = torch.cat(idx_jk_triples)
+#         idx_j_triples, idx_k_triples = idx_jk_triples.split(1, dim=-1)
 
-        # Convert to positions
-        R_wrapped = torch.sum(inv_positions[..., None] * cell[None, ...], dim=1)
+#         inputs[idx_i_triples] = idx_i_triples
+#         inputs[idx_j_triples] = idx_j_triples.squeeze(-1)
+#         inputs[idx_k_triples] = idx_k_triples.squeeze(-1)
+#         return inputs
 
-        inputs[xyz] = R_wrapped
 
-        return inputs
+# class NeighborsCounter(nn.Module):
+#     """
+#     Store the number of neighbors for each atom
+#     """
+
+#     is_preprocessor: bool = True
+#     is_postprocessor: bool = False
+
+#     def __init__(self, sorted: bool = True):
+#         """
+#         Args:
+#             sorted: Set to false if chosen neighbor list yields unsorted center indices
+#                 (pair_i).
+#         """
+#         super(NeighborsCounter, self).__init__()
+#         self.sorted = sorted
+
+#     def forward(
+#         self,
+#         inputs: dict[str, torch.Tensor],
+#     ) -> dict[str, torch.Tensor]:
+#         pair_i = inputs[pair_i]
+
+#         if self.sorted:
+#             _, n_nbh = torch.unique_consecutive(pair_i, return_counts=True)
+#         else:
+#             _, n_nbh = torch.unique(pair_i, return_counts=True)
+
+#         inputs[n_nbh] = n_nbh
+#         return inputs
+
+
+# class PositionWrapper(nn.Module):
+#     """
+#     Wrap atom positions into periodic cell. This routine requires a non-zero cell.
+#     The cell center of the inverse cell is set to (0.5, 0.5, 0.5).
+#     """
+
+#     is_preprocessor: bool = True
+#     is_postprocessor: bool = False
+
+#     def __init__(self, eps: float = 1e-6):
+#         """
+#         Args:
+#             eps (float): small offset for numerical stability.
+#         """
+#         super().__init__()
+#         self.eps = eps
+
+#     def forward(
+#         self,
+#         inputs: dict[str, torch.Tensor],
+#     ) -> dict[str, torch.Tensor]:
+#         xyz = inputs[xyz]
+#         cell = inputs[cell].view(3, 3)
+#         pbc = inputs[pbc]
+
+#         inverse_cell = torch.inverse(cell)
+#         inv_positions = torch.sum(xyz[..., None] * inverse_cell[None, ...], dim=1)
+
+#         periodic = torch.masked_select(inv_positions, pbc[None, ...])
+
+#         # Apply periodic boundary conditions (with small buffer)
+#         periodic = periodic + self.eps
+#         periodic = periodic % 1.0
+#         periodic = periodic - self.eps
+
+#         # Update fractional coordinates
+#         inv_positions.masked_scatter_(pbc[None, ...], periodic)
+
+#         # Convert to positions
+#         R_wrapped = torch.sum(inv_positions[..., None] * cell[None, ...], dim=1)
+
+#         inputs[xyz] = R_wrapped
+
+#         return inputs
 
 
 
@@ -408,21 +421,6 @@ class CalcDist(IterDataPipe):
     def __iter__(self):
         for d in self.dp:
             yield self.kernel(d)
-
-    def __len__(self):
-        return len(self.dp)
-
-@functional_datapipe("filter_dist")
-class FilterDist(IterDataPipe):
-
-    def __init__(self, source_dp: IterDataPipe, short_cutoff: float):
-        self.dp = source_dp
-        self.short_cutoff = short_cutoff
-        self.kernel = FilterShortRange(short_cutoff).to(Config.device)
-
-    def __iter__(self):
-        for d in self.dp:
-            yield [self.kernel(dd) for dd in d]
 
     def __len__(self):
         return len(self.dp)

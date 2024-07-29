@@ -1,1 +1,1 @@
-from molpy.potential.bond import Harmonic
+from .harmonic import Harmonic

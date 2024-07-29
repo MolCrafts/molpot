@@ -5,8 +5,13 @@ from .config import Config
 
 logger_initialized = {}
 
-def setup_logger(name: str = None, output_dir: str|Path = None, rank: int = 0,
-                 log_level: int|None = None) -> logging.Logger:
+
+def setup_logger(
+    name: str = None,
+    output_dir: str | Path = None,
+    rank: int = 0,
+    log_level: int | None = None,
+) -> logging.Logger:
     """Initialize the logger.
 
     If the logger has not been initialized, this method will initialize the
@@ -34,9 +39,10 @@ def setup_logger(name: str = None, output_dir: str|Path = None, rank: int = 0,
     # the messages of this logger will not be propagated to its parent
     logger.propagate = False
 
-    formatter = logging.Formatter("[%(asctime)s %(name)s %(levelname)s]: %(message)s",
-                                  datefmt="%m/%d %H:%M:%S")
-    
+    formatter = logging.Formatter(
+        "[%(asctime)s %(name)s %(levelname)s]: %(message)s", datefmt="%m/%d %H:%M:%S"
+    )
+
     # create console handler for master process
     if rank == 0:
         console_handler = logging.StreamHandler(stream=sys.stdout)
