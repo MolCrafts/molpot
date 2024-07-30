@@ -15,5 +15,5 @@ from .potential.base import Potential, PotentialDict, PotentialSeq, ForceField
 from .potential import classical, nnp
 from .statistic import Tracker
 
-from . import train
-from .train.trainer import PotentialTrainer, Trainer
+from . import engine
+from .engine import PotentialTrainer, MDEngine

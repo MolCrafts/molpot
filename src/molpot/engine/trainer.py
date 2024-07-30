@@ -1,5 +1,3 @@
-import weakref
-from abc import ABC, abstractmethod
 from enum import IntEnum
 from pathlib import Path
 
@@ -7,42 +5,13 @@ import torch
 import torch.nn as nn
 
 import molpot as mpot
-from molpot.train.fix import FixManager
-
+from molpot.engine.fix import FixManager
 from molpot.log import setup_logger
 
-
-class Trainer(ABC):
-
-    class Stage(IntEnum):
-        pass
-
-    class Status(IntEnum):
-
-        INIT = 0
-        TRAINING = 1
-
-        STOPPING = 2
-        FINISHED = 3
-        ERROR = 4
-
-    def __init__(self):
-        self._fix = FixManager(self.Stage)
-
-    @property
-    def fix(self) -> FixManager:
-        return self._fix
-
-    @abstractmethod
-    def save_ckpt(self, path: str | Path) -> None:
-        pass
-
-    @abstractmethod
-    def load_ckpt(self, path: str | Path) -> None:
-        pass
+from .base import Engine
 
 
-class PotentialTrainer(Trainer):
+class PotentialTrainer(Engine):
 
     class Stage(IntEnum):
 
@@ -91,11 +60,11 @@ class PotentialTrainer(Trainer):
 
         step_to_run = steps
         self._fix.register(
-            self.Stage.before_iter, mpot.train.fix.StepCounter(step_to_run)
+            self.Stage.before_iter, mpot.engine.fix.StepCounter(step_to_run)
         )
         if self.valid_dataloader is not None:
             self._fix.register(
-                self.Stage.after_epoch, mpot.train.fix.Validation(every_n_epoch=1)
+                self.Stage.after_epoch, mpot.engine.fix.Validation(every_n_epoch=1)
             )
 
         status = {

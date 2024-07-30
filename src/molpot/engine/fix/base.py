@@ -1,11 +1,11 @@
 from __future__ import annotations
-from typing import Type, TypeVar
+from typing import Type
 from abc import ABC, abstractmethod
 
-from typing import TYPE_CHECKING
 
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from molpot.train.trainer import Trainer
+    from ..base import Engine
 
 
 class Fix(ABC):
@@ -15,7 +15,7 @@ class Fix(ABC):
         self.priority = priority
 
     @abstractmethod
-    def __call__(self, trainer: Trainer, status: dict, inputs: dict, outputs: dict):
+    def __call__(self, trainer: Engine, status: dict, inputs: dict, outputs: dict):
         pass
 
     def __repr__(self):
@@ -34,12 +34,12 @@ class Fix(ABC):
 
 class FixManager:
 
-    def __init__(self, stages: Type[Trainer.Stage]):
+    def __init__(self, stages: Type[Engine.Stage]):
         self.fixes: dict[int, list[Fix]] = {}
         for stage in stages:
             self.fixes[stage] = []
 
-    def register(self, stage: Trainer.Stage, fix: Fix):
+    def register(self, stage: Engine.Stage, fix: Fix):
 
         assert isinstance(fix, Fix)
         assert stage in self.fixes
@@ -48,14 +48,16 @@ class FixManager:
 
     def apply(
         self,
-        which_stage: Trainer.Stage,
-        trainer: Trainer,
+        which_stage: Engine.Stage,
+        engine: Engine,
         status: dict,
         inputs: dict,
         outputs: dict,
     ):
+        # switch engine's status
+        status['stage'] = which_stage
         for fix in self.fixes[which_stage]:
-            fix(trainer, status, inputs, outputs)
+            fix(engine, status, inputs, outputs)
 
     def __repr__(self):
         return f"<FixManager: {self.fixes}>"

@@ -7,8 +7,8 @@ import logging
 
 import numpy as np
 
-from molpot.train.fix.base import Fix
-from molpot.train.trainer import Trainer
+from molpot.engine.fix.base import Fix
+from molpot.engine.trainer import PotentialTrainer
 
 
 class EarlyStop(Fix):
@@ -21,7 +21,7 @@ class EarlyStop(Fix):
         self.counter = 0
         self.best_loss = np.inf
 
-    def __call__(self, trainer: Trainer, status: dict, inputs: dict, outputs: dict):
+    def __call__(self, trainer: PotentialTrainer, status: dict, inputs: dict, outputs: dict):
 
         val_loss = outputs[self.key]
         if self.counter < self.patience:
@@ -42,7 +42,7 @@ class StepCounter(Fix):
         super().__init__(priority=0)
         self.stop_step = stop_step
 
-    def __call__(self, trainer: Trainer, status: dict, inputs: dict, outputs: dict):
+    def __call__(self, trainer: PotentialTrainer, status: dict, inputs: dict, outputs: dict):
         if status["current_step"] > self.stop_step:
             status["flag"] = trainer.Status.FINISHED
 
@@ -52,6 +52,6 @@ class EpochCounter(Fix):
     def __init__(self):
         super().__init__(priority=0)
 
-    def __call__(self, trainer: Trainer, status: dict, inputs: dict, outputs: dict):
+    def __call__(self, trainer: PotentialTrainer, status: dict, inputs: dict, outputs: dict):
         if status["current_epoch"] > status["epoch_to_run"]:
             status["flag"] = trainer.Status.FINISHED
