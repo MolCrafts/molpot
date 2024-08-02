@@ -1,7 +1,8 @@
 import torch.nn as nn
 from ...md import MDEngine
+from ..base import Fix
 
-class Integrator(nn.Module):
+class Integrator(Fix):
     
     def __init__(self, time_step: float):
         super().__init__()

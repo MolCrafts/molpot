@@ -1,4 +1,5 @@
 from __future__ import annotations
+import torch.nn as nn
 from typing import Type
 from abc import ABC, abstractmethod
 
@@ -8,14 +9,13 @@ if TYPE_CHECKING:
     from ..base import Engine
 
 
-class Fix(ABC):
+class Fix(nn.Module):
 
     def __init__(self, priority: int = 5):
         assert priority >= 0
         self.priority = priority
 
-    @abstractmethod
-    def __call__(self, trainer: Engine, status: dict, inputs: dict, outputs: dict):
+    def forward(self, engine: Engine, status: dict, inputs: dict, outputs: dict):
         pass
 
     def __repr__(self):

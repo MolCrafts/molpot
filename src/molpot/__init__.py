@@ -11,9 +11,11 @@ from .pipline import dataset
 from .pipline.dataloader import DataLoader
 from .pipline.dataset import DataSet
 
-from .potential.base import Potential, PotentialDict, PotentialSeq, ForceField
+from .potential.base import Potential, PotentialDict, PotentialSeq
 from .potential import classical, nnp
 from .statistic import Tracker
 
 from . import engine
 from .engine import PotentialTrainer, MDEngine
+
+from .utils import *
