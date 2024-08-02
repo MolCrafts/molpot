@@ -25,12 +25,3 @@ class Engine(ABC):
     @property
     def fix(self) -> FixManager:
         return self._fix
-
-    @abstractmethod
-    def save_ckpt(self, path: str | Path) -> None:
-        pass
-
-    @abstractmethod
-    def load_ckpt(self, path: str | Path) -> None:
-        pass
-

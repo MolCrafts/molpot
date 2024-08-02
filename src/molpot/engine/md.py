@@ -1,7 +1,6 @@
+from pathlib import Path
 import torch
 from enum import IntEnum
-from ..potential.base import Potential
-from .fix import FixManager
 from .base import Engine
 
 
@@ -39,6 +38,7 @@ class MDEngine(Engine):
         status = {}
         inputs = system
         outputs = {}
+        potential = system.potential
 
         if self.progress:
             from tqdm import trange
@@ -55,7 +55,7 @@ class MDEngine(Engine):
         with grad_context:
 
             # perform init computation of forces
-            inputs, outputs = self.potential(inputs, outputs)
+            inputs, outputs = potential(inputs, outputs)
 
             self.before_run(status, inputs, outputs)
             self.fix.apply(self.Stage.before_run, self, status, inputs, outputs)

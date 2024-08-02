@@ -1,4 +1,5 @@
 import numpy as np
+from ..base import Fix
 
 class Dump:
 
@@ -6,9 +7,10 @@ class Dump:
         self.every_n_steps = every_n_steps
         # TODO: manage latest queue
 
-class DumpXYZ:
+class DumpXYZ(Fix):
 
     def __init__(self, every_n_steps: int):
+        super().__init__()
         self.every_n_steps = every_n_steps
 
     def forward(self, engine, status, inputs, outputs):
