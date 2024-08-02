@@ -1,2 +1,2 @@
-from . import classical, nnp
-from .classical import get_classic_potental
+from . import classic, nnp
+from .classic import get_classic_potental

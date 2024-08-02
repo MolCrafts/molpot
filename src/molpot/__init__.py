@@ -12,7 +12,7 @@ from .pipline.dataloader import DataLoader
 from .pipline.dataset import DataSet
 
 from .potential.base import Potential, PotentialDict, PotentialSeq
-from .potential import classical, nnp
+from .potential import classic, nnp
 from .statistic import Tracker
 
 from . import engine

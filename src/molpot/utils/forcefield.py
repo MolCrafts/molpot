@@ -20,6 +20,10 @@ class Style:
         self.types: list[Type] = []
         self.mixing = mixing
 
+    @property
+    def name(self) -> str:
+        return self.potential.name
+
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}: {self.name}>"
 

@@ -4,7 +4,7 @@ import torch
 
 import molpot.potential.nnp as nnp
 from molpot import Alias, Config
-from molpot.potential.nnp.pinet import DotLayer
+from molpot.potential.nnp.pinet import SelfDotLayer
 
 from .utils import assert_eqvar, assert_invar, rotate
 
