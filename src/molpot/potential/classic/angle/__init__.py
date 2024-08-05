@@ -1,1 +1,1 @@
-from .harmonic import Hamonic
+from .harmonic import Harmonic

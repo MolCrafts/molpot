@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 class Fix(nn.Module):
 
     def __init__(self, priority: int = 5):
+        super().__init__()
         assert priority >= 0
         self.priority = priority
 
@@ -39,12 +40,11 @@ class FixManager:
         for stage in stages:
             self.fixes[stage] = []
 
-    def register(self, stage: Engine.Stage, fix: Fix):
-
-        assert isinstance(fix, Fix)
-        assert stage in self.fixes
-        self.fixes[stage].append(fix)
-        self.fixes[stage].sort(key=lambda x: x.priority)
+    def register(self, fix: Fix, *stages: Engine.Stage, ):
+        for stage in stages:
+            assert stage in self.fixes
+            self.fixes[stage].append(fix)
+            self.fixes[stage].sort(key=lambda x: x.priority, reverse=True)
 
     def apply(
         self,

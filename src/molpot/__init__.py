@@ -4,6 +4,7 @@ Config()
 
 from . import alias
 from .alias import Alias, NameSpace
+from .utils import *
 
 from . import inspector
 from .inspector import DataInspector
@@ -17,5 +18,3 @@ from .statistic import Tracker
 
 from . import engine
 from .engine import PotentialTrainer, MDEngine
-
-from .utils import *

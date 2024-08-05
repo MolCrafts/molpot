@@ -2,6 +2,7 @@ from pathlib import Path
 import torch
 from enum import IntEnum
 from .base import Engine
+import molpot as mpot
 
 
 class MDEngine(Engine):
@@ -33,12 +34,16 @@ class MDEngine(Engine):
         self.gradients_required = gradients_required
         self.progress = progress
 
-    def run(self, system, n_steps):
+    def run(self, system: mpot.System, n_steps):
 
-        status = {}
-        inputs = system
-        outputs = {}
-        potential = system.potential
+        status = self.get_status()
+        inputs = system.frame
+        outputs = mpot.Frame()
+        outputs["atoms"]["xyz"] = inputs["atoms"]["xyz"]
+        outputs["atoms"]["energy"] = 0
+        outputs["atoms"]["forces"] = 0
+        outputs["atoms"]["momentum"] = 0
+        potential = system.forcefield.get_potential()
 
         if self.progress:
             from tqdm import trange
@@ -54,40 +59,31 @@ class MDEngine(Engine):
 
         with grad_context:
 
-            # perform init computation of forces
-            inputs, outputs = potential(inputs, outputs)
-
             self.before_run(status, inputs, outputs)
             self.fix.apply(self.Stage.before_run, self, status, inputs, outputs)
-            if status['flag'] > self.Status.STOPPING:
-                return system
 
             for step in iterator(n_steps):
 
                 self.before_step(status, inputs, outputs)
                 self.fix.apply(self.Stage.before_step, self, status, inputs, outputs)
-                if status['flag'] > self.Status.STOPPING:
-                    break
+
+                inputs, outputs = potential(inputs, outputs)
 
                 self.half_step(status, inputs, outputs)
                 self.fix.apply(self.Stage.half_step, self, status, inputs, outputs)
-                if status['flag'] > self.Status.STOPPING:
-                    break
 
                 self.main_step(status, inputs, outputs)
                 self.fix.apply(self.Stage.main_step, self, status, inputs, outputs)
-                if status['flag'] > self.Status.STOPPING:
-                    break
 
                 self.after_step(status, inputs, outputs)
                 self.fix.apply(self.Stage.after_step, self, status, inputs, outputs)
-                if status['flag'] > self.Status.STOPPING:
-                    break
 
                 status['current_step'] += 1
 
             self.after_run(status, inputs, outputs)
             self.fix.apply(self.Stage.after_run, self, status, inputs, outputs)
+            if status['status'] > self.Status.STOPPING:
+                return system
 
         return system
 

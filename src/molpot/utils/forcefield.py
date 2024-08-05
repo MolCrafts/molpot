@@ -2,7 +2,8 @@ import numpy as np
 from typing import Literal
 from functools import reduce
 from typing import Iterable
-from ..potential.base import Potential
+from ..potential.base import Potential, PotentialSeq, CalcForce
+import torch
 
 
 class Style:
@@ -194,33 +195,45 @@ class AngleStyle(Style):
         idx_i: int | None = None,
         idx_j: int | None = None,
         idx_k: int | None = None,
-        name: str = "",
+        name: str | None = None,
         *params,
         **named_params,
     ):
+        if name is None:
+            name = f"{idx_i}-{idx_j}-{idx_k}"
         self.types.append(AngleType(name, idx_i, idx_j, idx_k, *params, **named_params))
 
-    def get_param(self, key: str):
+    def get_params(self):
+            
         idx_i = []
         idx_j = []
         idx_k = []
-        params = []
+        params = {}
         for angletype in self.types:
             idx_i.append(angletype.idx_i)
             idx_j.append(angletype.idx_j)
             idx_k.append(angletype.idx_k)
-            params.append(angletype[key])
+            for k, v in angletype.named_params.items():
+                if k not in params:
+                    params[k] = []
+                params[k].append(v)
 
-        n_types_i = np.max(idx_i) + 1
-        n_types_j = np.max(idx_j) + 1
-        n_types_k = np.max(idx_k) + 1
-        n_types = max(n_types_i, n_types_j, n_types_k)
-        param_arr = np.zeros((n_types, n_types, n_types))
-        for i, j, k, param in zip(idx_i, idx_j, idx_k, params):
-            param_arr[i, j, k] = param
-            param_arr[k, j, i] = param
+        idx_i = np.array(idx_i)
+        idx_j = np.array(idx_j)
+        idx_k = np.array(idx_k)
+        n_types_i = idx_i.max() + 1
+        n_types_j = idx_j.max() + 1
+        n_types_k = idx_k.max() + 1
 
-        return param_arr
+        flatten_params = {}
+        for k in params:
+            n_types = max(n_types_i, n_types_j, n_types_k)
+            param_arr = np.zeros((n_types, n_types, n_types))
+            param_arr[idx_i, idx_j, idx_k] = params[k]
+            param_arr[idx_k, idx_j, idx_i] = params[k]
+            flatten_params[k] = param_arr
+
+        return flatten_params
 
 
 class DihedralStyle(Style):
@@ -366,32 +379,32 @@ class ForceField:
             detail += f"\nn_improperstyles: {self.n_improperstyles}, n_impropertypes: {self.n_impropertypes}"
         return detail + ">"
 
-    def def_bondstyle(self, potential: str, *params, **named_params):
+    def def_bondstyle(self, potential: Potential, *params, **named_params):
         bondstyle = BondStyle(potential, *params, **named_params)
         self.bondstyles.append(bondstyle)
         return bondstyle
 
-    def def_pairstyle(self, potential: str, *params, **named_params):
+    def def_pairstyle(self, potential: Potential, *params, **named_params):
         pairstyle = PairStyle(potential, *params, **named_params)
         self.pairstyles.append(pairstyle)
         return pairstyle
 
-    def def_atomstyle(self, potential: str, **params: dict):
+    def def_atomstyle(self, potential: Potential, **params: dict):
         atomstyle = AtomStyle(potential, **params)
         self.atomstyles.append(atomstyle)
         return atomstyle
 
-    def def_anglestyle(self, potential: str, *params, **named_params):
+    def def_anglestyle(self, potential: Potential, *params, **named_params):
         anglestyle = AngleStyle(potential, *params, **named_params)
         self.anglestyles.append(anglestyle)
         return anglestyle
 
-    def def_dihedralstyle(self, potential: str, *params, **named_params):
+    def def_dihedralstyle(self, potential: Potential, *params, **named_params):
         dihedralstyle = DihedralStyle(potential, *params, **named_params)
         self.dihedralstyles.append(dihedralstyle)
         return dihedralstyle
 
-    def def_improperstyle(self, potential: str, *params, **named_params):
+    def def_improperstyle(self, potential: Potential, *params, **named_params):
         improperstyle = ImproperStyle(potential, *params, **named_params)
         self.improperstyles.append(improperstyle)
         return improperstyle
@@ -556,7 +569,7 @@ class ForceField:
         for ff in forcefields:
             self.append(ff)
 
-    def get_potential(self):
+    def get_potential(self, auto_force: bool = True):
 
         potential = []
         for pairstyle in self.pairstyles:
@@ -569,3 +582,12 @@ class ForceField:
             potential.append(dihedralstyle.get_potential())
         for improperstyle in self.improperstyles:
             potential.append(improperstyle.get_potential())
+        assert len(potential) > 0, ValueError("no potential defined")
+        assert all(isinstance(p, Potential) for p in potential), TypeError(
+            f"potential must be an instance of Potential, got {[type(p) for p in potential]}"
+        )
+        pots = PotentialSeq(self.name, *potential)
+        if auto_force:
+            pots.post_process.append(CalcForce())
+
+        return pots

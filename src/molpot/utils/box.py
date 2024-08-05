@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from enum import IntEnum
 
+
 class Box:
 
     class Style(IntEnum):
@@ -11,11 +12,13 @@ class Box:
 
     def __init__(
         self,
-        matrix: torch.Tensor | None = None,
+        matrix: float | torch.Tensor | None = None,
         pbc: torch.Tensor = torch.zeros(3, dtype=bool),
     ):
         if matrix is None:
-            self._matrix = torch.eye(3)
+            self._matrix = 0
+        elif isinstance(matrix, (int, float)):
+            self._matrix = torch.eye(3) * matrix
         else:
             self._matrix = Box.check_matrix(matrix)
         self._pbc = pbc
@@ -37,7 +40,7 @@ class Box:
     @property
     def pbc(self) -> torch.Tensor:
         return self._pbc
-    
+
     @property
     def matrix(self) -> torch.Tensor:
         return self._matrix
@@ -56,7 +59,6 @@ class Box:
                 return torch.zeros(3)
             case Box.Style.ORTHOGONAL | Box.Style.TRICLINIC:
                 return self.calc_lengths_from_matrix(self._matrix)
-
 
     @property
     def angles(self) -> torch.Tensor:
@@ -177,12 +179,14 @@ class Box:
     @staticmethod
     def calc_style_from_matrix(matrix: torch.Tensor) -> Style:
 
-        if torch.allclose(matrix, torch.eye(3)):
+        if torch.allclose(matrix, torch.zeros((3, 3))):
             return Box.Style.FREE
         elif torch.allclose(matrix, torch.diag(torch.diagonal(matrix))):
             return Box.Style.ORTHOGONAL
         elif torch.tril(matrix, 1).sum() == 0:
             return Box.Style.TRICLINIC
+        else:
+            ValueError("Invalid box matrix")
 
     def set_lengths(self, lengths: torch.Tensor):
         self._matrix = self.calc_matrix_from_lengths_angles(lengths, self.angles)
@@ -227,7 +231,9 @@ class Box:
                 nb /= torch.linalg.norm(nb)
                 nc /= torch.linalg.norm(nc)
 
-                return torch.tensor([torch.dot(na, a), torch.dot(nb, b), torch.dot(nc, c)])
+                return torch.tensor(
+                    [torch.dot(na, a), torch.dot(nb, b), torch.dot(nc, c)]
+                )
 
     def wrap(self, xyz: torch.Tensor) -> torch.Tensor:
 
