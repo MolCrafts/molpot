@@ -18,7 +18,6 @@ dependencies = [
     "torchdata",
     "portalocker",
     "typer",
-    "molpy",
     "torchview",
     "torchinfo"
 ]
@@ -26,9 +25,6 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/MolCrafts/molpot"
 Issues = "https://github.com/MolCrafts/molpot/issues"
-
-[project.scripts]
-molpot = "molpot.cli:app"
 
 [build-system]
 requires = [

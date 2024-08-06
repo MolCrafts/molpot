@@ -3,6 +3,7 @@ import torch
 from enum import IntEnum
 from .base import Engine
 import molpot as mpot
+from molpot import alias
 
 
 class MDEngine(Engine):
@@ -53,9 +54,9 @@ class MDEngine(Engine):
             iterator = range
 
         if self.gradients_required:
-            grad_context = torch.no_grad()
-        else:
             grad_context = torch.enable_grad()
+        else:
+            grad_context = torch.no_grad()
 
         with grad_context:
 
@@ -67,7 +68,8 @@ class MDEngine(Engine):
                 self.before_step(status, inputs, outputs)
                 self.fix.apply(self.Stage.before_step, self, status, inputs, outputs)
 
-                inputs, outputs = potential(inputs, outputs)
+                with torch.enable_grad():
+                    inputs, outputs = potential(inputs, outputs)
 
                 self.half_step(status, inputs, outputs)
                 self.fix.apply(self.Stage.half_step, self, status, inputs, outputs)
@@ -85,6 +87,13 @@ class MDEngine(Engine):
             if status['status'] > self.Status.STOPPING:
                 return system
 
+        self.fix.finalize(self, status, inputs, outputs)
+
+        system.frame["atoms"]["xyz"] = outputs["atoms"]["xyz"]
+        system.frame["atoms"]["energy"] = outputs["atoms"]["energy"]
+        system.frame["atoms"]["forces"] = outputs["atoms"]["forces"]
+        system.frame["atoms"]["momentum"] = outputs["atoms"]["momentum"]
+        
         return system
 
     def before_run(self, status, inputs, outputs):

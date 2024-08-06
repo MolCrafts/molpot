@@ -1,8 +1,6 @@
 from __future__ import annotations
 import torch.nn as nn
 from typing import Type
-from abc import ABC, abstractmethod
-
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -31,6 +29,9 @@ class Fix(nn.Module):
             'input': {},
             'state': {},
         }
+    
+    def finalize(self, engine: Engine, status: dict, inputs: dict, outputs: dict):
+        pass
 
 
 class FixManager:
@@ -70,3 +71,11 @@ class FixManager:
                 data[stage_name][fix_name] = fix.state_dict()
 
         return data
+
+    def finalize(self,        engine: Engine,
+        status: dict,
+        inputs: dict,
+        outputs: dict):
+        for stage in self.fixes.values():
+            for fix in stage:
+                fix.finalize(engine, status, inputs, outputs)

@@ -29,7 +29,7 @@ class TorchNeighborList(nn.Module):
         self,
         inputs: dict, outputs
     ) -> dict:
-        assert alias.xyz == "xyz"
+
         xyz = inputs['atoms'][alias.xyz]
         cell = inputs['box'][alias.cell]
         pbc = inputs['box'][alias.pbc]
