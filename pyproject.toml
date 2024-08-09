@@ -16,10 +16,7 @@ dependencies = [
     "numpy",
     "torch_scatter",
     "torchdata",
-    "portalocker",
     "typer",
-    "torchview",
-    "torchinfo"
 ]
 
 [project.urls]
@@ -27,7 +24,8 @@ Homepage = "https://github.com/MolCrafts/molpot"
 Issues = "https://github.com/MolCrafts/molpot/issues"
 
 [build-system]
-requires = [
-    "setuptools",
-]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core"]
+build-backend = "scikit_build_core.build"
+
+[tool.scikit-build]
+cmake.source-dir = "src/op"
