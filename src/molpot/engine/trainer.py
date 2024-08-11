@@ -10,6 +10,8 @@ from molpot.log import setup_logger
 
 from .base import Engine
 
+from tensordict import TensorDict
+
 
 class PotentialTrainer(Engine):
 
@@ -26,18 +28,14 @@ class PotentialTrainer(Engine):
         self,
         name: str,
         model: nn.Module,
-        train_dataloader: mpot.DataLoader,
         loss_fn: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         lr_scheduler: torch.optim.lr_scheduler._LRScheduler,
         root_dir: str | Path = Path.cwd(),
-        enable_amp: bool = False,
-        valid_dataloader: mpot.DataLoader | None = None,
+        enable_amp: bool = False
     ):
         self.name = name
         self.model = model
-        self.dataloader = train_dataloader
-        self.valid_dataloader = valid_dataloader
         self.loss_fn = loss_fn
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
@@ -50,8 +48,17 @@ class PotentialTrainer(Engine):
         self._fix = FixManager(self.Stage)
         # TODO: amp
 
+    def init_status(self) -> TensorDict:
+        return TensorDict(
+            current_step=0,
+            current_epoch=0,
+            flag=self.Status.INIT,
+            metrices={}
+        )
+
     def train(
         self,
+        dataloader,
         steps: int,
         epochs: int = 0,
         upto: bool = False,
@@ -60,12 +67,8 @@ class PotentialTrainer(Engine):
 
         step_to_run = steps
         self._fix.register(
-            self.Stage.before_iter, mpot.engine.fix.StepCounter(step_to_run)
+            mpot.engine.fix.StepCounter(step_to_run), self.Stage.before_iter
         )
-        if self.valid_dataloader is not None:
-            self._fix.register(
-                self.Stage.after_epoch, mpot.engine.fix.Validation(every_n_epoch=1)
-            )
 
         status = {
             "current_step": 0,
@@ -74,64 +77,59 @@ class PotentialTrainer(Engine):
             "metrices": {}
         }
 
-        inputs = {}
-        outputs = {
-            'loss_list': [],
-        }
+        data = next(iter(dataloader))
 
-        self.before_train(status, inputs, outputs)
-        self._fix.apply(self.Stage.before_train, self, status, inputs, outputs)
+        self.before_train(status, data)
+        self._fix.apply(self.Stage.before_train, self, status, data)
         if status['flag'] > self.Status.STOPPING:
-            return status, outputs
+            return status
 
         while True:
 
-            self.before_epoch(status, inputs, outputs)
-            self._fix.apply(self.Stage.before_epoch, self, status, inputs, outputs)
+            self.before_epoch(status, data)
+            self._fix.apply(self.Stage.before_epoch, self, status, data)
             if status['flag'] > self.Status.STOPPING:
                 break
 
-            for data in self.dataloader:
+            for data in dataloader:
 
-                inputs |= data
-
-                self.before_iter(status, inputs, outputs)
-                self._fix.apply(self.Stage.before_iter, self, status, inputs, outputs)
+                self.before_iter(status, data)
+                self._fix.apply(self.Stage.before_iter, self, status, data)
                 if status['flag'] > self.Status.STOPPING:
                     break
 
-                self.train_impl(status, inputs, outputs)
+                self.train_impl(status, data)
                 status['current_step'] += 1
-                self.after_iter(status, inputs, outputs)
-                self._fix.apply(self.Stage.after_iter, self, status, inputs, outputs)
+                self.after_iter(status, data)
+                self._fix.apply(self.Stage.after_iter, self, status, data)
 
-            self.after_epoch(status, inputs, outputs)
-            self._fix.apply(self.Stage.after_epoch, self, status, inputs, outputs)
+            self.after_epoch(status, data)
+            self._fix.apply(self.Stage.after_epoch, self, status, data)
             status['current_epoch'] += 1
 
-        self.after_train(status, inputs, outputs)
-        self._fix.apply(self.Stage.after_iter, self, status, inputs, outputs)
+        self.after_train(status)
+        self._fix.apply(self.Stage.after_iter, self, status, data)
 
-        return status, outputs
+        return status
 
-    def before_train(self, status: dict, inputs: dict, outputs: dict) -> None:
+    def before_train(self, status: dict, inputs: dict) -> None:
         pass
 
-    def before_epoch(self, status: dict, inputs: dict, outputs: dict) -> None:
+    def before_epoch(self, status: dict, inputs: dict) -> None:
         pass
 
-    def before_iter(self, status: dict, inputs: dict, outputs: dict) -> None:
+    def before_iter(self, status: dict, inputs: dict) -> None:
         pass
 
-    def train_impl(self, status: dict, inputs: dict, outputs: dict) -> None:
+    def train_impl(self, status: dict, inputs: dict) -> None:
         model = self.model.train()
         optimizer = self.optimizer
         optimizer.zero_grad()
         lr_scheduler = self.lr_scheduler
 
         # calculate loss
-        inputs, outputs = model(inputs, outputs)
-        loss = self.loss_fn(inputs, outputs)
+        inputs = model(inputs)
+        loss = self.loss_fn(inputs)
 
         # calculate grad
         loss.backward()
@@ -140,13 +138,13 @@ class PotentialTrainer(Engine):
             lr_scheduler.step()
         status['metrices']['loss'] = loss.item()
 
-    def after_iter(self, status: dict, inputs: dict, outputs: dict) -> None:
+    def after_iter(self, status: dict, inputs: dict) -> None:
         pass
 
-    def after_epoch(self, status: dict, inputs: dict, outputs: dict) -> None:
+    def after_epoch(self, status: dict, inputs: dict) -> None:
         pass
 
-    def after_train(self, status: dict, inputs: dict, outputs: dict) -> None:
+    def after_train(self, status: dict, inputs: dict) -> None:
         pass
 
     def save_ckpt(self, path: str | Path) -> None:

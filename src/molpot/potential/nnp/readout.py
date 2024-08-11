@@ -67,9 +67,9 @@ class Atomwise(nn.Module):
         )
         self.aggregation_mode = aggregation_mode
 
-    def forward(self, inputs: dict[str, torch.Tensor], outputs: dict[str, torch.Tensor]) -> tuple[dict, dict]:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> tuple[dict, dict]:
         # predict atomwise contributions
-        y = self.outnet(outputs[self.from_key])
+        y = self.outnet(inputs[self.from_key])
 
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:
@@ -77,7 +77,7 @@ class Atomwise(nn.Module):
 
         # aggregate
         if self.aggregation_mode is not None:
-            idx_m = inputs[molid]
+            idx_m = inputs["atoms", "batch_mask"]
             # maxm = int(idx_m[-1]) + 1
             # y = scatter_add(y, idx_m, dim=0, dim_size=maxm)
             y = scatter_add(y, idx_m, dim=0)
@@ -87,8 +87,8 @@ class Atomwise(nn.Module):
             if self.aggregation_mode == "avg":
                 y = y / inputs[n_atoms]
 
-        outputs[self.to_key] = y
-        return inputs, outputs
+        inputs[self.to_key] = y
+        return inputs
     
 class Derivative(nn.Module):
 

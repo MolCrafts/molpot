@@ -15,7 +15,7 @@ class CalcNBList(IterDataPipe):
     def __init__(self, source_dp: IterDataPipe, cutoff: float):
         self.dp = source_dp
         self.cutoff = cutoff
-        self.kernel = TorchNeighborList(cutoff).to(Config.device)
+        self.kernel = TorchNeighborList(cutoff)
 
     def __iter__(self):
         for d in self.dp:
@@ -30,7 +30,7 @@ class CalcDist(IterDataPipe):
 
     def __init__(self, source_dp: IterDataPipe):
         self.dp = source_dp
-        self.kernel = PairwiseDistances().to(Config.device)
+        self.kernel = PairwiseDistances()
 
     def __iter__(self):
         for d in self.dp:

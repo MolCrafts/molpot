@@ -6,8 +6,8 @@ def loss_wrapper(input_: str, target: str):
     def decorate(func):
 
         @wraps(func)
-        def wrapper(inputs, outputs):
-            return func(inputs[input_], outputs[target])
+        def wrapper(inputs):
+            return func(inputs[input_], inputs[target])
 
         return wrapper
 

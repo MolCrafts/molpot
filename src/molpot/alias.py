@@ -3,13 +3,13 @@ import torch
 
 class Alias:
 
-    def __init__(self, name: str, type: type, unit: str, comment: str, shape: tuple=(), namespace: str = "default") -> None:
+    def __init__(self, name: str, key: str, type: type, unit: str, comment: str, shape: tuple=()) -> None:
         self.name = name
+        self.key = key
         self.type = type
         self.unit = unit
         self.shape = shape
         self.comment = comment
-        self.namespace = namespace
 
     def __hash__(self) -> int:
         return hash(self.name)
@@ -17,12 +17,13 @@ class Alias:
     def __repr__(self) -> str:
         return f"<Alias: {self.name}>"
     
-    def __eq__(self, o: Union[str, "Alias"]) -> bool:
+    def __eq__(self, o: Union[str, "Alias", tuple]) -> bool:
         if isinstance(o, Alias):
             return self.name == o.name
-        else:
+        elif isinstance(o, (tuple, str)):
             return self.name == o
-
+        else:
+            return False
 
 class NameSpace(dict):
 
@@ -43,25 +44,34 @@ class NameSpace(dict):
         return f"<NameSpace: {self.name}>"
     
     def add(self, alias:Alias):
-        alias.namespace = self.name
         self[alias.name] = alias
 
-    def set(self, alias: str, type_: type, unit: str, comment: str, shape: tuple=()):
-        self.add(Alias(alias, type_, unit, comment, self.name, shape))
+    def set(self, name:str, key: str, type_: type, unit: str, comment: str, shape: tuple=()):
+        self.add(Alias(name, key, type_, unit, comment, shape))
 
-n_atoms = Alias("n_atoms", int, "unit", "number of atoms")
-atomid = Alias("idx", int, "unit", "atom index")
-xyz = R = Alias("xyz", float, "unit", "atom coordinates")
-Z = Alias("Z", int, "unit", "atomic number")
-pbc = Alias("pbc", torch.Tensor, "unit", "periodic boundary condition")
-cell = Alias("cell", torch.Tensor, "unit", "cell matrix")
-molid = Alias("molid", int, "unit", "molecule index")
-offsets = Alias("offsets", torch.Tensor, "unit", "offsets")
-pair_i = Alias("pair_i", int, "unit", "pair atom index i")
-pair_j = Alias("pair_j", int, "unit", "pair atom index j")
-pair_diff = Alias("pair_diff", torch.Tensor, "angstrom", "pair displacement")
-pair_dist = Alias("pair_dist", torch.Tensor, "angstrom", "pair distance")
-bond_i = Alias("bond_i", int, "unit", "bond atom index i")
-bond_j = Alias("bond_j", int, "unit", "bond atom index j")
-bond_diff = Alias("bond_diff", torch.Tensor, "angstrom", "bond displacement")
-bond_dist = Alias("bond_dist", torch.Tensor, "angstrom", "bond distance")
+# atoms section
+n_atoms = Alias("n_atoms", ("atoms", "n_atoms"), int, "unit", "number of atoms")
+atomid = Alias("idx", ("atoms", "idx"), int, "unit", "atom index")
+molid = Alias("molid", ("atoms", "molid"), int, "unit", "molecule index")
+xyz = R = Alias("xyz", ("atoms", "xyz"), float, "unit", "atom coordinates")
+Z = Alias("Z", ("atoms", "Z"), int, "unit", "atomic number")
+
+# box section
+pbc = Alias("pbc", ("box", "pbc"), torch.Tensor, "unit", "periodic boundary condition")
+
+box_matrix = Alias("box_matrix", ("box", "matrix"), torch.Tensor, "unit", "cell matrix")
+
+# bonds section
+bond_i = Alias("bond_i", ("bonds", "i"), int, "unit", "bond atom index i")
+bond_j = Alias("bond_j", ("bonds", "j"), int, "unit", "bond atom index j")
+bond_diff = Alias("diff", ("bond", "diff"), torch.Tensor, "angstrom", "bond displacement")
+bond_dist = Alias("dist", ("bond", "dist"), torch.Tensor, "angstrom", "bond distance")
+
+# pairs section
+pair_i = Alias("pair_i", ("pairs", "i"), int, "unit", "pair atom index i")
+pair_j = Alias("pair_j", ("pairs", "j"), int, "unit", "pair atom index j")
+pair_diff = Alias("pair_diff", ("pairs", "diff"), torch.Tensor, "angstrom", "pair displacement")
+pair_dist = Alias("pair_dist", ("pairs", "dist"), torch.Tensor, "angstrom", "pair distance")
+pair_offset = Alias("pair_offset", ("pairs", "offset"), torch.Tensor, "unit", "offsets")
+
+# global section

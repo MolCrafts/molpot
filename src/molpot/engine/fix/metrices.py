@@ -17,11 +17,11 @@ class MAE(Fix):
         self.every_n_steps = every_n_steps
         self.kernel = torch.nn.L1Loss(reduction=reduction)
 
-    def __call__(self, trainer, status, inputs, outputs) -> None:
+    def __call__(self, trainer, status, inputs) -> None:
 
         step = status["current_step"]
         if step % self.every_n_steps == 0:
-            result = outputs[self.result_key]
+            result = inputs[self.result_key]
             target = inputs[self.target_key]
             mae = self.kernel(result, target)
             status['metrices'][self.output_key] = mae
@@ -35,7 +35,7 @@ class StepSpeed(Fix):
         self.start_time = time.perf_counter()
         self.tracker = Tracker()
 
-    def __call__(self, trainer, status, inputs, outputs) -> None:
+    def __call__(self, trainer, status, inputs) -> None:
         if status["current_step"] % self.every_n_steps == 0:
             end_time = time.perf_counter()
             iter_time = end_time - self.start_time
@@ -52,7 +52,7 @@ class EpochSpeed(Fix):
         self.start_time = time.perf_counter()
         self.tracker = Tracker()
 
-    def __call__(self, trainer, status, inputs, outputs) -> None:
+    def __call__(self, trainer, status, inputs) -> None:
         if status["current_step"] % self.every_n_epochs == 0:
             end_time = time.perf_counter()
             iter_time = end_time - self.start_time

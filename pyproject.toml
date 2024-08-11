@@ -20,7 +20,9 @@ dependencies = [
     "tensordict",
     "typer",
     "rich",
-    "pint"
+    "pint",
+    "chemfiles",
+    "tensorboard"
 ]
 
 [project.optional-dependencies]

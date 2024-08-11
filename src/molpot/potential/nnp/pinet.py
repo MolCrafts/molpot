@@ -199,28 +199,28 @@ class GCBlock(nn.Module):
         self.scale_layer = ScaleLayer()
         self.dot_layer = SelfDotLayer()
 
-    def forward(self, inputs, outputs) -> dict[str, torch.Tensor]:
-        pair_i = inputs["pair_i"]
-        pair_j = inputs["pair_j"]
-        basis = inputs["basis"]
-        p1 = inputs["p1"]
+    def forward(self, inputs) -> dict[str, torch.Tensor]:
+        pair_i = inputs[alias.pair_i]
+        pair_j = inputs[alias.pair_j]
+        basis = inputs["pinet", "basis"]
+        p1 = inputs["pinet", "p1"]
         p1, i1 = self.p1_layer(pair_i, pair_j, p1, basis)
-        outputs["p1"] = p1
-        outputs["i1"] = i1
+        inputs["pinet", "p1"] = p1
+        inputs["pinet", "i1"] = i1
 
         if self.rank >= 3:
-            p3 = outputs["p3"]
-            diff_p3 = inputs["norm_diff"]
+            p3 = inputs["pinet", "p1"]
+            diff_p3 = inputs[alias.pair_diff]
             p3, i3 = self.p3_layer(pair_i, pair_j, p3, basis, diff_p3)
-            outputs["p3"] = p3
-            outputs["i3"] = i3
+            inputs["pinet", "p3"] = p3
+            inputs["pinet", "i3"] = i3
         if self.rank >= 5:
-            p5 = outputs["p5"]
-            diff_p5 = inputs["diff_p5"]
+            p5 = inputs["pinet", "p5"]
+            diff_p5 = inputs[diff_p5]
             p5, i5 = self.p5_layer(pair_i, pair_j, p5, basis, diff_p5)
-            outputs["p5"] = p5
-            outputs["i5"] = i5
-        return inputs, outputs
+            inputs["pinet", "p5"] = p5
+            inputs["pinet", "i5"] = i5
+        return inputs
 
 
 class ResUpdate(nn.Module):
@@ -296,9 +296,7 @@ class PiNet(nn.Module):
 
         self.res_update = ResUpdate()
 
-    def forward(
-        self, inputs: dict[str, torch.Tensor], outputs: dict[str, torch.Tensor]
-    ) -> None:
+    def forward(self, inputs: dict[str, torch.Tensor]) -> None:
 
         # get tensors from input dictionary
         atomic_numbers = inputs[alias.Z]
@@ -306,32 +304,31 @@ class PiNet(nn.Module):
         xyz = inputs[alias.xyz]
         idx_i = inputs[alias.pair_i]
         idx_j = inputs[alias.pair_j]
-        offsets = inputs[alias.offsets]
+        offsets = inputs[alias.pair_offset]
         r_ij = xyz[idx_j] - xyz[idx_i] + offsets
         d_ij = torch.norm(r_ij, dim=-1)
 
         basis = self.basis_fn(d_ij)
         fc = self.cutoff_fn(d_ij)
 
-        inputs["basis"] = basis * fc[..., None]
-        inputs["p1"] = self.embedding(atomic_numbers)[:, None, :]
-        n_channels = inputs["p1"].shape[-1]
+        inputs["pinet", "basis"] = basis * fc[..., None]
+        inputs["pinet", "p1"] = self.embedding(atomic_numbers)[:, None, :]
+        n_channels = inputs["pinet", "p1"].shape[-1]
 
-        inputs["p1"] = self.before_gc_block_layer(inputs["p1"])
+        inputs["pinet", "p1"] = self.before_gc_block_layer(inputs["pinet", "p1"])
 
         if self.rank >= 3:
-            inputs["p3"] = torch.zeros([n_atoms, 3, n_channels])
+            inputs["pinet", "p3"] = torch.zeros([n_atoms, 3, n_channels])
         if self.rank >= 5:
-            inputs["p5"] = torch.zeros([n_atoms, 5, n_channels])
+            inputs["pinet", "p5"] = torch.zeros([n_atoms, 5, n_channels])
 
-        inputs["diff_p5"] = d_ij
         x = r_ij[:, 0]
         y = r_ij[:, 1]
         z = r_ij[:, 2]
         x2 = x * x
         y2 = y * y
         z2 = z * z
-        inputs["diff_p5"] = torch.stack(
+        inputs["pinet", "diff_p5"] = torch.stack(
             [
                 2 / 3 * x2 - 1 / 3 * (y2 + z2),
                 2 / 3 * y2 - 1 / 3 * (x2 + z2),
@@ -343,12 +340,12 @@ class PiNet(nn.Module):
         )
 
         for i in range(self.depth):
-            inputs, outputs = self.gc_blocks[i](inputs, outputs)
+            inputs = self.gc_blocks[i](inputs)
 
-            outputs["p1"] = self.res_update(outputs["p1"], inputs["p1"])
+            inputs["pinet", "p1"] = self.res_update(inputs["pinet", "p1"], inputs["pinet", "p1"])
             if self.rank >= 3:
-                outputs["p3"] = self.res_update(outputs["p3"], inputs["p3"])
+                inputs["pinet", "p3"] = self.res_update(inputs["pinet", "p3"], inputs["pinet", "p3"])
             if self.rank >= 5:
-                outputs["p5"] = self.res_update(outputs["p5"], inputs["p5"])
+                inputs["pinet", "p5"] = self.res_update(inputs["pinet", "p5"], inputs["p5"])
 
-        return inputs, outputs
+        return inputs

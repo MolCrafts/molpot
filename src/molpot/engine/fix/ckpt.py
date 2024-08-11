@@ -19,13 +19,13 @@ class SaveCheckPoint(Fix):
         self.every_n_epochs = every_n_epochs
         self.recent_ckpts = deque(maxlen=max_to_keep)
 
-    def __call__(self, trainer, status, inputs, outputs) -> None:
+    def __call__(self, trainer, status, inputs) -> None:
 
         step = status["current_step"]
         epoch = status["current_epoch"]
         if step % self.every_n_steps == 0 or epoch % self.every_n_epochs == 0:
             name = f"step_{step}_epoch_{epoch}.pth"
-            self.save_ckpt(name, trainer, status, inputs, outputs)
+            self.save_ckpt(name, trainer, status, inputs)
 
             if len(self.recent_ckpts) == self.max_to_keep:
                 to_delete = self.recent_ckpts.popleft()
@@ -33,7 +33,7 @@ class SaveCheckPoint(Fix):
 
             self.recent_ckpts.append(name)
 
-    def save_ckpt(self, name, train, status, inputs, outputs) -> None:
+    def save_ckpt(self, name, train, status, inputs) -> None:
 
         data = {
             "model": train.model.state_dict(),
@@ -61,14 +61,14 @@ class LoadCheckPoint(Fix):
         self.every_n_epochs = every_n_epochs
         self.name = name
 
-    def __call__(self, trainer, status, inputs, outputs) -> None:
+    def __call__(self, trainer, status, inputs) -> None:
 
         step = status["current_step"]
         epoch = status["current_epoch"]
         if step % self.every_n_steps == 0 or epoch % self.every_n_epochs == 0:
-            self.load_ckpt(trainer, status, inputs, outputs)
+            self.load_ckpt(trainer, status, inputs)
 
-    def load_ckpt(self, train, status, inputs, outputs) -> None:
+    def load_ckpt(self, train, status, inputs) -> None:
 
         if self.name is None:
             ckpt = Path(train.work_dir) / "latest.pth"

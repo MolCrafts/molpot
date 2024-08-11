@@ -27,9 +27,4 @@ class Engine(ABC):
         return self._fix
 
     def get_status(self):
-        return {
-            'status': list(self.Status)[0],
-            'stage': list(self.Stage)[0],
-            'current_step': 0,
-            'current_epoch': 0
-        }
+        pass

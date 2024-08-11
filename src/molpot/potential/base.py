@@ -1,13 +1,14 @@
 import torch
 import torch.nn as nn
 from torch.autograd import grad
+from molpot import alias
 
 class Potential(nn.Module):
 
     def __init__(self):
         super().__init__()
 
-    def forces(self, inputs, outputs):
+    def forces(self, inputs):
         raise NotImplementedError()
     
 class PotentialDict(nn.ModuleDict, Potential):
@@ -26,12 +27,12 @@ class PotentialSeq(Potential):
         self.post_process = nn.Sequential()
         self.auto_force = auto_force
 
-    def forward(self, inputs, outputs):
+    def forward(self, inputs):
         for module in self.potentials:
-            inputs, outputs = module(inputs, outputs)
+            inputs = module(inputs)
         for module in self.post_process:
-            inputs, outputs = module(inputs, outputs)
-        return inputs, outputs
+            inputs = module(inputs)
+        return inputs
     
     def __len__(self):
         return len(self.potentials)
@@ -45,8 +46,8 @@ class CalcForce(nn.Module):
 
     def forward(self, inputs, outputs):
 
-        energy = outputs['atoms'][self.energy_key]
+        energy = inputs[self.energy_key]
         go = [torch.ones_like(energy)]
-        force = grad(energy, inputs['atoms']['xyz'], grad_outputs=go, create_graph=False, retain_graph=True)[0]
-        outputs['atoms'][self.force_key] = force
-        return inputs, outputs
+        force = grad(energy, inputs[alias.xyz], grad_outputs=go, create_graph=False, retain_graph=True)[0]
+        inputs[self.force_key] = force
+        return inputs

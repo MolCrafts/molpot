@@ -28,7 +28,7 @@ class TensorBoardFix(Fix):
 
         self._tb_writer = SummaryWriter(log_dir, **self.kwargs)
 
-    def __call__(self, trainer, status, inputs, outputs) -> None:
+    def __call__(self, trainer, status, inputs) -> None:
 
         step = status["current_step"]
 

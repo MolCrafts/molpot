@@ -28,14 +28,10 @@ class DataSet(BaseDataset):
         name: str,
         save_dir: None | Path | str,
         total: int,
-        batch_size: int,
-        split: dict|None = None,
         device: str = "cpu",
     ):
         self.name = name
         self.total = total
-        self.logger = logging.getLogger(self.name)
-        self.batch_size = batch_size
         self.device = device
 
         if save_dir is None:
@@ -50,7 +46,7 @@ class DataSet(BaseDataset):
 
     def __len__(self):
         return self.total
-    
+
 
 def read_stream_as_text(_tuple: tuple[str, bytes]):
     path, stream = _tuple
@@ -67,35 +63,47 @@ class QM9(DataSet):
         self,
         save_dir: None | Path | str = None,
         total: int = 0,
-        batch_size: int = 1,
         device: str = "cpu",
-        split: dict | None = None,
         atom_ref: bool = True,
         remove_uncharacterized: bool = True,
     ):
-        super().__init__("QM9", save_dir, total, batch_size, device)
-        self.split = split
+        super().__init__("qm9", save_dir, total, device)
         self.remove_uncharacterized = remove_uncharacterized
         self.atom_ref = atom_ref
-        self.labels.set("A", float, "GHz", "rotational_constant_A", shape=())
-        self.labels.set("B", float, "GHz", "rotational_constant_B", shape=())
-        self.labels.set("C", float, "GHz", "rotational_constant_C", shape=())
-        self.labels.set("mu", float, "Debye", "dipole_moment", shape=())
-        self.labels.set("alpha", float, "a0", "isotropic_polarizability", shape=())
-        self.labels.set("homo", float, "hartree", "homo", shape=())
-        self.labels.set("lumo", float, "hartree", "lump", shape=())
-        self.labels.set("gap", float, "hartree", "gap", shape=())
-        self.labels.set("r2", float, "a0", "electronic_spatial_extent", shape=())
-        self.labels.set("zpve", float, "hartree", "zpve", shape=())
-        self.labels.set("U0", float, "hartree", "energy_U0", shape=())
-        self.labels.set("U", float, "hartree", "energy_U", shape=())
-        self.labels.set("H", float, "hartree", "enthalpy_H", shape=())
-        self.labels.set("G", float, "hartree", "free_energy", shape=())
-        self.labels.set("Cv", float, "cal/mol/K", "heat_capacity", shape=())
-
-    def calc_nblist(self, max_cutoff, shorter_cutoff=None):
-        self.max_cutoff = max_cutoff
-        self.shorter_cutoff = shorter_cutoff
+        self.labels.set(
+            "A", ("targets", "A"), float, "GHz", "rotational_constant_A", shape=()
+        )
+        self.labels.set(
+            "B", ("targets", "B"), float, "GHz", "rotational_constant_B", shape=()
+        )
+        self.labels.set(
+            "C", ("targets", "C"), float, "GHz", "rotational_constant_C", shape=()
+        )
+        self.labels.set(
+            "mu", ("targets", "mu"), float, "Debye", "dipole_moment", shape=()
+        )
+        self.labels.set(
+            "alpha",
+            ("targets", "alpha"),
+            float,
+            "a0",
+            "isotropic_polarizability",
+            shape=(),
+        )
+        self.labels.set("homo", ("targets", "homo"), float, "hartree", "homo", shape=())
+        self.labels.set("lumo", ("targets", "lumo"), float, "hartree", "lump", shape=())
+        self.labels.set("gap", ("targets", "gap"), float, "hartree", "gap", shape=())
+        self.labels.set(
+            "r2", ("targets", "r2"), float, "a0", "electronic_spatial_extent", shape=()
+        )
+        self.labels.set("zpve", ("targets", "zpve"), float, "hartree", "zpve", shape=())
+        self.labels.set("U0", ("targets", "U0"), float, "hartree", "energy_U0", shape=())
+        self.labels.set("U", ("targets", "U"), float, "hartree", "energy_U", shape=())
+        self.labels.set("H", ("targets", "H"), float, "hartree", "enthalpy_H", shape=())
+        self.labels.set("G", ("targets", "G"), float, "hartree", "free_energy", shape=())
+        self.labels.set(
+            "Cv", ("targets", "Cv"), float, "cal/mol/K", "heat_capacity", shape=()
+        )
 
     def get_pipeline(self) -> IterDataPipe:
 
@@ -111,19 +119,10 @@ class QM9(DataSet):
         )
         if self.total > 0:
             dp = dp.header(self.total).set_length(self.total)
-        if self.max_cutoff:
-            dp = dp.calc_nblist(self.max_cutoff).calc_dist()
-        if self.shorter_cutoff:
-            dp = dp.filter_dist(self.shorter_cutoff)
-        dp = dp.batch(self.batch_size).collate_data().in_memory_cache()
-        if self.device == "cuda":
-            dp = dp.pin_memory(device=self.device)
-        if self.split:
-            return dp.random_split(weights=self.split, seed=0)
         return dp
 
     def __iter__(self):
-        dp = self.get_pipline()
+        dp = self.get_pipeline()
         for d in dp:
             yield d
 
@@ -168,89 +167,3 @@ class QM9(DataSet):
             for line in lines[9:-1]:
                 uncharacterized.append(int(line.split()[0]))
         return uncharacterized
-
-
-# class RMD17(DataSet):
-#     def __init__(
-#         self,
-#         save_dir: None | Path | str = None,
-#         total: int = 0,
-#         batch_size: int = 64,
-#         device: str = "cpu",
-#         molecule: str = "aspirin",
-#         atom_dress: bool = True,
-#     ):
-#         super().__init__("rmd17", save_dir, total, batch_size, device)
-#         self.molecule = molecule
-#         Alias("rmd17")
-#         Alias.rmd17.set("molecule", "_rmd17_molecule", str, None, "molecule name")
-#         Alias.rmd17.set("energy", "_rmd17_U", float, "kcal/mol", "_energy")
-#         Alias.rmd17.set("forces", "_rmd17_F", float, "kcal/mol/angstrom", "_forces")
-#         Alias.rmd17.set("R", "_rmd17_R", np.ndarray, "angstrom", "atomic coordinates")
-#         Alias.rmd17.set("Z", "_rmd17_Z", int, None, "atomic numbers in molecule")
-#         self.atom_dress = atom_dress
-
-#     @property
-#     def Z(self):
-#         return torch.tensor([1, 6, 8])
-
-#     def _get_molecule(self, _tuple: str):
-#         filename = _tuple[0]
-#         if filename.endswith(f"{self.molecule}.npz"):
-#             return True
-#         return False
-
-#     def prepare(self) -> IterDataPipe:
-#         url = "https://figshare.com/ndownloader/files/23950376"
-
-#         dp = IterableWrapper([url])
-#         cache_dp = (
-#             dp.on_disk_cache(filepath_fn=self.save_to)
-#             .read_from_http()
-#             .load_from_bz2()
-#             .load_from_tar()
-#             .filter(filter_fn=self._get_molecule)
-#         )
-
-#         dp = cache_dp.end_caching(same_filepath_fn=True).read_rmd17().shuffle()
-#         if self.atom_dress:
-#             self._pre_load(dp)
-#             dp = dp.map(partial(apply_dress, type_list=self.Z, key=Alias.Z, target=Alias.rmd17.energy, w=self.w))
-
-#         return super().prepare(dp)
-
-#     def _pre_load(self, dp: IterDataPipe) -> IterDataPipe:
-
-#         frames = []
-
-#         for frame in dp:
-#             frames.append(frame)
-
-#         if self.atom_dress:
-#             x = [torch.eq(frame[Alias.Z], self.Z.unsqueeze(1)).sum(dim=-1) for frame in frames]
-#             x = torch.stack(x).to(Config.device).to(torch.float32)
-#             y = [frame[Alias.rmd17.energy] for frame in frames]
-#             y = torch.tensor(y).to(Config.device)
-
-#             self.w, self.residue = atomic_dress(x, y)
-#             self.logger.info(f"atomic dressing summary: ")
-#             self.logger.info(f"weights: {self.w}")
-#             self.logger.info(f"residue: {self.residue}")
-
-# class Trajectory(DataSet):
-
-#     def __init__(
-#         self, trajectory: mp.io.TrajLoader, total: int = 0, batch_size: int = 1
-#     ):
-#         super().__init__("Trajectory", None, True, total, batch_size)
-#         self.trajectory = trajectory
-
-#     def prepare(self) -> IterDataPipe:
-#         # Since ctypes objects containing pointers cannot be pickled
-#         # pre-load instead of lazy loading
-#         frames = [frame.as_dict() for frame in islice(self.trajectory, self.total)]
-#         frames = [{k: torch.tensor(v) for k, v in frame.items()} for frame in frames]
-#         dp = IterableWrapper(frames)
-#         self.trajectory.close()
-#         del self.trajectory
-#         return self._prepare(dp)

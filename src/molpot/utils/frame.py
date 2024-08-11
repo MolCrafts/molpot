@@ -4,6 +4,7 @@ from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict._td import T, CompatibleType, DeviceType
 
 from typing import Sequence
+from molpot.alias import Alias
 
 class Frames(LazyStackedTensorDict):
     pass
@@ -26,9 +27,12 @@ class Frame(TensorDict):
             'dihedrals': {},
             'impropers': {},
             'pairs': {},
-            'box': {}
+            'box': {},
+            'targets': {},
+            'predicts': {}
         }
-        default.update(source)
+        if source is not None:
+            default.update(source)
         super().__init__(default, batch_size, device, names, non_blocking, lock, **kwargs)
 
     @classmethod
@@ -36,3 +40,18 @@ class Frame(TensorDict):
         return Frames.maybe_dense_stack(
             input, dim=dim, out=out, **kwargs
         )
+    
+    def __getitem__(self, key: str) -> T:
+        if isinstance(key, Alias):
+            key = key.key
+        return super().__getitem__(key)
+    
+    def __setitem__(self, key: str, value: T) -> None:
+        if isinstance(key, Alias):
+            key = key.key
+        super().__setitem__(key, value)
+
+    def __contains__(self, key: str) -> bool:
+        if isinstance(key, Alias):
+            key = key.key
+        return super().__contains__(key)

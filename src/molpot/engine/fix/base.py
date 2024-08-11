@@ -14,7 +14,7 @@ class Fix(nn.Module):
         assert priority >= 0
         self.priority = priority
 
-    def forward(self, engine: Engine, status: dict, inputs: dict, outputs: dict):
+    def forward(self, engine: Engine, status: dict, inputs: dict):
         pass
 
     def __repr__(self):
@@ -30,7 +30,7 @@ class Fix(nn.Module):
             'state': {},
         }
     
-    def finalize(self, engine: Engine, status: dict, inputs: dict, outputs: dict):
+    def finalize(self, engine: Engine, status: dict, inputs: dict):
         pass
 
 
@@ -41,9 +41,9 @@ class FixManager:
         for stage in stages:
             self.fixes[stage] = []
 
-    def register(self, fix: Fix, *stages: Engine.Stage, ):
+    def register(self, fix: Fix, *stages: Engine.Stage):
         for stage in stages:
-            assert stage in self.fixes
+            assert stage in self.fixes, ValueError(f"Stage {stage} not found in {self.fixes.keys()}")
             self.fixes[stage].append(fix)
             self.fixes[stage].sort(key=lambda x: x.priority, reverse=True)
 
@@ -52,13 +52,12 @@ class FixManager:
         which_stage: Engine.Stage,
         engine: Engine,
         status: dict,
-        inputs: dict,
-        outputs: dict,
+        inputs: dict
     ):
         # switch engine's status
         status['stage'] = which_stage
         for fix in self.fixes[which_stage]:
-            fix(engine, status, inputs, outputs)
+            fix(engine, status, inputs)
 
     def __repr__(self):
         return f"<FixManager: {self.fixes}>"
@@ -74,8 +73,7 @@ class FixManager:
 
     def finalize(self,        engine: Engine,
         status: dict,
-        inputs: dict,
-        outputs: dict):
+        inputs: dict):
         for stage in self.fixes.values():
             for fix in stage:
-                fix.finalize(engine, status, inputs, outputs)
+                fix.finalize(engine, status, inputs)

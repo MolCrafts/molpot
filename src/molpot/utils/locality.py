@@ -1,7 +1,8 @@
 import torch
 from torch import nn
 
-from molpot import alias
+from molpot.alias import *
+
 
 
 class TorchNeighborList(nn.Module):
@@ -27,19 +28,19 @@ class TorchNeighborList(nn.Module):
 
     def forward(
         self,
-        inputs: dict, outputs
+        inputs: dict
     ) -> dict:
 
-        xyz = inputs['atoms'][alias.xyz]
-        cell = inputs['box'][alias.cell]
-        pbc = inputs['box'][alias.pbc]
+        _xyz = inputs[xyz]
+        cell = inputs[box_matrix]
+        _pbc = inputs[pbc]
 
-        pair_i, pair_j, offset = self._build_neighbor_list(xyz, cell, pbc, self._cutoff)
-        outputs['pairs'][alias.pair_i] = pair_i.detach()
-        outputs['pairs'][alias.pair_j] = pair_j.detach()
-        outputs['pairs'][alias.offsets] = offset
+        _pair_i, _pair_j, _offset = self._build_neighbor_list(_xyz, cell, _pbc, self._cutoff)
+        inputs[pair_i] = _pair_i.detach()
+        inputs[pair_j] = _pair_j.detach()
+        inputs[pair_offset] = _offset
 
-        return inputs, outputs
+        return inputs
 
     def _build_neighbor_list(self, positions, cell, pbc, cutoff):
         # Check if shifts are needed for periodic boundary conditions
@@ -167,21 +168,21 @@ class PairwiseDistances(nn.Module):
     Compute pair-wise distances from indices provided by a neighbor list transform.
     """
 
-    def forward(self, inputs: dict[str, torch.Tensor], outputs) -> dict[str, torch.Tensor]:
-        xyz = inputs['atoms'][alias.xyz]
-        offsets = outputs['pairs'][alias.offsets]
-        pair_i = outputs['pairs'][alias.pair_i]
-        pair_j = outputs['pairs'][alias.pair_j]
+    def forward(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        _xyz = inputs[xyz]
+        _offsets = inputs[pair_offset]
+        _pair_i = inputs[pair_i]
+        _pair_j = inputs[pair_j]
 
         # To avoid error in Windows OS
-        pair_i = pair_i.long()
-        pair_j = pair_j.long()
+        _pair_i = _pair_i.long()
+        _pair_j = _pair_j.long()
 
-        pairs = torch.cat((pair_i, pair_j), dim=-1)
-        pairs = torch.sort(pairs, dim=-1)[0]
+        _pairs = torch.cat((_pair_i, _pair_j), dim=-1)
+        _pairs = torch.sort(_pairs, dim=-1)[0]
 
-        outputs['pairs'][alias.pair_diff] = xyz[pair_j] - xyz[pair_i] + offsets
-        outputs['pairs'][alias.pair_dist] = torch.norm(outputs['pairs'][alias.pair_diff], dim=-1)
+        inputs[pair_diff] = _xyz[_pair_j] - _xyz[_pair_i] + _offsets
+        inputs[pair_dist] = torch.norm(inputs[pair_diff], dim=-1)
 
         return inputs
 
