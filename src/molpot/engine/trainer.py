@@ -32,7 +32,8 @@ class PotentialTrainer(Engine):
         optimizer: torch.optim.Optimizer,
         lr_scheduler: torch.optim.lr_scheduler._LRScheduler,
         root_dir: str | Path = Path.cwd(),
-        enable_amp: bool = False
+        enable_amp: bool = False,
+        device: str = "cuda"
     ):
         self.name = name
         self.model = model
@@ -44,7 +45,7 @@ class PotentialTrainer(Engine):
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.logger = setup_logger(name=self.name, output_dir=self.work_dir)
         self.amp_enabled = enable_amp
-
+        self.device = device
         self._fix = FixManager(self.Stage)
         # TODO: amp
 
@@ -55,6 +56,9 @@ class PotentialTrainer(Engine):
             flag=self.Status.INIT,
             metrices={}
         )
+    
+    def compile(self) -> None:
+        self.model = torch.compile(self.model)
 
     def train(
         self,
@@ -65,7 +69,7 @@ class PotentialTrainer(Engine):
         resume: str | Path | bool = False
     ) -> dict:
 
-        step_to_run = steps
+        step_to_run = steps - 1
         self._fix.register(
             mpot.engine.fix.StepCounter(step_to_run), self.Stage.before_iter
         )
@@ -77,7 +81,8 @@ class PotentialTrainer(Engine):
             "metrices": {}
         }
 
-        data = next(iter(dataloader))
+        # data = next(iter(dataloader))
+        data = {}
 
         self.before_train(status, data)
         self._fix.apply(self.Stage.before_train, self, status, data)
@@ -92,7 +97,7 @@ class PotentialTrainer(Engine):
                 break
 
             for data in dataloader:
-
+                data.to(self.device)
                 self.before_iter(status, data)
                 self._fix.apply(self.Stage.before_iter, self, status, data)
                 if status['flag'] > self.Status.STOPPING:
@@ -107,7 +112,7 @@ class PotentialTrainer(Engine):
             self._fix.apply(self.Stage.after_epoch, self, status, data)
             status['current_epoch'] += 1
 
-        self.after_train(status)
+        self.after_train(status, data)
         self._fix.apply(self.Stage.after_iter, self, status, data)
 
         return status
@@ -122,13 +127,13 @@ class PotentialTrainer(Engine):
         pass
 
     def train_impl(self, status: dict, inputs: dict) -> None:
-        model = self.model.train()
+
         optimizer = self.optimizer
         optimizer.zero_grad()
         lr_scheduler = self.lr_scheduler
 
         # calculate loss
-        inputs = model(inputs)
+        inputs = self.model(inputs)
         loss = self.loss_fn(inputs)
 
         # calculate grad

@@ -10,7 +10,7 @@ class Validation(Fix):
 
     def __call__(self, trainer, status, inputs):
 
-        model = trainer.model.eval()
+        model = trainer.model
         loss_fn = trainer.loss_fn
         for inputs in self.valid_dataloader:
 

@@ -36,11 +36,13 @@ class StepSpeed(Fix):
         self.tracker = Tracker()
 
     def __call__(self, trainer, status, inputs) -> None:
+        print(f"stepspeed: {status['current_step']} % {self.every_n_steps} = {status['current_step'] % self.every_n_steps}")
         if status["current_step"] % self.every_n_steps == 0:
             end_time = time.perf_counter()
             iter_time = end_time - self.start_time
             self.tracker.update(iter_time / self.every_n_steps)
-            status['metrices']["step_speed"] = self.tracker.mean
+            # status['metrices']["sec_per_step"] = self.tracker.mean
+            status['metrices']["step_per_sec"] = 1 / self.tracker.mean
             self.start_time = end_time
 
 
@@ -53,9 +55,11 @@ class EpochSpeed(Fix):
         self.tracker = Tracker()
 
     def __call__(self, trainer, status, inputs) -> None:
-        if status["current_step"] % self.every_n_epochs == 0:
+        print(f"epochspeed: {status['current_epoch']} % {self.every_n_epochs} = {status['current_epoch'] % self.every_n_epochs}")
+        if status["current_epoch"] % self.every_n_epochs == 0:
             end_time = time.perf_counter()
             iter_time = end_time - self.start_time
             self.tracker.update(iter_time / self.every_n_epochs)
-            status['metrices']["epoch_speed"] = self.tracker.mean
+            # status['metrices']["epoch_speed"] = self.tracker.mean
+            status['metrices']["epoch_per_sec"] = 1 / self.tracker.mean
             self.start_time = end_time

@@ -55,3 +55,6 @@ class Frame(TensorDict):
         if isinstance(key, Alias):
             key = key.key
         return super().__contains__(key)
+    
+    def __repr__(self) -> str:
+        return f"Frame({super().__repr__()})"

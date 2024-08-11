@@ -14,7 +14,7 @@ class TensorBoardFix(Fix):
         every_n_steps: int,
         every_n_epochs: int = 1,
         log_dir: str = "tb_log",
-        outputs=[],
+        excludes=[],
         **kwargs,
     ) -> None:
 
@@ -23,7 +23,7 @@ class TensorBoardFix(Fix):
         self.kwargs = kwargs
         self.every_n_steps = every_n_steps
         self.every_n_epochs = every_n_epochs
-        self.outputs = outputs
+        self.excludes = excludes
         from torch.utils.tensorboard import SummaryWriter
 
         self._tb_writer = SummaryWriter(log_dir, **self.kwargs)
@@ -34,11 +34,9 @@ class TensorBoardFix(Fix):
 
         if step % self.every_n_steps == 0:
 
-            for key in self.outputs:
-                if key in status['metrices']:
-                    self._write_scalar(step, key, status['metrices'][key])
-                else:
-                    Warning(f"Key {key} not found in status['metrices']")
+            for key, value in status["metrices"].items():
+                if key not in self.excludes:
+                    self._write_scalar(step, key, value)
 
     def __del__(self) -> None:
         writer = getattr(self, "_tb_writer", None)

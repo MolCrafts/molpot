@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter_add
 
-from molpot.alias import *
+from molpot import alias
 from .block import build_gated_equivariant_mlp, build_mlp
 from torch.autograd import grad
 # from .scatter import scatter_add

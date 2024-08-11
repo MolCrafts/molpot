@@ -45,33 +45,35 @@ class NameSpace(dict):
     
     def add(self, alias:Alias):
         self[alias.name] = alias
+        return alias
 
-    def set(self, name:str, key: str, type_: type, unit: str, comment: str, shape: tuple=()):
-        self.add(Alias(name, key, type_, unit, comment, shape))
+    def set(self, name:str, key: str, type_: type, unit: str, comment: str, shape: tuple=(), namespace:str="default"):
+        return self.add(Alias(name, key, type_, unit, comment, shape))
 
 # atoms section
-n_atoms = Alias("n_atoms", ("atoms", "n_atoms"), int, "unit", "number of atoms")
-atomid = Alias("idx", ("atoms", "idx"), int, "unit", "atom index")
-molid = Alias("molid", ("atoms", "molid"), int, "unit", "molecule index")
-xyz = R = Alias("xyz", ("atoms", "xyz"), float, "unit", "atom coordinates")
-Z = Alias("Z", ("atoms", "Z"), int, "unit", "atomic number")
+default_ns = NameSpace("default")
+n_atoms = default_ns.set("n_atoms", ("atoms", "n_atoms"), int, "unit", "number of atoms")
+atomid = default_ns.set("idx", ("atoms", "idx"), int, "unit", "atom index")
+molid = default_ns.set("molid", ("atoms", "molid"), int, "unit", "molecule index")
+xyz = R = default_ns.set("xyz", ("atoms", "xyz"), float, "unit", "atom coordinates")
+Z = default_ns.set("Z", ("atoms", "Z"), int, "unit", "atomic number")
 
 # box section
-pbc = Alias("pbc", ("box", "pbc"), torch.Tensor, "unit", "periodic boundary condition")
+pbc = default_ns.set("pbc", ("box", "pbc"), torch.Tensor, "unit", "periodic boundary condition")
 
-box_matrix = Alias("box_matrix", ("box", "matrix"), torch.Tensor, "unit", "cell matrix")
+box_matrix = default_ns.set("box_matrix", ("box", "matrix"), torch.Tensor, "unit", "cell matrix")
 
 # bonds section
-bond_i = Alias("bond_i", ("bonds", "i"), int, "unit", "bond atom index i")
-bond_j = Alias("bond_j", ("bonds", "j"), int, "unit", "bond atom index j")
-bond_diff = Alias("diff", ("bond", "diff"), torch.Tensor, "angstrom", "bond displacement")
-bond_dist = Alias("dist", ("bond", "dist"), torch.Tensor, "angstrom", "bond distance")
+bond_i = default_ns.set("bond_i", ("bonds", "i"), int, "unit", "bond atom index i")
+bond_j = default_ns.set("bond_j", ("bonds", "j"), int, "unit", "bond atom index j")
+bond_diff = default_ns.set("diff", ("bond", "diff"), torch.Tensor, "angstrom", "bond displacement")
+bond_dist = default_ns.set("dist", ("bond", "dist"), torch.Tensor, "angstrom", "bond distance")
 
 # pairs section
-pair_i = Alias("pair_i", ("pairs", "i"), int, "unit", "pair atom index i")
-pair_j = Alias("pair_j", ("pairs", "j"), int, "unit", "pair atom index j")
-pair_diff = Alias("pair_diff", ("pairs", "diff"), torch.Tensor, "angstrom", "pair displacement")
-pair_dist = Alias("pair_dist", ("pairs", "dist"), torch.Tensor, "angstrom", "pair distance")
-pair_offset = Alias("pair_offset", ("pairs", "offset"), torch.Tensor, "unit", "offsets")
+pair_i = default_ns.set("pair_i", ("pairs", "i"), int, "unit", "pair atom index i")
+pair_j = default_ns.set("pair_j", ("pairs", "j"), int, "unit", "pair atom index j")
+pair_diff = default_ns.set("pair_diff", ("pairs", "diff"), torch.Tensor, "angstrom", "pair displacement")
+pair_dist = default_ns.set("pair_dist", ("pairs", "dist"), torch.Tensor, "angstrom", "pair distance")
+pair_offset = default_ns.set("pair_offset", ("pairs", "offset"), torch.Tensor, "unit", "offsets")
 
 # global section

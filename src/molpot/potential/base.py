@@ -44,7 +44,7 @@ class CalcForce(nn.Module):
         self.energy_key = energy_key
         self.force_key = force_key
 
-    def forward(self, inputs, outputs):
+    def forward(self, inputs):
 
         energy = inputs[self.energy_key]
         go = [torch.ones_like(energy)]
