@@ -12,12 +12,23 @@ classifiers = [
     "License :: OSI Approved :: BSD License",
     "Development Status :: 1 - Planning",
 ]
+
 dependencies = [
-    "numpy",
+    "torch",
     "torch_scatter",
-    "torchdata",
+    "torchdata==0.8",
+    "tensordict",
     "typer",
+    "rich",
+    "pint"
 ]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "ase"
+]
+
 
 [project.urls]
 Homepage = "https://github.com/MolCrafts/molpot"

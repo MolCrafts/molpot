@@ -1,12 +1,38 @@
+import torch
 
-class Frame(dict):
+from tensordict import LazyStackedTensorDict, TensorDict
+from tensordict._td import T, CompatibleType, DeviceType
 
-    def __init__(self):
+from typing import Sequence
 
-        self['atoms'] = {}
-        self['bonds'] = {}
-        self['angles'] = {}
-        self['dihedrals'] = {}
-        self['impropers'] = {}
-        self['pairs'] = {}
-        self['box'] = {}
+class Frames(LazyStackedTensorDict):
+    pass
+
+class Frame(TensorDict):
+
+    def __init__(self, 
+        source: T | dict[str, CompatibleType] = None,
+        batch_size: Sequence[int] | torch.Size | int | None = None,
+        device: DeviceType | None = None,
+        names: Sequence[str] | None = None,
+        non_blocking: bool = None,
+        lock: bool = False,
+        **kwargs,
+    ):
+        default = {
+            'atoms': {},
+            'bonds': {},
+            'angles': {},
+            'dihedrals': {},
+            'impropers': {},
+            'pairs': {},
+            'box': {}
+        }
+        default.update(source)
+        super().__init__(default, batch_size, device, names, non_blocking, lock, **kwargs)
+
+    @classmethod
+    def maybe_dense_stack(cls, input, dim=0, *, out=None, **kwargs):
+        return Frames.maybe_dense_stack(
+            input, dim=dim, out=out, **kwargs
+        )

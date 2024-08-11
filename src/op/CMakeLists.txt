@@ -24,12 +24,10 @@ set(SRC_FILES
 set(LIBRARY ${NAME}Lib)
 add_library(${LIBRARY} SHARED ${SRC_FILES})
 set_property(TARGET ${LIBRARY} PROPERTY CXX_STANDARD 17)
-target_include_directories(${LIBRARY} PRIVATE ${Python3_INCLUDE_DIRS}
-  include/common                                              
-)
+target_include_directories(${LIBRARY} PRIVATE ${Python3_INCLUDE_DIRS} include)
 target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${Python3_LIBRARIES})
 if(ENABLE_CUDA)
-    set_property(TARGET ${LIBRARY} PROPERTY CUDA_STANDARD 14)
+    set_property(TARGET ${LIBRARY} PROPERTY CUDA_STANDARD 17)
     target_compile_definitions(${LIBRARY} PRIVATE ENABLE_CUDA)
 endif(ENABLE_CUDA)
 
@@ -63,12 +61,10 @@ foreach(TEST_SCRIPT ${TEST_SCRIPTS})
 endforeach()
 
 # Installation
-include(CMakePrintHelpers)
 install(TARGETS ${LIBRARY} DESTINATION ${Python3_SITEARCH}/${NAME})
 file(GLOB_RECURSE PYBIND_SCRIPTS binding/*.py)
 foreach(PYBIND_SCRIPT ${PYBIND_SCRIPTS})
 file(RELATIVE_PATH REL_PATH ${CMAKE_SOURCE_DIR}/binding ${PYBIND_SCRIPT})
     get_filename_component(REL_DIR ${REL_PATH} DIRECTORY)
     install(FILES ${PYBIND_SCRIPT} DESTINATION ${Python3_SITEARCH}/${NAME}/${REL_DIR})
-    cmake_print_variables(REL_DIR)
 endforeach()
