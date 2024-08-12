@@ -70,40 +70,23 @@ class QM9(DataSet):
         super().__init__("qm9", save_dir, total, device)
         self.remove_uncharacterized = remove_uncharacterized
         self.atom_ref = atom_ref
-        self.labels.set(
-            "A", ("targets", "A"), float, "GHz", "rotational_constant_A", shape=()
-        )
-        self.labels.set(
-            "B", ("targets", "B"), float, "GHz", "rotational_constant_B", shape=()
-        )
-        self.labels.set(
-            "C", ("targets", "C"), float, "GHz", "rotational_constant_C", shape=()
-        )
-        self.labels.set(
-            "mu", ("targets", "mu"), float, "Debye", "dipole_moment", shape=()
-        )
-        self.labels.set(
-            "alpha",
-            ("targets", "alpha"),
-            float,
-            "a0",
-            "isotropic_polarizability",
-            shape=(),
-        )
-        self.labels.set("homo", ("targets", "homo"), float, "hartree", "homo", shape=())
-        self.labels.set("lumo", ("targets", "lumo"), float, "hartree", "lump", shape=())
-        self.labels.set("gap", ("targets", "gap"), float, "hartree", "gap", shape=())
-        self.labels.set(
-            "r2", ("targets", "r2"), float, "a0", "electronic_spatial_extent", shape=()
-        )
-        self.labels.set("zpve", ("targets", "zpve"), float, "hartree", "zpve", shape=())
-        self.labels.set("U0", ("targets", "U0"), float, "hartree", "energy_U0", shape=())
-        self.labels.set("U", ("targets", "U"), float, "hartree", "energy_U", shape=())
-        self.labels.set("H", ("targets", "H"), float, "hartree", "enthalpy_H", shape=())
-        self.labels.set("G", ("targets", "G"), float, "hartree", "free_energy", shape=())
-        self.labels.set(
-            "Cv", ("targets", "Cv"), float, "cal/mol/K", "heat_capacity", shape=()
-        )
+
+        self.labels.set("A", float, "GHz", "rotational_constant_A")
+        self.labels.set("B", float, "GHz", "rotational_constant_B")
+        self.labels.set("C", float, "GHz", "rotational_constant_C")
+        self.labels.set("mu", float, "Debye", "dipole_moment")
+        self.labels.set("alpha", float, "a0", "isotropic_polarizability")
+        self.labels.set("alpha", float, "a0", "isotropic_polarizability")
+        self.labels.set("homo", float, "hartree", "homo")
+        self.labels.set("lumo", float, "hartree", "lump")
+        self.labels.set("gap", float, "hartree", "gap")
+        self.labels.set("r2", float, "a0", "electronic_spatial_extent")
+        self.labels.set("zpve", float, "hartree", "zpve")
+        self.labels.set("U0", float, "hartree", "energy_U0")
+        self.labels.set("U", float, "hartree", "energy_U")
+        self.labels.set("H", float, "hartree", "enthalpy_H")
+        self.labels.set("G", float, "hartree", "free_energy")
+        self.labels.set("Cv", float, "cal/mol/K", "heat_capacity")
 
     def get_pipeline(self) -> IterDataPipe:
 

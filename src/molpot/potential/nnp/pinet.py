@@ -1,10 +1,10 @@
+from molpot.potential.nnp.utils import aggregate_add
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from molpot import NameSpace
 from .block import build_mlp
 from typing import Callable
-from torch_scatter import scatter_add
 from molpot import alias
 
 
@@ -14,7 +14,7 @@ class PPLayer(nn.Module):
         self,
         n_in: int,
         n_out: int,
-        n_hidden: list[int],
+        n_hidden: list[int] = [],
         activation: Callable | None = F.tanh,
     ):
         super().__init__()
@@ -32,7 +32,7 @@ class IILayer(nn.Module):
         self,
         n_in: int,
         n_out: int,
-        n_hidden: list[int],
+        n_hidden: list[int] = [],
         activation: Callable | None = F.tanh,
     ):
         super().__init__()
@@ -69,6 +69,7 @@ class PILayer(nn.Module):
 
         inter = prop_i + prop_j
         inter = self.mlp(inter)
+
         inter = torch.einsum(
             "pcb, pb->pc", inter.reshape(-1, prop_i.shape[-1], basis.shape[-1]), basis
         )  # (n_atoms, n_channels)
@@ -81,7 +82,7 @@ class PIXLayer(nn.Module):
         self,
         n_in: int,
         n_out: int,
-        n_hidden: list[int],
+        n_hidden: list[int] = [],
         activation: Callable | None = F.tanh,
     ):
         super().__init__()
@@ -115,8 +116,7 @@ class IPLayer(nn.Module):
 
     def forward(self, idx_i, inter):
 
-        return scatter_add(inter, idx_i, dim=0)
-
+        return aggregate_add(inter, idx_i, dim_size=torch.max(idx_i) + 1, dim=0)
 
 class InvarLayer(nn.Module):
 
@@ -135,10 +135,10 @@ class InvarLayer(nn.Module):
 
     def forward(self, idx_i, idx_j, p1, basis):
 
-        p1 = self.pp_layer(p1)
         i1 = self.pi_layer(p1, idx_i, idx_j, basis)
         i1 = self.ii_layer(i1)
         p1 = self.ip_layer(idx_i, i1)
+        p1 = self.pp_layer(p1)
 
         return p1, i1
 
@@ -154,13 +154,15 @@ class EqvarLayer(nn.Module):
 
         self.scale_layer = ScaleLayer()
 
-    def forward(self, idx_i, idx_j, px, diff):
+    def forward(self, idx_i, idx_j, px, diff, i1):
 
-        px = self.pp_layer(px)
         ix = self.pi_layer(px, idx_i, idx_j)
-        ix = self.scale_layer(ix, diff)
-        ix = self.ii_layer(ix)
+        ix = self.scale_layer(ix, i1)
+        scaled_diff = self.scale_layer(diff[:, :, None], i1)
+        ix = ix + scaled_diff
         px = self.ip_layer(idx_i, ix)
+        px = self.pp_layer(px)
+        ix = self.ii_layer(ix)
 
         return px, ix
 
@@ -181,20 +183,14 @@ class GCBlock(nn.Module):
 
     def __init__(
         self,
-        rank: int,
         pp_nodes: list[int],
         pi_nodes: list[int],
         ii_nodes: list[int],
         activation: Callable | None = F.tanh,
     ):
         super().__init__()
-        self.rank = rank
-        assert rank in [1, 3, 5], NotImplementedError("Only rank 1, 3, 5 are supported")
         self.p1_layer = InvarLayer(pp_nodes, pi_nodes, ii_nodes, activation)
-        if rank >= 3:
-            self.p3_layer = EqvarLayer([pp_nodes[0], pp_nodes[-1]])
-        if rank >= 5:
-            self.p5_layer = EqvarLayer([pp_nodes[0], pp_nodes[-1]])
+        self.p3_layer = EqvarLayer([pp_nodes[0], pp_nodes[-1]])
 
         self.scale_layer = ScaleLayer()
         self.dot_layer = SelfDotLayer()
@@ -208,18 +204,11 @@ class GCBlock(nn.Module):
         inputs["pinet", "p1"] = p1
         inputs["pinet", "i1"] = i1
 
-        if self.rank >= 3:
-            p3 = inputs["pinet", "p1"]
-            diff_p3 = inputs[alias.pair_diff]
-            p3, i3 = self.p3_layer(pair_i, pair_j, p3, basis, diff_p3)
-            inputs["pinet", "p3"] = p3
-            inputs["pinet", "i3"] = i3
-        if self.rank >= 5:
-            p5 = inputs["pinet", "p5"]
-            diff_p5 = inputs[diff_p5]
-            p5, i5 = self.p5_layer(pair_i, pair_j, p5, basis, diff_p5)
-            inputs["pinet", "p5"] = p5
-            inputs["pinet", "i5"] = i5
+        p3 = inputs["pinet", "p3"]
+        diff_p3 = inputs['pairs', 'norm_diff'] 
+        p3, i3 = self.p3_layer(pair_i, pair_j, p3, diff_p3, i1)
+        inputs["pinet", "p3"] = p3
+        inputs["pinet", "i3"] = i3
         return inputs
 
 
@@ -243,8 +232,7 @@ class PiNet(nn.Module):
         pi_nodes: int = [16, 16],
         ii_nodes: int = [16, 16],
         activation: Callable | None = F.tanh,
-        max_atomtypes: int = 100,
-        rank: int = 1,
+        max_atomtypes: int = 100
     ):
         super().__init__()
 
@@ -263,15 +251,7 @@ class PiNet(nn.Module):
             "vectorial property",
             ("n_atoms", "n_components", "n_channels"),
         )
-        self.labels.set(
-            "p5",
-            torch.Tensor,
-            "unit",
-            "tensorial property",
-            ("n_atoms", "n_components", "n_channels"),
-        )
 
-        self.rank = rank
         self.depth = depth
         self.basis_fn = basis_fn
         self.cutoff_fn = cutoff_fn
@@ -289,7 +269,7 @@ class PiNet(nn.Module):
 
         self.gc_blocks = nn.ModuleList(
             [
-                GCBlock(rank, pp_nodes, pi_nodes, ii_nodes, activation)
+                GCBlock(pp_nodes, pi_nodes, ii_nodes, activation)
                 for _ in range(depth)
             ]
         )
@@ -299,53 +279,29 @@ class PiNet(nn.Module):
     def forward(self, inputs: dict[str, torch.Tensor]) -> None:
 
         # get tensors from input dictionary
-        atomic_numbers = inputs[alias.Z]
-        n_atoms = atomic_numbers.shape[0]
-        xyz = inputs[alias.xyz]
-        idx_i = inputs[alias.pair_i]
-        idx_j = inputs[alias.pair_j]
-        offsets = inputs[alias.pair_offset]
-        r_ij = xyz[idx_j] - xyz[idx_i] + offsets
-        d_ij = torch.norm(r_ij, dim=-1)
+        Z = inputs[alias.Z]
+        n_atoms = Z.shape[0]
+        r_ij = inputs[alias.pair_diff]
+        d_ij = inputs[alias.pair_dist]
+        r_ij /= torch.norm(r_ij, dim=-1, keepdim=True)
+        inputs['pairs', 'norm_diff'] = r_ij
 
         basis = self.basis_fn(d_ij)
         fc = self.cutoff_fn(d_ij)
 
         inputs["pinet", "basis"] = basis * fc[..., None]
-        inputs["pinet", "p1"] = self.embedding(atomic_numbers)[:, None, :]
-        n_channels = inputs["pinet", "p1"].shape[-1]
+        p1 = self.embedding(Z)[:, None, :]
 
-        inputs["pinet", "p1"] = self.before_gc_block_layer(inputs["pinet", "p1"])
+        p1 = self.before_gc_block_layer(p1)
+        p3 = torch.zeros([n_atoms, 3, p1.shape[-1]])
 
-        if self.rank >= 3:
-            inputs["pinet", "p3"] = torch.zeros([n_atoms, 3, n_channels])
-        if self.rank >= 5:
-            inputs["pinet", "p5"] = torch.zeros([n_atoms, 5, n_channels])
-
-        x = r_ij[:, 0]
-        y = r_ij[:, 1]
-        z = r_ij[:, 2]
-        x2 = x * x
-        y2 = y * y
-        z2 = z * z
-        inputs["pinet", "diff_p5"] = torch.stack(
-            [
-                2 / 3 * x2 - 1 / 3 * (y2 + z2),
-                2 / 3 * y2 - 1 / 3 * (x2 + z2),
-                x * y,
-                x * z,
-                y * z,
-            ],
-            axis=1,
-        )
+        inputs["pinet", "p1"] = p1
+        inputs["pinet", "p3"] = p3
 
         for i in range(self.depth):
             inputs = self.gc_blocks[i](inputs)
-
-            inputs["pinet", "p1"] = self.res_update(inputs["pinet", "p1"], inputs["pinet", "p1"])
-            if self.rank >= 3:
-                inputs["pinet", "p3"] = self.res_update(inputs["pinet", "p3"], inputs["pinet", "p3"])
-            if self.rank >= 5:
-                inputs["pinet", "p5"] = self.res_update(inputs["pinet", "p5"], inputs["p5"])
-
+            inputs["pinet", "p1"] = self.res_update(inputs["pinet", "p1"], p1)
+            inputs["pinet", "p3"] = self.res_update(inputs["pinet", "p3"], p3)
+            p1 = inputs["pinet", "p1"]
+            p3 = inputs["pinet", "p3"]
         return inputs

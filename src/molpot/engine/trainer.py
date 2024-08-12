@@ -19,8 +19,8 @@ class PotentialTrainer(Engine):
 
         before_train = 0
         before_epoch = 1
-        before_iter = 2
-        after_iter = 3
+        before_step = 2
+        after_step = 3
         after_epoch = 4
         after_train = 5
 
@@ -71,7 +71,7 @@ class PotentialTrainer(Engine):
 
         step_to_run = steps - 1
         self._fix.register(
-            mpot.engine.fix.StepCounter(step_to_run), self.Stage.before_iter
+            mpot.engine.fix.StepCounter(step_to_run), self.Stage.before_step
         )
 
         status = {
@@ -81,49 +81,46 @@ class PotentialTrainer(Engine):
             "metrices": {}
         }
 
-        # data = next(iter(dataloader))
-        data = {}
-
-        self.before_train(status, data)
-        self._fix.apply(self.Stage.before_train, self, status, data)
+        self.before_train(status)
+        self._fix.apply(self.Stage.before_train, self, status, None)
         if status['flag'] > self.Status.STOPPING:
             return status
 
         while True:
 
-            self.before_epoch(status, data)
-            self._fix.apply(self.Stage.before_epoch, self, status, data)
+            self.before_epoch(status)
+            self._fix.apply(self.Stage.before_epoch, self, status, None)
             if status['flag'] > self.Status.STOPPING:
                 break
 
             for data in dataloader:
                 data.to(self.device)
-                self.before_iter(status, data)
-                self._fix.apply(self.Stage.before_iter, self, status, data)
+                self.before_step(status, data)
+                self._fix.apply(self.Stage.before_step, self, status, data)
                 if status['flag'] > self.Status.STOPPING:
                     break
 
                 self.train_impl(status, data)
                 status['current_step'] += 1
-                self.after_iter(status, data)
-                self._fix.apply(self.Stage.after_iter, self, status, data)
+                self.after_step(status, data)
+                self._fix.apply(self.Stage.after_step, self, status, data)
 
             self.after_epoch(status, data)
             self._fix.apply(self.Stage.after_epoch, self, status, data)
             status['current_epoch'] += 1
 
-        self.after_train(status, data)
-        self._fix.apply(self.Stage.after_iter, self, status, data)
+        self.after_train(status, data)  # NOTE: potential bug: this data is from `data = next(iter(dataloader))`
+        self._fix.apply(self.Stage.after_train, self, status, data)
 
         return status
 
-    def before_train(self, status: dict, inputs: dict) -> None:
+    def before_train(self, status: dict) -> None:
         pass
 
-    def before_epoch(self, status: dict, inputs: dict) -> None:
+    def before_epoch(self, status: dict) -> None:
         pass
 
-    def before_iter(self, status: dict, inputs: dict) -> None:
+    def before_step(self, status: dict, inputs: dict) -> None:
         pass
 
     def train_impl(self, status: dict, inputs: dict) -> None:
@@ -143,7 +140,7 @@ class PotentialTrainer(Engine):
             lr_scheduler.step()
         status['metrices']['loss'] = loss.item()
 
-    def after_iter(self, status: dict, inputs: dict) -> None:
+    def after_step(self, status: dict, inputs: dict) -> None:
         pass
 
     def after_epoch(self, status: dict, inputs: dict) -> None:

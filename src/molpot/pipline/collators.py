@@ -28,7 +28,7 @@ def _collate_frame(batch: Sequence[dict]):
         repeats=coll_batch[n_atoms],
         dim=0,
     )
-    coll_batch["atoms", "batch_mask"] = batch_mask
+    coll_batch[atom_batch_mask] = batch_mask
 
     atomistic_offset = torch.cumsum(coll_batch[n_atoms], dim=0)
     atomistic_offset = torch.cat(
@@ -39,7 +39,7 @@ def _collate_frame(batch: Sequence[dict]):
             coll_batch[key] = torch.cat(
                 [d[key] + off for d, off in zip(batch, atomistic_offset)], dim=0
             )
-
+    coll_batch[n_batches] = len(batch)
     return coll_batch
 
 

@@ -17,5 +17,3 @@ class Validation(Fix):
             inputs = model(inputs)
             loss = loss_fn(inputs)
             status['metrices']["valid_loss"] = loss.item()
-
-        model.train()

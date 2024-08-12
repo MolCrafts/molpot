@@ -3,8 +3,6 @@ from typing import Callable
 import torch
 from torch import nn as nn
 
-__all__ = ["replicate_module", "derivative_from_atomic", "derivative_from_molecular"]
-
 from torch.autograd import grad
 
 
@@ -124,3 +122,44 @@ def derivative_from_atomic(
     dfdx = torch.cat(dfdx, dim=0)
 
     return dfdx
+
+def aggregate(
+        src: torch.Tensor, index: torch.Tensor, dim: int = 0, reduce: str = "add"
+):
+    """
+    Aggregate a tensor based on an index tensor.
+
+    Args:
+        src (torch.Tensor): Source tensor.
+        index (torch.Tensor): Index tensor.
+        dim (int): Dimension to aggregate.
+        reduce (str): Reduction operation.
+
+    Returns:
+        torch.Tensor: Aggregated tensor.
+    """
+    if reduce == "add" or reduce == "sum":
+        return aggregate_add(src, index, dim_size=torch.max(index) + 1, dim=dim)
+    elif reduce == "mean":
+        return aggregate_mean(src, index, dim_size=torch.max(index) + 1, dim=dim)
+    else:
+        raise NotImplementedError(f"Reduction operation {reduce} not implemented.")
+
+def aggregate_add(
+    x: torch.Tensor, idx_i: torch.Tensor, dim_size: int, dim: int = 0
+) -> torch.Tensor:
+    shape = list(x.shape)
+    shape[dim] = dim_size
+    tmp = torch.zeros(shape, dtype=x.dtype, device=x.device)
+    y = tmp.index_add(dim, idx_i, x)
+    return y
+
+def aggregate_mean(
+    x: torch.Tensor, idx_i: torch.Tensor, dim_size: int, dim: int = 0
+) -> torch.Tensor:
+    shape = list(x.shape)
+    shape[dim] = dim_size
+    tmp = torch.zeros(shape, dtype=x.dtype, device=x.device)
+    count = tmp.index_add(dim, idx_i, torch.ones_like(x))
+    y = tmp.index_add(dim, idx_i, x)
+    return y / count.clamp(min=1)

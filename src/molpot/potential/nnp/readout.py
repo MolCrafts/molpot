@@ -1,14 +1,15 @@
 from typing import Callable, Sequence
 
+from molpot.potential.nnp.utils import aggregate
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_scatter import scatter_add
+from torch.autograd import grad
+
+from .block import build_mlp
 
 from molpot import alias
-from .block import build_gated_equivariant_mlp, build_mlp
-from torch.autograd import grad
-# from .scatter import scatter_add
+
 
 class Atomwise(nn.Module):
     """
@@ -77,17 +78,9 @@ class Atomwise(nn.Module):
 
         # aggregate
         if self.aggregation_mode is not None:
-            idx_m = inputs["atoms", "batch_mask"]
-            # maxm = int(idx_m[-1]) + 1
-            # y = scatter_add(y, idx_m, dim=0, dim_size=maxm)
-            y = scatter_add(y, idx_m, dim=0)
-            # y = torch.squeeze(y, -1)
-            y = torch.squeeze(y)
+            y = aggregate(y, inputs[alias.atom_batch_mask], dim=0, reduce=self.aggregation_mode)
 
-            if self.aggregation_mode == "avg":
-                y = y / inputs[n_atoms]
-
-        inputs[self.to_key] = y
+        inputs[self.to_key] = torch.squeeze(y)
         return inputs
     
 class Derivative(nn.Module):
