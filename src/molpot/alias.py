@@ -90,10 +90,10 @@ xyz = R = atoms_ns.set("xyz", torch.Tensor, "unit", "atom coordinates")
 Z = atoms_ns.set("Z", int, "unit", "atomic number")
 atom_batch_mask = atoms_ns.set("atomic_batch_mask", torch.Tensor, "unit", "atoms batch mask")
 
-# box section
-box_ns = NameSpace("box")
-pbc = box_ns.set("pbc", torch.Tensor, "unit", "periodic boundary condition")
-box_matrix = box_ns.set("box_matrix", torch.Tensor, "unit", "cell matrix")
+# cell section
+cell_ns = NameSpace("cell")
+pbc = cell_ns.set("pbc", torch.Tensor, "unit", "periodic boundary condition")
+cell = cell_ns.set("cell", torch.Tensor, "unit", "cell matrix")
 
 # bonds section
 bonds_ns = NameSpace("bonds")
