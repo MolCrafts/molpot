@@ -137,7 +137,7 @@ class _Elements(metaclass=Singleton):
         ununhexium=Element(116, "ununhexium", "Uuh", 292 * daltons),
     )
 
-    def __getitem__(self, key: int | str):
+    def __getitem__(self, key: int | str) -> Element:
         if isinstance(key, int):
             if any((match := e) for e in self._elements.values() if e.number == key):
                 return match

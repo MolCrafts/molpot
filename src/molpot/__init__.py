@@ -10,7 +10,7 @@ from . import inspector
 from .inspector import DataInspector
 from .pipline import dataset
 from .pipline.dataloader import DataLoader
-from .pipline.dataset import DataSet
+from .pipline.dataset import Dataset
 
 from .potential.base import Potential, PotentialDict, PotentialSeq
 from .potential import classic, nnp

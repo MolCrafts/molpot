@@ -28,6 +28,7 @@ class Frame(TensorDict):
             'impropers': {},
             'pairs': {},
             'box': {},
+            'props': {},
             'targets': {},
             'predicts': {}
         }

@@ -1,17 +1,18 @@
+import io
 import logging
-import tempfile
-from io import BytesIO, TextIOWrapper
+import tarfile
+import time
 from pathlib import Path
 
+import requests
 import torch
+from torch.utils.data import Dataset
 
-from torch.utils.data import IterableDataset as BaseDataset
-from torchdata.datapipes.iter import IterDataPipe, IterableWrapper
-from .process import apply_dress, atomic_dress
-from molpot.alias import Alias, NameSpace
+import molpot as mpot
+from molpot import NameSpace, alias
 
 
-class DataSet(BaseDataset):
+class IterableDataset(torch.utils.data.IterableDataset):
     """
     Base class for all datasets. It includes 5 processes:
         * Download / tokenize / process.
@@ -26,48 +27,35 @@ class DataSet(BaseDataset):
     def __init__(
         self,
         name: str,
-        save_dir: None | Path | str,
-        total: int,
+        save_dir: str | Path,
         device: str = "cpu",
     ):
         self.name = name
-        self.total = total
+        self.save_dir = Path(save_dir)
         self.device = device
-
-        if save_dir is None:
-            self.save_dir = Path(tempfile.gettempdir()) / self.name
-        else:
-            self.save_dir = Path(save_dir) / self.name
-
         self.labels = NameSpace(name)
-
-    def get_pipeline(self) -> IterDataPipe:
-        pass
+        self.logger = logging.getLogger(__name__)
 
     def __len__(self):
-        return self.total
+        pass
+
+    def __iter__(self):
+        pass
+
+    def reset(self):
+        self.state = {}
 
 
-def read_stream_as_text(_tuple: tuple[str, bytes]):
-    path, stream = _tuple
-    return path, TextIOWrapper(BytesIO(stream.read()))
-
-
-def read_stream_as_bytes(_tuple: tuple[str, bytes]):
-    path, stream = _tuple
-    return path, BytesIO(stream.read())
-
-
-class QM9(DataSet):
+class QM9(IterableDataset):
     def __init__(
         self,
-        save_dir: None | Path | str = None,
-        total: int = 0,
+        save_dir: str | Path,
         device: str = "cpu",
+        total: int = 133885,
         atom_ref: bool = True,
         remove_uncharacterized: bool = True,
     ):
-        super().__init__("qm9", save_dir, total, device)
+        super().__init__("qm9", save_dir, device)
         self.remove_uncharacterized = remove_uncharacterized
         self.atom_ref = atom_ref
 
@@ -88,65 +76,89 @@ class QM9(DataSet):
         self.labels.set("G", float, "hartree", "free_energy")
         self.labels.set("Cv", float, "cal/mol/K", "heat_capacity")
 
-    def get_pipeline(self) -> IterDataPipe:
+        self.reset()
+        self.total = total
 
-        url = "https://ndownloader.figshare.com/files/3195389"  # tar.bz2
+        self.frames = self._download_data(total)
 
-        dp = (
-            IterableWrapper([url])
-            .read_from_http()
-            .load_from_bz2(length=self.total)
-            .load_from_tar(length=self.total)
-            .read_from_stream()
-            .read_qm9()
-        )
-        if self.total > 0:
-            dp = dp.header(self.total).set_length(self.total)
-        return dp
-
-    def __iter__(self):
-        dp = self.get_pipeline()
-        for d in dp:
-            yield d
+    # @property
+    # def data(self):
+    #     return self._download_data()
 
     def __len__(self):
-        return self.total
+        return len(self.frames)
 
-    @property
-    def Z(self):
-        return torch.tensor([1, 6, 7, 8, 9])
+    def __iter__(self):
+        frames = self.frames
+        for frame in frames:
+            yield frame
+        self.reset()
 
-    @property
-    def atomrefs(self):
-        lines = self._download_atomrefs()
-        props = [
-            self.labels["zpve"],
-            self.labels["U0"],
-            self.labels["U"],
-            self.labels["H"],
-            self.labels["G"],
-            self.labels["Cv"],
-        ]
-        atref = {z.item(): {} for z in self.Z}
-        for z, l in zip([1, 6, 7, 8, 9], lines[5:10]):
-            for i, p in enumerate(props):
-                atref[z][p] = float(l.split()[i + 1])
-        return atref
+    # def _download_uncharacterized(self):
+    #     self.logger.info("Downloading list of uncharacterized molecules...")
+    #     at_url = "https://ndownloader.figshare.com/files/3195404"
+    #     requests.get(at_url).content
+    #     self.logger.info("Done.")
 
-    def _download_atomrefs(self):
-        url = IterableWrapper(["https://ndownloader.figshare.com/files/3195395"])
-        dp = url.read_from_http().readlines()
-        lines = []
-        for _, line in dp:
-            lines.append(line.decode("utf-8"))
-        return lines
+    #     uncharacterized = []
+    #     with open(io.TextIOWrapper(io.BytesIO())) as f:
+    #         lines = f.readlines()
+    #         for line in lines[9:-1]:
+    #             uncharacterized.append(int(line.split()[0]))
+    #     return uncharacterized
 
-    def _download_uncharacterized(self):
-        at_url = "https://ndownloader.figshare.com/files/3195404"
-        path = self.fetch(at_url, "uncharacterized.txt", self.data_dir)
-        uncharacterized = []
-        with open(path) as f:
+    # def _download_atomrefs(self, tmpdir):
+    #     self.logger.info("Downloading GDB-9 atom references...")
+    #     at_url = "https://ndownloader.figshare.com/files/3195395"
+    #     atomrefs = requests.get(at_url).content
+
+    #     qm9 = self.labels
+
+    #     props = [qm9.zpve, qm9.U0, qm9.U, qm9.H, qm9.G, qm9.Cv]
+    #     atref = {p: torch.zeros((100,)) for p in props}
+    #     with open(atomrefs) as f:
+    #         lines = f.readlines()
+    #         for z, l in zip([1, 6, 7, 8, 9], lines[5:10]):
+    #             for i, p in enumerate(props):
+    #                 atref[p][z] = float(l.split()[i + 1])
+    #     atref = {k: v.tolist() for k, v in atref.items()}
+    #     return atref
+
+    def _download_data(self, total):
+        self.logger.info("Downloading GDB-9 data...")
+        qm9_url = "https://ndownloader.figshare.com/files/3195389"
+        qm9_bytes = requests.get(qm9_url, allow_redirects=True).content
+        qm9_fobj = io.BytesIO(qm9_bytes)
+        qm9_fobj.seek(0)
+        qm9_tar = tarfile.open(fileobj=qm9_fobj, mode="r:bz2")
+        names = qm9_tar.getnames()
+
+        exclude_url = "https://figshare.com/ndownloader/files/3195404"
+        exclude_bytes = requests.get(exclude_url, allow_redirects=True).content
+        exclude_fobj = io.TextIOWrapper(io.BytesIO(exclude_bytes))
+        exclude = [int(line.split()[0]) for line in exclude_fobj.readlines()[9:-1]]
+        names = [name for name in names if int(name[-10:-4]) not in exclude]
+        QM9 = self.labels
+        props = [QM9.zpve, QM9.U0, QM9.U, QM9.H, QM9.G, QM9.Cv]
+
+        frames = []
+        time_pt = time.perf_counter()
+        for i, name in enumerate(names):
+            f = io.TextIOWrapper(qm9_tar.extractfile(name))
             lines = f.readlines()
-            for line in lines[9:-1]:
-                uncharacterized.append(int(line.split()[0]))
-        return uncharacterized
+            Z = [mpot.Element[l.split()[0]].number for l in lines[2:-3]]
+            R = [[float(i.replace("*^", "E")) for i in l.split()[1:4]] for l in lines[2:-3]]
+            frame = mpot.Frame()
+            frame[alias.Z] = torch.tensor(Z)
+            frame[alias.R] = torch.tensor(R, dtype=torch.float)
+            frame[alias.n_atoms] = torch.tensor(len(Z))
+            prop_line = lines[1].split()
+            for k, v in zip(props, prop_line[1:]):
+                frame[k] = torch.tensor(float(v))
+            frames.append(frame)
+            end_time = time.perf_counter()
+            self.logger.debug(f"Frame {i} loaded in {end_time - time_pt:.2f}s")
+            time_pt = end_time
+            if i == total:
+                break
+        return frames

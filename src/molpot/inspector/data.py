@@ -9,11 +9,11 @@ import numpy as np
 import torch
 from rich.console import Console
 from rich.table import Column, Table
-from molpot.pipline.dataset import DataSet
+from molpot.pipline.dataset import Dataset
 
 class DataInspector:
 
-    def __init__(self, dataset: DataSet):
+    def __init__(self, dataset: Dataset):
 
         self.dataset = dataset
 

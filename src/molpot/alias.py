@@ -58,6 +58,13 @@ class NameSpace(dict):
     def add(self, alias: Alias) -> AliasKey:
         self[alias.name] = alias
         return alias.key
+    
+    def __getattribute__(self, name: str) -> str:
+        if name in NameSpace.namespaces:
+            return NameSpace.namespaces[name]
+        elif name in self:
+            return self[name].key
+        return super().__getattribute__(name)
 
     def set(
         self,
