@@ -1,4 +1,3 @@
-from molpot.potential.nnp.utils import aggregate_add
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,6 +5,7 @@ from molpot import NameSpace
 from .block import build_mlp
 from typing import Callable
 from molpot import alias
+from torch_scatter import scatter_add
 
 
 class PPLayer(nn.Module):
@@ -116,7 +116,7 @@ class IPLayer(nn.Module):
 
     def forward(self, idx_i, inter):
 
-        return aggregate_add(inter, idx_i, dim_size=torch.max(idx_i) + 1, dim=0)
+        return scatter_add(inter, idx_i, dim=0)
 
 class InvarLayer(nn.Module):
 
@@ -293,7 +293,7 @@ class PiNet(nn.Module):
         p1 = self.embedding(Z)[:, None, :]
 
         p1 = self.before_gc_block_layer(p1)
-        p3 = torch.zeros([n_atoms, 3, p1.shape[-1]])
+        p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], device=p1.device)
 
         inputs["pinet", "p1"] = p1
         inputs["pinet", "p3"] = p3

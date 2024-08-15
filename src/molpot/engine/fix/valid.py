@@ -13,7 +13,7 @@ class Validation(Fix):
         model = trainer.model
         loss_fn = trainer.loss_fn
         for inputs in self.valid_dataloader:
-
+            inputs = inputs.to(trainer.device)
             inputs = model(inputs)
             loss = loss_fn(inputs)
             status['metrices']["valid_loss"] = loss.item()

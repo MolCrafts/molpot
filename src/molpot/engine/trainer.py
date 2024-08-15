@@ -36,7 +36,9 @@ class PotentialTrainer(Engine):
         device: str = "cuda"
     ):
         self.name = name
-        self.model = model
+        self.device = torch.device(device)
+        print(self.device)
+        self.model = model.to(self.device)
         self.loss_fn = loss_fn
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
@@ -45,7 +47,6 @@ class PotentialTrainer(Engine):
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.logger = setup_logger(name=self.name, output_dir=self.work_dir)
         self.amp_enabled = enable_amp
-        self.device = device
         self._fix = FixManager(self.Stage)
         # TODO: amp
 
@@ -93,10 +94,18 @@ class PotentialTrainer(Engine):
             if status['flag'] > self.Status.STOPPING:
                 break
 
+            # prof = torch.profiler.profile(
+            #     schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
+            #     on_trace_ready=torch.profiler.tensorboard_trace_handler("runs/profile"), 
+            #     record_shapes=True, 
+            #     with_stack=True)
+            # print('profile start')
+            # prof.start()
             for data in dataloader:
-                data.to(self.device)
+                data = data.to(self.device)
                 self.before_step(status, data)
                 self._fix.apply(self.Stage.before_step, self, status, data)
+                # prof.step()
                 if status['flag'] > self.Status.STOPPING:
                     break
 
@@ -104,6 +113,8 @@ class PotentialTrainer(Engine):
                 status['current_step'] += 1
                 self.after_step(status, data)
                 self._fix.apply(self.Stage.after_step, self, status, data)
+
+            # prof.stop()
 
             self.after_epoch(status, data)
             self._fix.apply(self.Stage.after_epoch, self, status, data)

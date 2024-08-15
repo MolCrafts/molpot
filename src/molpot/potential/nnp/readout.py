@@ -1,6 +1,5 @@
 from typing import Callable, Sequence
 
-from molpot.potential.nnp.utils import aggregate
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,6 +8,7 @@ from torch.autograd import grad
 from .block import build_mlp
 
 from molpot import alias
+from torch_scatter import scatter
 
 
 class Atomwise(nn.Module):
@@ -78,7 +78,7 @@ class Atomwise(nn.Module):
 
         # aggregate
         if self.aggregation_mode is not None:
-            y = aggregate(y, inputs[alias.atom_batch_mask], dim=0, reduce=self.aggregation_mode)
+            y = scatter(y, inputs[alias.atom_batch_mask], dim=0, reduce=self.aggregation_mode)
 
         inputs[self.to_key] = torch.squeeze(y)
         return inputs

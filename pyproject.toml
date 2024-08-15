@@ -14,9 +14,9 @@ classifiers = [
 ]
 
 dependencies = [
-    "torch",
-    "torch_scatter",
+    "torch==2.4.0a0+3bcc3cddb5.nv24.7",
     "torchdata==0.8",
+    "torch_scatter",
     "tensordict",
     "typer",
     "rich",
