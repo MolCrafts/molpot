@@ -11,6 +11,7 @@ from torch.utils.data import Dataset
 import molpot as mpot
 from molpot import NameSpace, alias
 
+logger = logging.getLogger("molpot")
 
 class IterableDataset(torch.utils.data.IterableDataset):
     """
@@ -34,7 +35,6 @@ class IterableDataset(torch.utils.data.IterableDataset):
         self.save_dir = Path(save_dir)
         self.device = device
         self.labels = NameSpace(name)
-        self.logger = logging.getLogger(__name__)
 
     def __len__(self):
         pass
@@ -79,11 +79,16 @@ class QM9(IterableDataset):
         self.reset()
         self.total = total
 
-        self.frames = self._download_data(total)
+    def prepare(self):
+        if self.save_dir.exists():
+            frames = mpot.Frame.load(self.save_dir/self.name)
+        else:
+            self.frames = self._download_data(total)
+            self.frames = self.save_frames(self.frames)
 
-    # @property
-    # def data(self):
-    #     return self._download_data()
+    def save_frames(self, frames):
+        frames.save(self.save_dir/self.name)
+        return frames
 
     def __len__(self):
         return len(self.frames)
@@ -95,10 +100,10 @@ class QM9(IterableDataset):
         self.reset()
 
     # def _download_uncharacterized(self):
-    #     self.logger.info("Downloading list of uncharacterized molecules...")
+    #     logger.info("Downloading list of uncharacterized molecules...")
     #     at_url = "https://ndownloader.figshare.com/files/3195404"
     #     requests.get(at_url).content
-    #     self.logger.info("Done.")
+    #     logger.info("Done.")
 
     #     uncharacterized = []
     #     with open(io.TextIOWrapper(io.BytesIO())) as f:
@@ -108,7 +113,7 @@ class QM9(IterableDataset):
     #     return uncharacterized
 
     # def _download_atomrefs(self, tmpdir):
-    #     self.logger.info("Downloading GDB-9 atom references...")
+    #     logger.info("Downloading GDB-9 atom references...")
     #     at_url = "https://ndownloader.figshare.com/files/3195395"
     #     atomrefs = requests.get(at_url).content
 
@@ -125,7 +130,7 @@ class QM9(IterableDataset):
     #     return atref
 
     def _download_data(self, total):
-        self.logger.info("Downloading GDB-9 data...")
+        logger.info("Downloading GDB-9 data...")
         qm9_url = "https://ndownloader.figshare.com/files/3195389"
         qm9_bytes = requests.get(qm9_url, allow_redirects=True).content
         qm9_fobj = io.BytesIO(qm9_bytes)
@@ -143,6 +148,7 @@ class QM9(IterableDataset):
 
         frames = []
         time_pt = time.perf_counter()
+        total -= 1
         for i, name in enumerate(names):
             f = io.TextIOWrapper(qm9_tar.extractfile(name))
             lines = f.readlines()
@@ -157,7 +163,7 @@ class QM9(IterableDataset):
                 frame[k] = torch.tensor(float(v))
             frames.append(frame)
             end_time = time.perf_counter()
-            self.logger.debug(f"Frame {i} loaded in {end_time - time_pt:.2f}s")
+            logger.debug(f"Frame {i} loaded in {end_time - time_pt:.2f}s")
             time_pt = end_time
             if i == total:
                 break
