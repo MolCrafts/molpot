@@ -14,7 +14,7 @@ from molpot.engine.base import Engine
 class EarlyStop(Fix):
 
     def __init__(self, key, patience=5, min_delta=0):
-        super().__init__(0, 0)
+        super().__init__()
         self.key = key
         self.patience = patience
         self.min_delta = min_delta
@@ -39,7 +39,7 @@ class EarlyStop(Fix):
 class StepCounter(Fix):
 
     def __init__(self, stop_step: int):
-        super().__init__(priority=0)
+        super().__init__()
         self.stop_step = stop_step
 
     def __call__(self, trainer: Engine, status: dict, inputs: dict):
@@ -50,7 +50,7 @@ class StepCounter(Fix):
 class EpochCounter(Fix):
 
     def __init__(self):
-        super().__init__(priority=0)
+        super().__init__()
 
     def __call__(self, trainer: Engine, status: dict, inputs: dict):
         if status["current_epoch"] > status["epoch_to_run"]:

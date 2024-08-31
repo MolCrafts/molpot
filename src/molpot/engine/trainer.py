@@ -94,18 +94,10 @@ class PotentialTrainer(Engine):
             if status['flag'] > self.Status.STOPPING:
                 break
 
-            # prof = torch.profiler.profile(
-            #     schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
-            #     on_trace_ready=torch.profiler.tensorboard_trace_handler("runs/profile"), 
-            #     record_shapes=True, 
-            #     with_stack=True)
-            # print('profile start')
-            # prof.start()
             for data in dataloader:
                 data = data.to(self.device)
                 self.before_step(status, data)
                 self._fix.apply(self.Stage.before_step, self, status, data)
-                # prof.step()
                 if status['flag'] > self.Status.STOPPING:
                     break
 
@@ -113,8 +105,6 @@ class PotentialTrainer(Engine):
                 status['current_step'] += 1
                 self.after_step(status, data)
                 self._fix.apply(self.Stage.after_step, self, status, data)
-
-            # prof.stop()
 
             self.after_epoch(status, data)
             self._fix.apply(self.Stage.after_epoch, self, status, data)

@@ -10,9 +10,6 @@ class Dump:
     def __init__(self, every_n_steps: int):
         self.every_n_steps = every_n_steps
         self.priority = 10
-        # TODO: manage latest queue
-
-    
 
     def finalize(self, engine, status, inputs, outputs):
         pass

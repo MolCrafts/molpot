@@ -1,7 +1,8 @@
 import datetime
 import time
 from .base import Fix
-
+from pathlib import Path
+import torch
 
 class ConsoloLogFix(Fix):
     pass
@@ -18,7 +19,7 @@ class TensorBoardFix(Fix):
         **kwargs,
     ) -> None:
 
-        super().__init__(priority=9)
+        super().__init__()
         self.log_dir = log_dir
         self.kwargs = kwargs
         self.every_n_steps = every_n_steps
@@ -45,3 +46,26 @@ class TensorBoardFix(Fix):
 
     def _write_scalar(self, step: int, key, value, tag='metrices') -> None:
         self._tb_writer.add_scalar(f'{tag}/{key}', value, step, new_style=True)
+
+class Profiler(Fix):
+
+    def __init__(
+        self,
+        wait, warmup, active, repeat=0, skip_first=0, log_dir=Path.cwd(), record_shapes=True, with_stack=True
+    ):
+        super().__init__()
+        self.profiler = torch.profiler.profile(
+            schedule=torch.profiler.schedule(wait=wait, warmup=warmup, active=active, repeat=repeat),
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(log_dir),
+            record_shapes=record_shapes,
+            with_stack=with_stack
+        )
+
+    def before_epoch(self, trainer, status, inputs):
+        self.profiler.start()
+
+    def after_step(self, trainer, status, inputs):
+        self.profiler.step()
+
+    def after_epoch(self, trainer, status, inputs):
+        self.profiler.end()

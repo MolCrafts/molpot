@@ -15,20 +15,22 @@ classifiers = [
 
 dependencies = [
     "torch",
-    "torchdata",
     "torch_scatter",
     "tensordict",
     "typer",
     "rich",
     "pint",
     "chemfiles",
-    "tensorboard"
+    "tensorboard",
+    "h5py"
 ]
 
 [project.optional-dependencies]
-test = [
+dev = [
     "pytest",
-    "ase"
+    "ase",
+    "isort",
+    "black"
 ]
 
 

@@ -4,7 +4,7 @@ from .base import Fix
 class Validation(Fix):
 
     def __init__(self, every_n_epoch: int, valid_dataloader):
-        super().__init__(priority=1)
+        super().__init__()
         self.every_n_epoch = every_n_epoch
         self.valid_dataloader = valid_dataloader
 

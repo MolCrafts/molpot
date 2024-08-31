@@ -12,7 +12,7 @@ class SaveCheckPoint(Fix):
         self, every_n_steps: int, every_n_epochs: int, max_to_keep: int | None = None
     ) -> None:
 
-        super().__init__(priority=9)
+        super().__init__()
 
         self.max_to_keep = max_to_keep
         self.every_n_steps = every_n_steps
@@ -55,7 +55,7 @@ class LoadCheckPoint(Fix):
 
     def __init__(self, every_n_steps: int, every_n_epochs: int, name:str|None = None) -> None:
 
-        super().__init__(priority=0)
+        super().__init__()
 
         self.every_n_steps = every_n_steps
         self.every_n_epochs = every_n_epochs
@@ -74,7 +74,7 @@ class LoadCheckPoint(Fix):
             ckpt = Path(train.work_dir) / "latest.pth"
 
         else:
-            ckpt = Path(train.work_dir) / f"step_{status["current_step"]}_epoch_{status["current_epoch"]}.pth"
+            ckpt = Path(train.work_dir) / f"step_{status['current_step']}_epoch_{status['current_epoch']}.pth"
 
         assert ckpt.exists(), FileNotFoundError(f"Checkpoint {ckpt} not found.")
         

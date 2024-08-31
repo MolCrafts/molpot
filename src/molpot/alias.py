@@ -100,7 +100,7 @@ atom_batch_mask = atoms_ns.set("atomic_batch_mask", torch.Tensor, "unit", "atoms
 # cell section
 cell_ns = NameSpace("cell")
 pbc = cell_ns.set("pbc", torch.Tensor, "unit", "periodic boundary condition")
-cell = cell_ns.set("cell", torch.Tensor, "unit", "cell matrix")
+cell = cell_ns.set("matrix", torch.Tensor, "unit", "cell matrix")
 
 # bonds section
 bonds_ns = NameSpace("bonds")
@@ -120,4 +120,4 @@ pair_offset = pairs_ns.set("offset", torch.Tensor, "unit", "offsets")
 # prop section
 props = NameSpace("props")
 n_atoms = props.set("n_atoms", int, "unit", "number of atoms")
-n_batches = props.set("n_batches", int, "unit", "number of batches")
+n_pairs = props.set("n_pairs", int, "unit", "number of pairs")

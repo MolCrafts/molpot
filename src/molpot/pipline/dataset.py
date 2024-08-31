@@ -1,11 +1,14 @@
 import io
 import logging
+import random
 import tarfile
 import time
+from functools import reduce
 from pathlib import Path
 
 import requests
 import torch
+from torch.nn import Module
 from torch.utils.data import Dataset
 
 import molpot as mpot
@@ -13,7 +16,7 @@ from molpot import NameSpace, alias
 
 logger = logging.getLogger("molpot")
 
-class IterableDataset(torch.utils.data.IterableDataset):
+class Dataset:
     """
     Base class for all datasets. It includes 5 processes:
         * Download / tokenize / process.
@@ -30,11 +33,19 @@ class IterableDataset(torch.utils.data.IterableDataset):
         name: str,
         save_dir: str | Path,
         device: str = "cpu",
+        preprocess: list[Module] = []
     ):
+        super().__init__()
         self.name = name
         self.save_dir = Path(save_dir)
         self.device = device
         self.labels = NameSpace(name)
+        self._preprocess = preprocess
+
+    def pre_process(self, inputs):
+        for proc in self._preprocess:
+            inputs = proc(inputs)
+        return inputs
 
     def __len__(self):
         pass
@@ -46,7 +57,7 @@ class IterableDataset(torch.utils.data.IterableDataset):
         self.state = {}
 
 
-class QM9(IterableDataset):
+class QM9(Dataset, torch.utils.data.Dataset):
     def __init__(
         self,
         save_dir: str | Path,
@@ -54,8 +65,10 @@ class QM9(IterableDataset):
         total: int = 133885,
         atom_ref: bool = True,
         remove_uncharacterized: bool = True,
+        preprocess: list[Module] = []
     ):
-        super().__init__("qm9", save_dir, device)
+        super().__init__("qm9", save_dir, device, preprocess=preprocess)
+
         self.remove_uncharacterized = remove_uncharacterized
         self.atom_ref = atom_ref
 
@@ -76,28 +89,18 @@ class QM9(IterableDataset):
         self.labels.set("G", float, "hartree", "free_energy")
         self.labels.set("Cv", float, "cal/mol/K", "heat_capacity")
 
-        self.reset()
         self.total = total
 
-    def prepare(self):
-        if self.save_dir.exists():
-            frames = mpot.Frame.load(self.save_dir/self.name)
-        else:
-            self.frames = self._download_data(total)
-            self.frames = self.save_frames(self.frames)
-
-    def save_frames(self, frames):
-        frames.save(self.save_dir/self.name)
-        return frames
+        self.frames = self._download_data(total)
 
     def __len__(self):
-        return len(self.frames)
+        return self.total
 
     def __iter__(self):
-        frames = self.frames
-        for frame in frames:
-            yield frame
-        self.reset()
+        return iter(map(self.pre_process, self.frames.values()))
+
+    def __getitem__(self, idx):
+        return self.pre_process(self.frames.values()[idx])
 
     # def _download_uncharacterized(self):
     #     logger.info("Downloading list of uncharacterized molecules...")
@@ -130,26 +133,28 @@ class QM9(IterableDataset):
     #     return atref
 
     def _download_data(self, total):
-        logger.info("Downloading GDB-9 data...")
+        logger.info("start to download data...")
         qm9_url = "https://ndownloader.figshare.com/files/3195389"
         qm9_bytes = requests.get(qm9_url, allow_redirects=True).content
         qm9_fobj = io.BytesIO(qm9_bytes)
         qm9_fobj.seek(0)
         qm9_tar = tarfile.open(fileobj=qm9_fobj, mode="r:bz2")
         names = qm9_tar.getnames()
+        logger.info(f"find {len(names)} files")
 
         exclude_url = "https://figshare.com/ndownloader/files/3195404"
         exclude_bytes = requests.get(exclude_url, allow_redirects=True).content
         exclude_fobj = io.TextIOWrapper(io.BytesIO(exclude_bytes))
         exclude = [int(line.split()[0]) for line in exclude_fobj.readlines()[9:-1]]
         names = [name for name in names if int(name[-10:-4]) not in exclude]
+        logger.info(f"exclude files")
         QM9 = self.labels
         props = [QM9.zpve, QM9.U0, QM9.U, QM9.H, QM9.G, QM9.Cv]
+        random_seleted_names = random.choices(names, k=total)
 
-        frames = []
-        time_pt = time.perf_counter()
-        total -= 1
-        for i, name in enumerate(names):
+        logger.info('start to convert')
+        frames = {}
+        for name in random_seleted_names:
             f = io.TextIOWrapper(qm9_tar.extractfile(name))
             lines = f.readlines()
             Z = [mpot.Element[l.split()[0]].number for l in lines[2:-3]]
@@ -157,14 +162,11 @@ class QM9(IterableDataset):
             frame = mpot.Frame()
             frame[alias.Z] = torch.tensor(Z)
             frame[alias.R] = torch.tensor(R, dtype=torch.float)
-            frame[alias.n_atoms] = torch.tensor(len(Z))
+            frame[alias.n_atoms] = torch.tensor([len(Z)])
             prop_line = lines[1].split()
             for k, v in zip(props, prop_line[1:]):
-                frame[k] = torch.tensor(float(v))
-            frames.append(frame)
+                frame[k] = torch.tensor([float(v)])
+            frames[name] = frame
             end_time = time.perf_counter()
-            logger.debug(f"Frame {i} loaded in {end_time - time_pt:.2f}s")
-            time_pt = end_time
-            if i == total:
-                break
+        logger.info('end convert')
         return frames

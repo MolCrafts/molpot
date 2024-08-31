@@ -3,22 +3,21 @@ import torch.nn as nn
 from typing import Type
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from ..base import Engine
 
 
 class Fix(nn.Module):
 
-    def __init__(self, priority: int = 5):
+    def __init__(self):
         super().__init__()
-        assert priority >= 0
-        self.priority = priority
 
     def forward(self, engine: Engine, status: dict, inputs: dict):
         pass
 
     def __repr__(self):
-        return f"<Fix {self.name}: {self.priority}>"
+        return f"<Fix {self.name}>"
 
     @property
     def name(self):
@@ -26,10 +25,10 @@ class Fix(nn.Module):
 
     def state_dict(self) -> dict:
         return {
-            'input': {},
-            'state': {},
+            "input": {},
+            "state": {},
         }
-    
+
     def finalize(self, engine: Engine, status: dict, inputs: dict):
         pass
 
@@ -43,19 +42,16 @@ class FixManager:
 
     def register(self, fix: Fix, *stages: Engine.Stage):
         for stage in stages:
-            assert stage in self.fixes, ValueError(f"Stage {stage} not found in {self.fixes.keys()}")
+            assert stage in self.fixes, ValueError(
+                f"Stage {stage} not found in {self.fixes.keys()}"
+            )
             self.fixes[stage].append(fix)
-            self.fixes[stage].sort(key=lambda x: x.priority, reverse=True)
 
     def apply(
-        self,
-        which_stage: Engine.Stage,
-        engine: Engine,
-        status: dict,
-        inputs: dict
+        self, which_stage: Engine.Stage, engine: Engine, status: dict, inputs: dict
     ):
         # switch engine's status
-        status['stage'] = which_stage
+        status["stage"] = which_stage
         for fix in self.fixes[which_stage]:
             fix(engine, status, inputs)
 
@@ -71,9 +67,7 @@ class FixManager:
 
         return data
 
-    def finalize(self,        engine: Engine,
-        status: dict,
-        inputs: dict):
+    def finalize(self, engine: Engine, status: dict, inputs: dict):
         for stage in self.fixes.values():
             for fix in stage:
                 fix.finalize(engine, status, inputs)
