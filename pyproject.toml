@@ -15,11 +15,9 @@ classifiers = [
 
 dependencies = [
     "torch",
-    "torch_scatter",
     "tensordict",
     "typer",
     "rich",
-    "pint",
     "chemfiles",
     "tensorboard",
     "h5py"

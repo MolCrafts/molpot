@@ -3,7 +3,6 @@ import logging
 import random
 import tarfile
 import time
-from functools import reduce
 from pathlib import Path
 
 import requests

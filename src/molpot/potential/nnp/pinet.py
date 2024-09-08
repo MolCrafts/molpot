@@ -5,7 +5,7 @@ from molpot import NameSpace
 from .block import build_mlp
 from typing import Callable
 from molpot import alias
-from torch_scatter import scatter_add
+from molpot_op.scatter import scatter_add
 
 
 class PPLayer(nn.Module):
