@@ -37,7 +37,6 @@ class PotentialTrainer(Engine):
     ):
         self.name = name
         self.device = torch.device(device)
-        print(self.device)
         self.model = model.to(self.device)
         self.loss_fn = loss_fn
         self.optimizer = optimizer

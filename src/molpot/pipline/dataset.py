@@ -2,17 +2,22 @@ import io
 import logging
 import random
 import tarfile
+import tempfile
 import time
 from pathlib import Path
+from typing import Literal
 
+import numpy as np
 import requests
 import torch
 from torch.nn import Module
 
 import molpot as mpot
 from molpot import NameSpace, alias
+import shutil
 
 logger = logging.getLogger("molpot")
+
 
 class Dataset(torch.utils.data.Dataset):
     """
@@ -29,9 +34,9 @@ class Dataset(torch.utils.data.Dataset):
     def __init__(
         self,
         name: str,
-        save_dir: str | Path,
+        save_dir: Path | None,
         device: str = "cpu",
-        preprocess: list[Module] = []
+        preprocess: list[Module] = [],
     ):
         super().__init__()
         self.name = name
@@ -58,12 +63,12 @@ class Dataset(torch.utils.data.Dataset):
 class QM9(Dataset):
     def __init__(
         self,
-        save_dir: str | Path,
+        save_dir: Path | None = None,
         device: str = "cpu",
         total: int = 133885,
         atom_ref: bool = True,
         remove_uncharacterized: bool = True,
-        preprocess: list[Module] = []
+        preprocess: list[Module] = [],
     ):
         super().__init__("qm9", save_dir, device, preprocess=preprocess)
 
@@ -89,7 +94,7 @@ class QM9(Dataset):
 
         self.total = total
 
-        self.frames = self._download_data(total)
+        # self.frames = self._download_data(total)
 
     def __len__(self):
         return self.total
@@ -130,7 +135,7 @@ class QM9(Dataset):
     #     atref = {k: v.tolist() for k, v in atref.items()}
     #     return atref
 
-    def _download_data(self, total):
+    def prepare_data(self, total):
         logger.info("start to download data...")
         qm9_url = "https://ndownloader.figshare.com/files/3195389"
         qm9_bytes = requests.get(qm9_url, allow_redirects=True).content
@@ -150,21 +155,153 @@ class QM9(Dataset):
         props = [QM9.zpve, QM9.U0, QM9.U, QM9.H, QM9.G, QM9.Cv]
         random_seleted_names = random.choices(names, k=total)
 
-        logger.info('start to convert')
-        frames = {}
+        logger.info("start to convert")
+        start_time = time.perf_counter()
+        frames = []
         for name in random_seleted_names:
             f = io.TextIOWrapper(qm9_tar.extractfile(name))
             lines = f.readlines()
             Z = [mpot.Element[l.split()[0]].number for l in lines[2:-3]]
-            R = [[float(i.replace("*^", "E")) for i in l.split()[1:4]] for l in lines[2:-3]]
+            R = [
+                [float(i.replace("*^", "E")) for i in l.split()[1:4]]
+                for l in lines[2:-3]
+            ]
             frame = mpot.Frame()
+            frame["global"]["name"] = name
             frame[alias.Z] = torch.tensor(Z)
             frame[alias.R] = torch.tensor(R, dtype=torch.float)
             frame[alias.n_atoms] = torch.tensor([len(Z)])
             prop_line = lines[1].split()
             for k, v in zip(props, prop_line[1:]):
                 frame[k] = torch.tensor([float(v)])
-            frames[name] = frame
-            end_time = time.perf_counter()
-        logger.info('end convert')
+            frames.append(frame)
+        logger.info(f"end convert, cost {time.perf_counter() - start_time:.2f}s")
+        return frames
+
+
+class rMD17(Dataset):
+
+    def __init__(
+        self,
+        molecule: Literal[
+            "aspirin",
+            "azobenzene",
+            "benzene",
+            "ethanol",
+            "malonaldehyde",
+            "naphthalene",
+            "paracetamol",
+            "salicylic",
+            "toluene",
+            "uracil",
+        ],
+        save_dir: str | Path,
+        device: str = "cpu",
+        total: int = 1000,
+        preprocess: list[Module] = [],
+    ):
+        super().__init__("rmd17", save_dir, device, preprocess=preprocess)
+
+        self.labels.set("energy", float, "kcal/mol", "potential_energy")
+        self.labels.set("forces", torch.Tensor, "kcal/mol/A", "forces")
+        self.molecule = molecule
+
+        self.atomrefs = {
+            "energy": [
+                0.0,
+                -313.5150902000774,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                -23622.587180094913,
+                -34219.46811826416,
+                -47069.30768969713,
+            ]
+        }
+
+        self.total = total
+
+        self.datasets_dict = dict(
+            aspirin="rmd17_aspirin.npz",
+            azobenzene="rmd17_azobenzene.npz",
+            benzene="rmd17_benzene.npz",
+            ethanol="rmd17_ethanol.npz",
+            malonaldehyde="rmd17_malonaldehyde.npz",
+            naphthalene="rmd17_naphthalene.npz",
+            paracetamol="rmd17_paracetamol.npz",
+            salicylic_acid="rmd17_salicylic.npz",
+            toluene="rmd17_toluene.npz",
+            uracil="rmd17_uracil.npz",
+        )
+
+        molecules = list(self.datasets_dict.keys())
+        if molecule not in molecules:
+            raise ValueError(
+                f"Invalid molecule. Choose from {molecules}. Got {molecule}"
+            )
+        
+        self.frames = self.prepare_data()
+
+    def __len__(self):
+        return self.total
+    
+    def __getitem__(self, idx):
+        return self.pre_process(self.frames[idx])
+    
+    def __iter__(self):
+        return iter(map(self.pre_process, self.frames))
+
+    def prepare_data(self):
+
+        if self.save_dir is None or not self.save_dir.exists():
+            tmpdir = tempfile.mkdtemp("md17")
+            frames = self._download_data(Path(tmpdir))
+            shutil.rmtree(tmpdir)
+        else:
+            frames = self._download_data(self.save_dir)
+
+        return frames
+
+    def _download_data(self, save_dir: Path):
+        logger.info("Downloading {} data".format(self.molecule))
+        raw_path = save_dir / "rmd17"
+        tar_path = save_dir / "rmd17.tar.gz"
+        url = "https://figshare.com/ndownloader/files/23950376"
+        with requests.get(url, stream=True) as response:
+            response.raise_for_status()  # 检查请求是否成功
+            with open(tar_path, "wb") as file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    file.write(chunk)
+        logger.info("Done.")
+
+        logger.info("Extracting data...")
+        tar = tarfile.open(tar_path)
+        tar.extract(
+            path=raw_path, member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}"
+        )
+
+        logger.info("Parsing molecule {:s}".format(self.molecule))
+
+        data = np.load(
+            raw_path / "rmd17" / "npz_data" / self.datasets_dict[self.molecule]
+        )
+
+        numbers = data["nuclear_charges"]
+        frames = []
+        for positions, energies, forces in zip(
+            data["coords"], data["energies"], data["forces"]
+        ):
+            frame = mpot.Frame()
+            frame[alias.Z] = torch.tensor(numbers, dtype=torch.int)
+            frame[alias.R] = torch.tensor(positions, dtype=torch.float)
+            frame[alias.props_ns.name]["energy"] = torch.tensor([energies])
+            frame[alias.props_ns.name]["forces"] = torch.tensor(forces)
+            frame[alias.n_atoms] = torch.tensor([len(numbers)], dtype=torch.int)
+            frame[alias.cell] = torch.zeros(3)
+            frame[alias.pbc] = torch.zeros(3, dtype=torch.bool)
+            frames.append(frame)
+
+        tar.close()
+        logger.info("Done.")
         return frames

@@ -2,7 +2,7 @@ from typing import Callable
 
 import torch
 from torch import nn
-from torch_scatter import scatter_add
+from molpot_op.scatter import scatter_add
 
 import molpot as mpot
 import molpot.potential.nnp as nnp

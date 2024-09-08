@@ -8,7 +8,7 @@ from torch.autograd import grad
 from .block import build_mlp
 
 from molpot import alias
-from torch_scatter import scatter
+from molpot_op.scatter import scatter_add
 
 
 class Atomwise(nn.Module):
@@ -78,7 +78,7 @@ class Atomwise(nn.Module):
 
         # aggregate
         if self.aggregation_mode is not None:
-            y = scatter(y, inputs[alias.atom_batch_mask], dim=0, reduce=self.aggregation_mode)
+            y = scatter_add(y, inputs[alias.atom_batch_mask], dim=0, reduce=self.aggregation_mode)
 
         inputs[self.to_key] = torch.squeeze(y)
         return inputs

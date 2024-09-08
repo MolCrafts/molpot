@@ -280,7 +280,7 @@ class PiNet(nn.Module):
 
         # get tensors from input dictionary
         Z = inputs[alias.Z]
-        n_atoms = inputs[alias.n_atoms]
+        n_atoms = len(Z)
         r_ij = inputs[alias.pair_diff]
         d_ij = inputs[alias.pair_dist]
         r_ij /= torch.norm(r_ij, dim=-1, keepdim=True)

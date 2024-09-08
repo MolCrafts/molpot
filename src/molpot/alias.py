@@ -118,6 +118,6 @@ pair_dist = pairs_ns.set("dist", torch.Tensor, "angstrom", "pair distance")
 pair_offset = pairs_ns.set("offset", torch.Tensor, "unit", "offsets")
 
 # prop section
-props = NameSpace("props")
-n_atoms = props.set("n_atoms", int, "unit", "number of atoms")
-n_pairs = props.set("n_pairs", int, "unit", "number of pairs")
+props_ns = NameSpace("props")
+n_atoms = props_ns.set("n_atoms", int, "unit", "number of atoms")
+n_pairs = props_ns.set("n_pairs", int, "unit", "number of pairs")
