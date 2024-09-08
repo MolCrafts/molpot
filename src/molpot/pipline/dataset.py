@@ -8,14 +8,13 @@ from pathlib import Path
 import requests
 import torch
 from torch.nn import Module
-from torch.utils.data import Dataset
 
 import molpot as mpot
 from molpot import NameSpace, alias
 
 logger = logging.getLogger("molpot")
 
-class Dataset:
+class Dataset(torch.utils.data.Dataset):
     """
     Base class for all datasets. It includes 5 processes:
         * Download / tokenize / process.
@@ -56,7 +55,7 @@ class Dataset:
         self.state = {}
 
 
-class QM9(Dataset, torch.utils.data.Dataset):
+class QM9(Dataset):
     def __init__(
         self,
         save_dir: str | Path,
