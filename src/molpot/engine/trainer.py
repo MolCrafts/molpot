@@ -10,7 +10,7 @@ from molpot.log import setup_logger
 
 from .base import Engine
 
-from tensordict import TensorDict
+from tensordict.tensordict import TensorDict
 
 
 class PotentialTrainer(Engine):
@@ -63,13 +63,13 @@ class PotentialTrainer(Engine):
     def train(
         self,
         dataloader,
-        steps: int,
+        steps: int|float,
         epochs: int = 0,
         upto: bool = False,
         resume: str | Path | bool = False
     ) -> dict:
 
-        step_to_run = steps - 1
+        step_to_run = int(steps - 1)
         self._fix.register(
             mpot.engine.fix.StepCounter(step_to_run), self.Stage.before_step
         )
@@ -90,6 +90,7 @@ class PotentialTrainer(Engine):
 
             self.before_epoch(status)
             self._fix.apply(self.Stage.before_epoch, self, status, None)
+            print(status['current_step'])
             if status['flag'] > self.Status.STOPPING:
                 break
 

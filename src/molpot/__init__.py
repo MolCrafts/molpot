@@ -1,6 +1,9 @@
 from .config import Config
 
 Config()
+ftype = Config.ftype
+itype = Config.itype
+ctype = Config.ctype
 
 from . import alias
 from .alias import Alias, NameSpace

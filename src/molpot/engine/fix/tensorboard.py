@@ -55,7 +55,7 @@ class Profiler(Fix):
     ):
         super().__init__()
         self.profiler = torch.profiler.profile(
-            schedule=torch.profiler.schedule(wait=wait, warmup=warmup, active=active, repeat=repeat),
+            schedule=torch.profiler.schedule(wait=wait, warmup=warmup, active=active, repeat=repeat, skip_first=skip_first),
             on_trace_ready=torch.profiler.tensorboard_trace_handler(log_dir),
             record_shapes=record_shapes,
             with_stack=with_stack
@@ -68,4 +68,5 @@ class Profiler(Fix):
         self.profiler.step()
 
     def after_epoch(self, trainer, status, inputs):
-        self.profiler.end()
+        trainer._fix.remove(self)
+        self.profiler.stop()

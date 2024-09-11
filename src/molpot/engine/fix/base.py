@@ -47,6 +47,11 @@ class FixManager:
             )
             self.fixes[stage].append(fix)
 
+    def remove(self, fix: Fix):
+        for stage in self.fixes.values():
+            if fix in stage:
+                stage.remove(fix)
+
     def apply(
         self, which_stage: Engine.Stage, engine: Engine, status: dict, inputs: dict
     ):

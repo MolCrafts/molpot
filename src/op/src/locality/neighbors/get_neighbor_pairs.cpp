@@ -7,7 +7,6 @@ using torch::full;
 using torch::index_select;
 using torch::indexing::Slice;
 using torch::arange;
-using torch::frobenius_norm;
 using torch::kInt32;
 using torch::Scalar;
 using torch::hstack;
@@ -15,6 +14,7 @@ using torch::vstack;
 using torch::Tensor;
 using torch::outer;
 using torch::round;
+using torch::linalg;
 
 static tuple<Tensor, Tensor, Tensor, Tensor> forward(const Tensor& positions,
 						     const Scalar& cutoff,
@@ -67,7 +67,7 @@ static tuple<Tensor, Tensor, Tensor, Tensor> forward(const Tensor& positions,
         deltas -= outer(round(deltas.index({Slice(), 1})/box_vectors.index({1, 1})), box_vectors.index({1}));
         deltas -= outer(round(deltas.index({Slice(), 0})/box_vectors.index({0, 0})), box_vectors.index({0}));
     }
-    Tensor distances = frobenius_norm(deltas, 1);
+    Tensor distances = linalg.vector_norm(A, 2., dim, keepdim)(deltas, 1);
 
     if (max_num_pairs_ == -1) {
         const Tensor mask = distances > cutoff;

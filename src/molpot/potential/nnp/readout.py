@@ -77,8 +77,8 @@ class Atomwise(nn.Module):
             inputs[self.per_atom_output_key] = y
 
         # aggregate
-        if self.aggregation_mode is not None:
-            y = scatter_add(y, inputs[alias.atom_batch_mask], dim=0, reduce=self.aggregation_mode)
+        if self.aggregation_mode is not None:  # TODO: only sum supported
+            y = scatter_add(y, inputs[alias.atom_batch_mask], dim=0)
 
         inputs[self.to_key] = torch.squeeze(y)
         return inputs

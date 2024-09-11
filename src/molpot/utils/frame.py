@@ -1,7 +1,6 @@
 import torch
 
-from tensordict import LazyStackedTensorDict, TensorDict
-from tensordict._td import T, CompatibleType, DeviceType
+from tensordict.tensordict import TensorDict, LazyStackedTensorDict
 
 from typing import Sequence
 from molpot.alias import Alias
@@ -12,9 +11,9 @@ class Frames(LazyStackedTensorDict):
 class Frame(TensorDict):
 
     def __init__(self, 
-        source: T | dict[str, CompatibleType] = None,
+        source: dict[str] = None,
         batch_size: Sequence[int] | torch.Size | int | None = None,
-        device: DeviceType | None = None,
+        device: None = None,
         names: Sequence[str] | None = None,
         non_blocking: bool = None,
         lock: bool = False,

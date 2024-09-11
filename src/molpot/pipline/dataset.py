@@ -1,3 +1,4 @@
+from functools import lru_cache
 import io
 import logging
 import random
@@ -41,6 +42,7 @@ class Dataset(torch.utils.data.Dataset):
         super().__init__()
         self.name = name
         self.save_dir = Path(save_dir)
+        self.save_dir.mkdir(parents=True, exist_ok=True)
         self.device = device
         self.labels = NameSpace(name)
         self._preprocess = preprocess
@@ -169,11 +171,11 @@ class QM9(Dataset):
             frame = mpot.Frame()
             frame["global"]["name"] = name
             frame[alias.Z] = torch.tensor(Z)
-            frame[alias.R] = torch.tensor(R, dtype=torch.float)
-            frame[alias.n_atoms] = torch.tensor([len(Z)])
+            frame[alias.R] = torch.tensor(R, dtype=mpot.ftype)
+            frame[alias.n_atoms] = torch.tensor([len(Z)], dtype=mpot.itype)
             prop_line = lines[1].split()
             for k, v in zip(props, prop_line[1:]):
-                frame[k] = torch.tensor([float(v)])
+                frame[k] = torch.tensor([float(v)], dtype=mpot.ftype)
             frames.append(frame)
         logger.info(f"end convert, cost {time.perf_counter() - start_time:.2f}s")
         return frames
@@ -240,39 +242,54 @@ class rMD17(Dataset):
             raise ValueError(
                 f"Invalid molecule. Choose from {molecules}. Got {molecule}"
             )
-        
-        self.frames = self.prepare_data()
+
+        # self._frames = self.prepare_data()
 
     def __len__(self):
         return self.total
-    
+
     def __getitem__(self, idx):
         return self.pre_process(self.frames[idx])
-    
+
     def __iter__(self):
         return iter(map(self.pre_process, self.frames))
+
+    @property
+    def frames(self):
+        return self._frames
 
     def prepare_data(self):
 
         if self.save_dir is None or not self.save_dir.exists():
-            tmpdir = tempfile.mkdtemp("md17")
-            frames = self._download_data(Path(tmpdir))
-            shutil.rmtree(tmpdir)
+            frames = self._fetch_data()
         else:
             frames = self._download_data(self.save_dir)
-
+        self._frames = frames
         return frames
+
+    def _fetch_data(self):
+        logger.info("Fetching {} data".format(self.molecule))
+        rmd17_url = "https://figshare.com/ndownloader/files/23950376"
+        rmd17_bytes = requests.get(rmd17_url, allow_redirects=True).content
+        rmd17_fobj = io.BytesIO(rmd17_bytes)
+        rmd17_fobj.seek(0)
+        rmd17_tar = tarfile.open(fileobj=rmd17_fobj, mode="r:bz2")
+        data = np.load(
+            rmd17_tar.extractfile(f"rmd17/npz_data/{self.datasets_dict[self.molecule]}")
+        )
+        return self.parse_data(data)
 
     def _download_data(self, save_dir: Path):
         logger.info("Downloading {} data".format(self.molecule))
         raw_path = save_dir / "rmd17"
         tar_path = save_dir / "rmd17.tar.gz"
         url = "https://figshare.com/ndownloader/files/23950376"
-        with requests.get(url, stream=True) as response:
-            response.raise_for_status()  # 检查请求是否成功
-            with open(tar_path, "wb") as file:
-                for chunk in response.iter_content(chunk_size=8192):
-                    file.write(chunk)
+        if not raw_path.exists():
+            with requests.get(url, stream=True) as response:
+                response.raise_for_status()
+                with open(tar_path, "wb") as file:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        file.write(chunk)
         logger.info("Done.")
 
         logger.info("Extracting data...")
@@ -286,22 +303,26 @@ class rMD17(Dataset):
         data = np.load(
             raw_path / "rmd17" / "npz_data" / self.datasets_dict[self.molecule]
         )
+        return self.parse_data(data)
 
+    def parse_data(self, data):
         numbers = data["nuclear_charges"]
         frames = []
         for positions, energies, forces in zip(
             data["coords"], data["energies"], data["forces"]
         ):
             frame = mpot.Frame()
-            frame[alias.Z] = torch.tensor(numbers, dtype=torch.int)
-            frame[alias.R] = torch.tensor(positions, dtype=torch.float)
-            frame[alias.props_ns.name]["energy"] = torch.tensor([energies])
-            frame[alias.props_ns.name]["forces"] = torch.tensor(forces)
-            frame[alias.n_atoms] = torch.tensor([len(numbers)], dtype=torch.int)
+            frame[alias.Z] = torch.tensor(numbers, dtype=mpot.itype)
+            frame[alias.R] = torch.tensor(positions, dtype=mpot.ftype)
+            frame[alias.props_ns.name]["energy"] = torch.tensor(
+                [energies], dtype=mpot.ftype
+            )
+            frame[alias.props_ns.name]["forces"] = torch.tensor(
+                forces, dtype=mpot.ftype
+            )
+            frame[alias.n_atoms] = torch.tensor([len(numbers)], dtype=mpot.itype)
             frame[alias.cell] = torch.zeros(3)
             frame[alias.pbc] = torch.zeros(3, dtype=torch.bool)
             frames.append(frame)
 
-        tar.close()
-        logger.info("Done.")
         return frames

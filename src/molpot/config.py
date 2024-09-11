@@ -18,9 +18,9 @@ class Singleton(type):
 class Config(metaclass=Singleton):
 
     device: torch.device = torch.device("cpu")
+    itype: torch.dtype = torch.int32
     ftype: torch.dtype = torch.float32
-    stype: torch.dtype = torch.int32
-    itype: torch.dtype = torch.complex64
+    ctype: torch.dtype = torch.complex64
 
     log_level: int = logging.INFO
 

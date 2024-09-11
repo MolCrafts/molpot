@@ -6,7 +6,7 @@ import torch
 
 def _collate_frame(batch: Sequence[Frame]):
 
-    coll_batch = Frame.maybe_dense_stack(batch)
+    coll_batch = Frame.maybe_dense_stack(batch).densify()
     coll_frame = Frame()
 
     # calculate atomic batch mask:
@@ -32,15 +32,18 @@ def _collate_frame(batch: Sequence[Frame]):
     )  # prepend 0 to atomistic_offset
     for key in [alias.pair_i, alias.pair_j, alias.bond_i, alias.bond_j]:
         if key in coll_batch:
-            coll_frame[key] = torch.cat(
+            coll_batch[key] = torch.nested.nested_tensor(
                 [d[key] + off for d, off in zip(batch, atomistic_offset)]
             )
 
-
+    # merge batch
     for category, td in coll_batch.items():
         for key, value in td.items():
             # merge batch, batch dim is the first dim
-            flatten_tensor = torch.flatten(value, start_dim=0, end_dim=1)
+            if value.is_nested:
+                flatten_tensor = torch.cat(value.unbind(), dim=0)
+            else:
+                flatten_tensor = torch.flatten(value, start_dim=0, end_dim=1)
             coll_frame[category, key] = flatten_tensor
 
     return coll_frame
