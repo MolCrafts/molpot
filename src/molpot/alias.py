@@ -1,7 +1,6 @@
-from typing import Union
 import torch
 
-AliasKey = tuple[str, str]
+AliasKey = tuple[str, str] | str
 
 
 class Alias:
@@ -9,32 +8,30 @@ class Alias:
     def __init__(
         self,
         name: str,
-        key: AliasKey,
-        type: type,
-        unit: str,
-        namespace: str,
-        comment: str = "",
+        comment: str,
+        dtype: type,
+        unit: str|None=None,
         shape: tuple = (),
+        namespace: str = "",
+        category: str = "",
     ) -> None:
         self.name = name
-        self.key = key
-        self.type = type
         self.unit = unit
-        self.namespace = namespace
-        self.shape = shape
         self.comment = comment
 
-    def __hash__(self) -> int:
-        return hash(self.name)
+        self.dtype = dtype
+        self.shape = shape
 
-    def __repr__(self) -> str:
-        return f"<Alias: {self.name}>"
+        self.namespace = namespace
+        self.category = category
 
-    def __eq__(self, o: Union[str, "Alias", tuple]) -> bool:
-        if isinstance(o, Alias):
-            return self.name == o.name
-        else:
-            return self.name == o
+    @property
+    def key(self) -> AliasKey:
+        return tuple([part for part in (self.namespace, self.category, self.name) if part])
+    
+    @property
+    def is_array(self) -> bool:
+        return len(self.shape) > 0
 
 
 class NameSpace(dict):
@@ -56,6 +53,7 @@ class NameSpace(dict):
         return f"<NameSpace: {self.name}>"
 
     def add(self, alias: Alias) -> AliasKey:
+        alias.namespace = self.name
         self[alias.name] = alias
         return alias.key
     
@@ -69,55 +67,54 @@ class NameSpace(dict):
     def set(
         self,
         name: str,
-        type_: type,
-        unit: str,
         comment: str,
+        dtype: type,
+        unit: str|None=None,
         shape: tuple = (),
+        category: str = "",
     ) -> AliasKey:
-        namespace = self.name
-        key = (namespace, name)
         return self.add(
             Alias(
                 name=name,
-                key=key,
-                type=type_,
-                unit=unit,
-                namespace=namespace,
                 comment=comment,
+                unit=unit,
+                dtype=dtype,
                 shape=shape,
+                namespace=self.name,
+                category=category,
             )
         )
 
 
 # atoms section
 atoms_ns = NameSpace("atoms")
-atomid = atoms_ns.set("idx", int, "unit", "atom index")
-molid = atoms_ns.set("molid", int, "unit", "molecule index")
-xyz = R = atoms_ns.set("xyz", torch.Tensor, "unit", "atom coordinates")
-Z = atoms_ns.set("Z", int, "unit", "atomic number")
-atom_batch_mask = atoms_ns.set("atomic_batch_mask", torch.Tensor, "unit", "atoms batch mask")
+atomid = atoms_ns.set("idx", "atom index", int)
+molid = atoms_ns.set("molid", "molecule index", int)
+xyz = R = atoms_ns.set("xyz", "atom coordinates", float, shape=(None, 3))
+Z = atoms_ns.set("Z", "atomic number", int)
+atom_batch_mask = atoms_ns.set("atomic_batch_mask", "atoms batch mask", int)
 
-# cell section
-cell_ns = NameSpace("cell")
-pbc = cell_ns.set("pbc", torch.Tensor, "unit", "periodic boundary condition")
-cell = cell_ns.set("matrix", torch.Tensor, "unit", "cell matrix")
+# # cell section
+# cell_ns = NameSpace("cell")
+# pbc = cell_ns.set("pbc", torch.Tensor, None, "periodic boundary condition")
+# cell = cell_ns.set("matrix", torch.Tensor, None, "cell matrix")
 
-# bonds section
+# # bonds section
 bonds_ns = NameSpace("bonds")
-bond_i = bonds_ns.set("i", int, "unit", "bond atom index i")
-bond_j = bonds_ns.set("j", int, "unit", "bond atom index j")
-bond_diff = bonds_ns.set("diff", torch.Tensor, "angstrom", "bond displacement")
-bond_dist = bonds_ns.set("dist", torch.Tensor, "angstrom", "bond distance")
+bond_i = bonds_ns.set("i", "bond atom index i", int)
+bond_j = bonds_ns.set("j", "bond atom index j", int)
+bond_diff = bonds_ns.set("diff", "bond displacement", float, unit="angstrom")
+bond_dist = bonds_ns.set("dist", "bond distance", float, unit="angstrom")
 
-# pairs section
+# # pairs section
 pairs_ns = NameSpace("pairs")
-pair_i = pairs_ns.set("i", int, "unit", "pair atom index i")
-pair_j = pairs_ns.set("j", int, "unit", "pair atom index j")
-pair_diff = pairs_ns.set("diff", torch.Tensor, "angstrom", "pair displacement")
-pair_dist = pairs_ns.set("dist", torch.Tensor, "angstrom", "pair distance")
-pair_offset = pairs_ns.set("offset", torch.Tensor, "unit", "offsets")
+pair_i = pairs_ns.set("i", "pair atom index i", int)
+pair_j = pairs_ns.set("j", "pair atom index j", int)
+pair_diff = pairs_ns.set("diff", "pair displacement", float, shape=(None, 3))
+pair_dist = pairs_ns.set("dist", "pair distance", float, shape=(None, 3))
+# pair_offset = pairs_ns.set("offset", "offsets", int)
 
 # prop section
 props_ns = NameSpace("props")
-n_atoms = props_ns.set("n_atoms", int, "unit", "number of atoms")
-n_pairs = props_ns.set("n_pairs", int, "unit", "number of pairs")
+n_atoms = props_ns.set("n_atoms", "number of atoms", int)
+n_pairs = props_ns.set("n_pairs", "number of pairs", int)

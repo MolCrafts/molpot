@@ -35,14 +35,17 @@ class Dataset(torch.utils.data.Dataset):
     def __init__(
         self,
         name: str,
-        save_dir: Path | None,
+        save_dir: Path | None = None,
         device: str = "cpu",
         preprocess: list[Module] = [],
     ):
         super().__init__()
         self.name = name
-        self.save_dir = Path(save_dir)
-        self.save_dir.mkdir(parents=True, exist_ok=True)
+        if save_dir:
+            self.save_dir = Path(save_dir)
+            self.save_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            self.save_dir = None
         self.device = device
         self.labels = NameSpace(name)
         self._preprocess = preprocess

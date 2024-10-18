@@ -20,4 +20,4 @@ from .potential import classic, nnp
 from .statistic import Tracker
 
 from . import engine
-from .engine import PotentialTrainer, MDEngine
+from .engine import PotentialTrainer
