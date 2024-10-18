@@ -1,3 +1,4 @@
+from typing import Union
 import torch
 
 AliasKey = tuple[str, str] | str
@@ -32,6 +33,20 @@ class Alias:
     @property
     def is_array(self) -> bool:
         return len(self.shape) > 0
+    
+    def __repr__(self) -> str:
+        return f"<Alias: {self.name}>"
+    
+    def __str__(self) -> str:
+        return self.name
+    
+    def __hash__(self) -> int:
+        return hash(self.key)
+    
+    def __eq__(self, other: Union["Alias", tuple]) -> bool:
+        if isinstance(other, tuple):
+            return self.key == other
+        return self.key == other.key
 
 
 class NameSpace(dict):
@@ -85,6 +100,7 @@ class NameSpace(dict):
             )
         )
 
+default_ns = NameSpace("default")
 
 # atoms section
 atoms_ns = NameSpace("atoms")
@@ -92,12 +108,11 @@ atomid = atoms_ns.set("idx", "atom index", int)
 molid = atoms_ns.set("molid", "molecule index", int)
 xyz = R = atoms_ns.set("xyz", "atom coordinates", float, shape=(None, 3))
 Z = atoms_ns.set("Z", "atomic number", int)
-atom_batch_mask = atoms_ns.set("atomic_batch_mask", "atoms batch mask", int)
+atom_batch_mask = atoms_ns.set("atom_batch_mask", "atoms batch mask", int)
 
-# # cell section
-# cell_ns = NameSpace("cell")
-# pbc = cell_ns.set("pbc", torch.Tensor, None, "periodic boundary condition")
-# cell = cell_ns.set("matrix", torch.Tensor, None, "cell matrix")
+# cell section
+pbc = default_ns.set("pbc", "periodic boundary condition", bool, shape=(3,))[1:]
+cell = default_ns.set("cell", "cell matrix", float, shape=(3, 3))[1:]
 
 # # bonds section
 bonds_ns = NameSpace("bonds")

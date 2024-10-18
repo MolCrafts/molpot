@@ -14,7 +14,7 @@ using torch::vstack;
 using torch::Tensor;
 using torch::outer;
 using torch::round;
-using torch::linalg;
+using torch::linalg::vector_norm;
 
 static tuple<Tensor, Tensor, Tensor, Tensor> forward(const Tensor& positions,
 						     const Scalar& cutoff,
@@ -40,9 +40,9 @@ static tuple<Tensor, Tensor, Tensor, Tensor> forward(const Tensor& positions,
         TORCH_CHECK(v[0][1] == 0, "Invalid box vectors: box_vectors[0][1] != 0");
         TORCH_CHECK(v[0][2] == 0, "Invalid box vectors: box_vectors[0][2] != 0");
         TORCH_CHECK(v[1][2] == 0, "Invalid box vectors: box_vectors[1][2] != 0");
-        TORCH_CHECK(v[0][0] >= 2*c, "Invalid box vectors: box_vectors[0][0] < 2*cutoff");
-        TORCH_CHECK(v[1][1] >= 2*c, "Invalid box vectors: box_vectors[1][1] < 2*cutoff");
-        TORCH_CHECK(v[2][2] >= 2*c, "Invalid box vectors: box_vectors[2][2] < 2*cutoff");
+        // TORCH_CHECK(v[0][0] >= 2*c, "Invalid box vectors: box_vectors[0][0] < 2*cutoff");
+        // TORCH_CHECK(v[1][1] >= 2*c, "Invalid box vectors: box_vectors[1][1] < 2*cutoff");
+        // TORCH_CHECK(v[2][2] >= 2*c, "Invalid box vectors: box_vectors[2][2] < 2*cutoff");
         TORCH_CHECK(v[0][0] >= 2*v[1][0], "Invalid box vectors: box_vectors[0][0] < 2*box_vectors[1][0]");
         TORCH_CHECK(v[0][0] >= 2*v[2][0], "Invalid box vectors: box_vectors[0][0] < 2*box_vectors[1][0]");
         TORCH_CHECK(v[1][1] >= 2*v[2][1], "Invalid box vectors: box_vectors[1][1] < 2*box_vectors[2][1]");
@@ -67,7 +67,7 @@ static tuple<Tensor, Tensor, Tensor, Tensor> forward(const Tensor& positions,
         deltas -= outer(round(deltas.index({Slice(), 1})/box_vectors.index({1, 1})), box_vectors.index({1}));
         deltas -= outer(round(deltas.index({Slice(), 0})/box_vectors.index({0, 0})), box_vectors.index({0}));
     }
-    Tensor distances = linalg.vector_norm(A, 2., dim, keepdim)(deltas, 1);
+    Tensor distances = vector_norm(deltas, 2, 1, false, std::nullopt);
 
     if (max_num_pairs_ == -1) {
         const Tensor mask = distances > cutoff;

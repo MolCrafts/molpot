@@ -1,19 +1,7 @@
-# # author: Roy Kid
-# # contact: lijichen365@126.com
-# # date: 2023-12-30
-# # version: 0.0.1
-
-# from collections import defaultdict, deque
-# from typing import Sequence
-
-# import pint
-# import torch
-# from torchdata.datapipes import functional_datapipe
-# from torchdata.datapipes.iter import IterDataPipe
-
-# from molpot import Config, Alias
-# from molpot.statistic.tracker import Tracker
-
+# author: Roy Kid
+# contact: lijichen365@126.com
+# date: 2023-12-30
+# version: 0.0.1
 # __all__ = ["Normalizer"]
 
 

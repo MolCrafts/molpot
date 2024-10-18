@@ -50,16 +50,21 @@ class Dataset(torch.utils.data.Dataset):
         self.labels = NameSpace(name)
         self._preprocess = preprocess
 
-    def pre_process(self, inputs):
-        for proc in self._preprocess:
-            inputs = proc(inputs)
-        return inputs
+        self.transforms = []
+
+    def add_transform(self, transform):
+        self.transforms.append(transform)
+
+    def apply_transforms(self, frame):
+        for transform in self.transforms:
+            frame = transform(frame)
+        return frame
 
     def __len__(self):
         pass
 
     def __iter__(self):
-        pass
+        pass 
 
     def reset(self):
         self.state = {}
@@ -104,11 +109,6 @@ class QM9(Dataset):
     def __len__(self):
         return self.total
 
-    def __iter__(self):
-        return iter(map(self.pre_process, self.frames.values()))
-
-    def __getitem__(self, idx):
-        return self.pre_process(self.frames.values()[idx])
 
     # def _download_uncharacterized(self):
     #     logger.info("Downloading list of uncharacterized molecules...")
