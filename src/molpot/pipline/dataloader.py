@@ -3,6 +3,12 @@ from typing import Sequence
 from molpot import Frame, alias
 import torch
 from tensordict import TensorDict
+from typing import TypeVar, Optional, Union, List, Tuple, Dict, Callable, Iterable
+from .dataset import Dataset
+from torch.utils.data import Sampler, IterableDataset
+
+_T_co = TypeVar("_T_co", covariant=True)
+
 
 def _collate_frame(batch: Sequence[Frame]):
 
@@ -18,7 +24,9 @@ def _collate_frame(batch: Sequence[Frame]):
         [torch.full((t,), fill_value=i) for i, t in enumerate(n_atoms)]
     ).reshape(batch_size, -1)
 
-    atomistic_offset = torch.cumsum(torch.concat([torch.tensor([0]), n_atoms.squeeze()]), dim=0)
+    atomistic_offset = torch.cumsum(
+        torch.concat([torch.tensor([0]), n_atoms.squeeze()]), dim=0
+    )
 
     for key in [alias.pair_i, alias.pair_j, alias.bond_i, alias.bond_j]:
         if key in coll_batch:
@@ -33,4 +41,6 @@ def _collate_frame(batch: Sequence[Frame]):
 class DataLoader(DataLoader):
 
     def __init__(self, *args, **kwargs):
-        super().__init__(collate_fn=_collate_frame, *args, **kwargs)
+        if 'collate_fn' not in kwargs:
+            kwargs['collate_fn'] = _collate_frame
+        super().__init__(*args, **kwargs)

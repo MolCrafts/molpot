@@ -239,17 +239,15 @@ class PiNet(nn.Module):
         self.labels = NameSpace("pinet")
         self.labels.set(
             "p1",
-            torch.Tensor,
-            "unit",
             "scalar property",
-            ("n_atoms", "n_components", "n_channels"),
+            float,
+            shape=(None, 1, ii_nodes[-1]),
         )
         self.labels.set(
             "p3",
-            torch.Tensor,
-            "unit",
             "vectorial property",
-            ("n_atoms", "n_components", "n_channels"),
+            float,
+            shape=(None, 3, ii_nodes[-1]),
         )
 
         self.depth = depth

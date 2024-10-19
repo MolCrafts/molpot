@@ -50,15 +50,13 @@ class Dataset(torch.utils.data.Dataset):
         self.labels = NameSpace(name)
         self._preprocess = preprocess
 
-        self.transforms = []
+        self.transforms = torch.nn.Sequential()
 
     def add_transform(self, transform):
         self.transforms.append(transform)
 
     def apply_transforms(self, frame):
-        for transform in self.transforms:
-            frame = transform(frame)
-        return frame
+        return self.transforms(frame)
 
     def __len__(self):
         pass

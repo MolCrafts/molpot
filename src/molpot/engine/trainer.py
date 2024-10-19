@@ -1,157 +1,118 @@
-from enum import IntEnum
-from pathlib import Path
-
+from .base import MolpotEngine
 import torch
-import torch.nn as nn
+from typing import Any, Callable, Union, Iterable, Sequence, Optional, Mapping, Tuple
+import collections
+from ignite.metrics import Metric
+from ignite.engine import (
+    create_supervised_trainer,
+    create_supervised_evaluator,
+    _prepare_batch,
+)
+from ignite.utils import convert_tensor
+from ignite.engine.events import (
+    CallableEventWithFilter,
+    EventEnum,
+    Events,
+    EventsList,
+    RemovableEventHandle,
+    State,
+)
 
-import molpot as mpot
-from molpot.engine.fix import FixManager
-from molpot.log import setup_logger
+def _prepare_batch(
+    batch: Sequence[torch.Tensor], device: Optional[Union[str, torch.device]] = None, non_blocking: bool = False
+) -> Tuple[Union[torch.Tensor, Sequence, Mapping, str, bytes], ...]:
+    """Prepare batch for training or evaluation: pass to a device with options."""
+    batch.to(device=device, non_blocking=non_blocking) if device is not None else batch
+    return (
+        batch,
+        batch
+    )
 
-from .base import Engine
 
-from tensordict.tensordict import TensorDict
-
-
-class PotentialTrainer(Engine):
-
-    class Stage(IntEnum):
-
-        before_train = 0
-        before_epoch = 1
-        before_step = 2
-        after_step = 3
-        after_epoch = 4
-        after_train = 5
+class PotentialTrainer(MolpotEngine):
 
     def __init__(
         self,
-        name: str,
-        model: nn.Module,
-        loss_fn: torch.nn.Module,
+        model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
-        lr_scheduler: torch.optim.lr_scheduler._LRScheduler,
-        root_dir: str | Path = Path.cwd(),
-        enable_amp: bool = False,
-        device: str = "cuda"
+        loss_fn: Union[Callable[[Any, Any], torch.Tensor], torch.nn.Module],
+        device: Union[str, torch.device] | None = None,
+        non_blocking: bool = False,
+        prepare_batch: Callable = _prepare_batch,
+        model_transform: Callable[[Any], Any] = lambda output: output,
+        output_transform: Callable[
+            [Any, Any, Any, torch.Tensor], Any
+        ] = lambda x, y, y_pred, loss: loss.item(),
+        deterministic: bool = False,
+        amp_mode: str | None = None,
+        scaler: Union[bool, "torch.cuda.amp.GradScaler"] = False,
+        gradient_accumulation_steps: int = 1,
+        model_fn: Callable[[torch.nn.Module, Any], Any] = lambda model, x: model(x),
     ):
-        self.name = name
-        self.device = torch.device(device)
-        self.model = model.to(self.device)
-        self.loss_fn = loss_fn
-        self.optimizer = optimizer
-        self.lr_scheduler = lr_scheduler
-        self.root_dir = Path(root_dir)
-        self.work_dir = self.root_dir / name
-        self.work_dir.mkdir(parents=True, exist_ok=True)
-        self.logger = setup_logger(name=self.name, output_dir=self.work_dir)
-        self.amp_enabled = enable_amp
-        self._fix = FixManager(self.Stage)
-        # TODO: amp
+        super().__init__()
 
-    def init_status(self) -> TensorDict:
-        return TensorDict(
-            current_step=0,
-            current_epoch=0,
-            flag=self.Status.INIT,
-            metrices={}
+        self.model = model
+        self.device = device
+        self.non_blocking = non_blocking
+        self.prepare_batch = prepare_batch
+        self.model_transform = model_transform
+        self.output_transform = output_transform
+        self.deterministic = deterministic
+        self.amp_mode = amp_mode
+        self.model_fn = model_fn
+
+        self.add_engine(
+            "trainer",
+            create_supervised_trainer(
+                model,
+                optimizer,
+                loss_fn,
+                device=device,
+                non_blocking=non_blocking,
+                prepare_batch=prepare_batch,
+                model_transform=model_transform,
+                output_transform=output_transform,
+                deterministic=deterministic,
+                amp_mode=amp_mode,
+                scaler=scaler,
+                gradient_accumulation_steps=gradient_accumulation_steps,
+                model_fn=model_fn,
+            ),
         )
-    
-    def compile(self) -> None:
-        self.model = torch.compile(self.model)
 
-    def train(
+    def add_evaluator(
         self,
-        dataloader,
-        steps: int|float,
-        epochs: int = 0,
-        upto: bool = False,
-        resume: str | Path | bool = False
-    ) -> dict:
-
-        step_to_run = int(steps - 1)
-        self._fix.register(
-            mpot.engine.fix.StepCounter(step_to_run), self.Stage.before_step
+        metrics: dict[str, Metric] = None,
+    ) -> None:
+        self.add_engine(
+            "evaluator",
+            create_supervised_evaluator(
+                self.model,
+                metrics=metrics,
+                device=self.device,
+                non_blocking=self.non_blocking,
+                prepare_batch=self.prepare_batch,
+                model_transform=self.model_transform,
+                output_transform=self.output_transform,
+                amp_mode=self.amp_mode,
+                model_fn=self.model_fn,
+            ),
         )
 
-        status = {
-            "current_step": 0,
-            "current_epoch": 0,
-            "flag": self.Status.INIT,
-            "metrices": {}
-        }
+    @property
+    def trainer(self):
+        return self._engines["trainer"]
 
-        self.before_train(status)
-        self._fix.apply(self.Stage.before_train, self, status, None)
-        if status['flag'] > self.Status.STOPPING:
-            return status
+    @property
+    def evaluator(self):
+        if "evaluator" not in self._engines:
+            raise ValueError("Evaluator not yet added to the trainer")
+        return self._engines["evaluator"]
 
-        while True:
-
-            self.before_epoch(status)
-            self._fix.apply(self.Stage.before_epoch, self, status, None)
-            print(status['current_step'])
-            if status['flag'] > self.Status.STOPPING:
-                break
-
-            for data in dataloader:
-                data = data.to(self.device)
-                self.before_step(status, data)
-                self._fix.apply(self.Stage.before_step, self, status, data)
-                if status['flag'] > self.Status.STOPPING:
-                    break
-
-                self.train_impl(status, data)
-                status['current_step'] += 1
-                self.after_step(status, data)
-                self._fix.apply(self.Stage.after_step, self, status, data)
-
-            self.after_epoch(status, data)
-            self._fix.apply(self.Stage.after_epoch, self, status, data)
-            status['current_epoch'] += 1
-
-        self.after_train(status, data)  # NOTE: potential bug: this data is from `data = next(iter(dataloader))`
-        self._fix.apply(self.Stage.after_train, self, status, data)
-
-        return status
-
-    def before_train(self, status: dict) -> None:
-        pass
-
-    def before_epoch(self, status: dict) -> None:
-        pass
-
-    def before_step(self, status: dict, inputs: dict) -> None:
-        pass
-
-    def train_impl(self, status: dict, inputs: dict) -> None:
-
-        optimizer = self.optimizer
-        optimizer.zero_grad()
-        lr_scheduler = self.lr_scheduler
-
-        # calculate loss
-        inputs = self.model(inputs)
-        loss = self.loss_fn(inputs)
-
-        # calculate grad
-        loss.backward()
-        optimizer.step()
-        if lr_scheduler is not None:
-            lr_scheduler.step()
-        status['metrices']['loss'] = loss.item()
-
-    def after_step(self, status: dict, inputs: dict) -> None:
-        pass
-
-    def after_epoch(self, status: dict, inputs: dict) -> None:
-        pass
-
-    def after_train(self, status: dict, inputs: dict) -> None:
-        pass
-
-    def save_ckpt(self, path: str | Path) -> None:
-        pass
-
-    def load_ckpt(self, path: str | Path) -> None:
-        pass
+    def run(
+        self,
+        data: Iterable | None = None,
+        max_epochs: int | None = None,
+        epoch_length: int | None = None,
+    ) -> State:
+        self.trainer.run(data, max_epochs=max_epochs, epoch_length=epoch_length)

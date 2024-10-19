@@ -15,6 +15,7 @@ classifiers = [
 
 dependencies = [
     "tensordict-nightly",
+    "pytorch-ignite",
     "typer",
     "rich",
     "chemfiles",

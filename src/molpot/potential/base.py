@@ -18,6 +18,7 @@ class PotentialDict(nn.ModuleDict, Potential):
 class PotentialSeq(Potential):
 
     def __new__(cls, name, *modules):
+        assert isinstance(name, str), "name must be a string"
         cls.name = name
         return super().__new__(cls)
     

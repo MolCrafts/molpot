@@ -1,30 +1,18 @@
-from abc import ABC, abstractmethod
-from enum import IntEnum
-from pathlib import Path
+from abc import ABC
 
-from .fix import FixManager
+from ignite.engine import Engine
+from typing import Callable
 
 
-class Engine(ABC):
-
-    class Stage(IntEnum):
-        pass
-
-    class Status(IntEnum):
-
-        INIT = 0
-        TRAINING = 1
-
-        STOPPING = 2
-        FINISHED = 3
-        ERROR = 4
+class MolpotEngine(ABC):
 
     def __init__(self):
-        self._fix = FixManager(self.Stage)
 
-    @property
-    def fix(self) -> FixManager:
-        return self._fix
+        self._engines: dict[str, Engine] = {}
 
-    def get_status(self):
-        pass
+    def add_engine(self, name: str, engine: Engine):
+
+        self._engines[name] = engine
+
+    def add_event(self, engine_name: str, event_name, handler: Callable):
+        self._engines[engine_name].add_event_handler(event_name, handler)

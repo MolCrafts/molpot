@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 # Configure
 set(NAME molpot_op)
 project(${NAME} LANGUAGES CXX)
-option(ENABLE_CUDA "Enable biuilding CUDA components" ON)
+option(ENABLE_CUDA "Enable biuilding CUDA components" OFF)
 if(ENABLE_CUDA)
     enable_language(CUDA)
 endif(ENABLE_CUDA)
