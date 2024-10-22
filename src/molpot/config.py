@@ -5,31 +5,24 @@ from collections import defaultdict
 import numpy as np
 import logging
 
-class Singleton(type):
-    _instances = {}
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
-        # want to run __init__ every time the class is called, add
-        else:
-            cls._instances[cls].__init__(*args, **kwargs)
-        return cls._instances[cls]
+class Config:
 
-class Config(metaclass=Singleton):
+    def __init__(self):
+        raise TypeError("Config class cannot be instantiated.")
 
     device: torch.device = torch.device("cpu")
-    itype: torch.dtype = torch.int32
-    ftype: torch.dtype = torch.float32
-    ctype: torch.dtype = torch.complex64
+    global_dtypes = {
+        "float": torch.float32,
+        "int": torch.int32,
+    }
+    ftype = global_dtypes["float"]
+    itype = global_dtypes["int"]
 
     log_level: int = logging.INFO
 
-    def __init__(self):
-        # 0 = all messages are logged (default behavior)
-        # 1 = INFO messages are not printed
-        # 2 = INFO and WARNING messages are not printed
-        # 3 = INFO, WARNING, and ERROR messages are not printed
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+    @classmethod
+    def get_dtype(cls, dtype_name):
+        return cls.global_dtypes.get(dtype_name, None)
 
     @classmethod
     def set_device(cls, device_info:dict):

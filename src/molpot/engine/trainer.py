@@ -1,32 +1,27 @@
-from .base import MolpotEngine
-import torch
-from typing import Any, Callable, Union, Iterable, Sequence, Optional, Mapping, Tuple
 import collections
-from ignite.metrics import Metric
-from ignite.engine import (
-    create_supervised_trainer,
-    create_supervised_evaluator,
-    _prepare_batch,
-)
+from typing import (Any, Callable, Iterable, Mapping, Optional, Sequence,
+                    Tuple, Union)
+
+import torch
+from ignite.engine import (_prepare_batch, create_supervised_evaluator,
+                           create_supervised_trainer)
+from ignite.engine.events import (CallableEventWithFilter, EventEnum, Events,
+                                  EventsList, RemovableEventHandle, State)
+from ignite.handlers import Checkpoint, ProgressBar, global_step_from_engine
+from ignite.metrics import EpochWise, Metric, MetricUsage
 from ignite.utils import convert_tensor
-from ignite.engine.events import (
-    CallableEventWithFilter,
-    EventEnum,
-    Events,
-    EventsList,
-    RemovableEventHandle,
-    State,
-)
+
+from .base import MolpotEngine
+
 
 def _prepare_batch(
-    batch: Sequence[torch.Tensor], device: Optional[Union[str, torch.device]] = None, non_blocking: bool = False
+    batch: Sequence[torch.Tensor],
+    device: Optional[Union[str, torch.device]] = None,
+    non_blocking: bool = False,
 ) -> Tuple[Union[torch.Tensor, Sequence, Mapping, str, bytes], ...]:
     """Prepare batch for training or evaluation: pass to a device with options."""
     batch.to(device=device, non_blocking=non_blocking) if device is not None else batch
-    return (
-        batch,
-        batch
-    )
+    return (batch, batch)
 
 
 class PotentialTrainer(MolpotEngine):
@@ -60,6 +55,7 @@ class PotentialTrainer(MolpotEngine):
         self.deterministic = deterministic
         self.amp_mode = amp_mode
         self.model_fn = model_fn
+        self.optimizer = optimizer
 
         self.add_engine(
             "trainer",
@@ -116,3 +112,9 @@ class PotentialTrainer(MolpotEngine):
         epoch_length: int | None = None,
     ) -> State:
         self.trainer.run(data, max_epochs=max_epochs, epoch_length=epoch_length)
+
+    def add_metric(self, name: str, metric: Metric, target: str, usage: str | MetricUsage = EpochWise()) -> None:
+        metric.attach(self._engines[target], name, usage)
+
+    def enable_progressbar(self, target: str="trainer") -> None:
+        ProgressBar().attach(self._engines[target])

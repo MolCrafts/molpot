@@ -1,10 +1,5 @@
 from .config import Config
 
-Config()
-ftype = Config.ftype
-itype = Config.itype
-ctype = Config.ctype
-
 from . import alias
 from .alias import Alias, NameSpace
 from .utils import *
@@ -21,3 +16,4 @@ from .statistic import Tracker
 
 from . import engine
 from .engine import PotentialTrainer
+from .engine.utils import *

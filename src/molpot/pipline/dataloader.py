@@ -1,6 +1,6 @@
 from torch.utils.data import DataLoader, default_collate
 from typing import Sequence
-from molpot import Frame, alias
+from molpot import Frame, alias, Config
 import torch
 from tensordict import TensorDict
 from typing import TypeVar, Optional, Union, List, Tuple, Dict, Callable, Iterable
@@ -16,17 +16,17 @@ def _collate_frame(batch: Sequence[Frame]):
     batch_size = int(coll_batch.batch_size.numel())
 
     if alias.n_atoms not in coll_batch:
-        n_atoms = torch.tensor([len(frame[alias.R]) for frame in batch], dtype=int)
+        n_atoms = torch.tensor([len(frame[alias.R]) for frame in batch], dtype=Config.itype)
     else:
         n_atoms = coll_batch[alias.n_atoms]
 
     atom_batch_mask = torch.cat(
         [torch.full((t,), fill_value=i) for i, t in enumerate(n_atoms)]
-    ).reshape(batch_size, -1)
+    ).reshape(batch_size, -1).to(torch.int64)  # scatter
 
     atomistic_offset = torch.cumsum(
-        torch.concat([torch.tensor([0]), n_atoms.squeeze()]), dim=0
-    )
+        torch.cat([torch.tensor([0]), n_atoms.squeeze()]), dim=0
+    ).to(Config.itype)
 
     for key in [alias.pair_i, alias.pair_j, alias.bond_i, alias.bond_j]:
         if key in coll_batch:

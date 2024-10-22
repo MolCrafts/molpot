@@ -1,5 +1,6 @@
 from typing import Union
 import torch
+from molpot import Config
 
 AliasKey = tuple[str, str] | str
 
@@ -11,7 +12,7 @@ class Alias:
         name: str,
         comment: str,
         dtype: type,
-        unit: str|None=None,
+        unit: str | None = None,
         shape: tuple = (),
         namespace: str = "",
         category: str = "",
@@ -28,21 +29,23 @@ class Alias:
 
     @property
     def key(self) -> AliasKey:
-        return tuple([part for part in (self.namespace, self.category, self.name) if part])
-    
+        return tuple(
+            [part for part in (self.namespace, self.category, self.name) if part]
+        )
+
     @property
     def is_array(self) -> bool:
         return len(self.shape) > 0
-    
+
     def __repr__(self) -> str:
         return f"<Alias: {self.name}>"
-    
+
     def __str__(self) -> str:
         return self.name
-    
+
     def __hash__(self) -> int:
         return hash(self.key)
-    
+
     def __eq__(self, other: Union["Alias", tuple]) -> bool:
         if isinstance(other, tuple):
             return self.key == other
@@ -71,7 +74,7 @@ class NameSpace(dict):
         alias.namespace = self.name
         self[alias.name] = alias
         return alias.key
-    
+
     def __getattribute__(self, name: str) -> str:
         if name in NameSpace.namespaces:
             return NameSpace.namespaces[name]
@@ -84,7 +87,7 @@ class NameSpace(dict):
         name: str,
         comment: str,
         dtype: type,
-        unit: str|None=None,
+        unit: str | None = None,
         shape: tuple = (),
         category: str = "",
     ) -> AliasKey:
@@ -99,6 +102,13 @@ class NameSpace(dict):
                 category=category,
             )
         )
+
+    def format(self, name: str, value):
+        alias = self[name]
+        dtype = alias.dtype
+        shape = alias.shape
+        return torch.tensor(value, dtype=Config.get_dtype(dtype)).reshape(shape)
+
 
 default_ns = NameSpace("default")
 

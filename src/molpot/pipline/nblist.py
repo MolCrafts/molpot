@@ -1,5 +1,5 @@
 from molpot.utils.locality import get_neighbor_pairs
-from molpot import alias
+from molpot import alias, Config
 import torch
 
 
@@ -21,8 +21,8 @@ class NeighborList(Transform):
             xyz, self.cutoff, box_vectors=cell
         )
 
-        tensordict[alias.pair_i] = neighbors[0]
-        tensordict[alias.pair_j] = neighbors[1]
-        tensordict[alias.pair_diff] = deltas
-        tensordict[alias.pair_dist] = distances
+        tensordict[alias.pair_i] = neighbors[0].to(torch.int64)  # for scatter 
+        tensordict[alias.pair_j] = neighbors[1].to(torch.int64)  # for scatter 
+        tensordict[alias.pair_diff] = deltas.to(Config.ftype)
+        tensordict[alias.pair_dist] = distances.to(Config.ftype)
         return tensordict
