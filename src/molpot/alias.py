@@ -116,7 +116,7 @@ default_ns = NameSpace("default")
 atoms_ns = NameSpace("atoms")
 atomid = atoms_ns.set("idx", "atom index", int)
 molid = atoms_ns.set("molid", "molecule index", int)
-xyz = R = atoms_ns.set("xyz", "atom coordinates", float, shape=(None, 3))
+xyz = R = atoms_ns.set("R", "atom coordinates", float, shape=(None, 3))
 Z = atoms_ns.set("Z", "atomic number", int)
 atom_batch_mask = atoms_ns.set("atom_batch_mask", "atoms batch mask", int)
 

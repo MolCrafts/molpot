@@ -67,6 +67,9 @@ class Dataset(torch.utils.data.Dataset):
     def reset(self):
         self.state = {}
 
+    def split(self, *args, **kwargs):
+        return torch.utils.data.random_split(self, *args, **kwargs)
+
 
 class QM9(Dataset):
     def __init__(
