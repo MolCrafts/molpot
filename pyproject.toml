@@ -14,13 +14,9 @@ classifiers = [
 ]
 
 dependencies = [
-    "tensordict-nightly",
+    "torch>=2.5.0",
+    "tensordict>=0.6.0",
     "pytorch-ignite",
-    "typer",
-    "rich",
-    "chemfiles",
-    "tensorboard",
-    "h5py"
 ]
 
 [project.optional-dependencies]
