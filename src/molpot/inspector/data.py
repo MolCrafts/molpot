@@ -30,7 +30,7 @@ class DataInspector:
         for label in self.dataset.labels.values():
             table.add_row(
                 label.name,
-                str(label.type),
+                str(label.dtype),
                 label.unit,
                 label.comment
             )

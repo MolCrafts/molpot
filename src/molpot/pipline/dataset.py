@@ -14,7 +14,7 @@ import torch
 from torch.nn import Module
 
 import molpot as mpot
-from molpot import NameSpace, alias
+from molpot import NameSpace, alias, Config
 import shutil
 
 logger = logging.getLogger("molpot")
@@ -38,19 +38,30 @@ class Dataset(torch.utils.data.Dataset):
         save_dir: Path | None = None,
         device: str = "cpu",
         preprocess: list[Module] = [],
+        total: int | None = None,
     ):
         super().__init__()
         self.name = name
+        save_dir = Path(save_dir)
         if save_dir:
-            self.save_dir = Path(save_dir)
-            self.save_dir.mkdir(parents=True, exist_ok=True)
+            if not save_dir.exists():
+                self.save_dir = Path(save_dir)
+                self.save_dir.mkdir(parents=True, exist_ok=True)
+            self.save_dir = save_dir
         else:
             self.save_dir = None
         self.device = device
         self.labels = NameSpace(name)
-        self._preprocess = preprocess
+        self._preprocess = torch.nn.Sequential(*preprocess)
 
         self.transforms = torch.nn.Sequential()
+
+        self._frames = []
+        self._total = None
+
+    @property
+    def frames(self):
+        return self._frames
 
     def add_transform(self, transform):
         self.transforms.append(transform)
@@ -58,11 +69,14 @@ class Dataset(torch.utils.data.Dataset):
     def apply_transforms(self, frame):
         return self.transforms(frame)
 
+    def prepare_data(self):
+        pass
+
     def __len__(self):
         pass
 
     def __iter__(self):
-        pass 
+        pass
 
     def reset(self):
         self.state = {}
@@ -109,7 +123,6 @@ class QM9(Dataset):
 
     def __len__(self):
         return self.total
-
 
     # def _download_uncharacterized(self):
     #     logger.info("Downloading list of uncharacterized molecules...")
@@ -175,11 +188,11 @@ class QM9(Dataset):
             frame = mpot.Frame()
             frame["global"]["name"] = name
             frame[alias.Z] = torch.tensor(Z)
-            frame[alias.R] = torch.tensor(R, dtype=mpot.ftype)
-            frame[alias.n_atoms] = torch.tensor([len(Z)], dtype=mpot.itype)
+            frame[alias.R] = torch.tensor(R, dtype=Config.ftype)
+            frame[alias.n_atoms] = torch.tensor([len(Z)], dtype=Config.itype)
             prop_line = lines[1].split()
             for k, v in zip(props, prop_line[1:]):
-                frame[k] = torch.tensor([float(v)], dtype=mpot.ftype)
+                frame[k] = torch.tensor([float(v)], dtype=Config.ftype)
             frames.append(frame)
         logger.info(f"end convert, cost {time.perf_counter() - start_time:.2f}s")
         return frames
@@ -206,10 +219,12 @@ class rMD17(Dataset):
         total: int = 1000,
         preprocess: list[Module] = [],
     ):
-        super().__init__("rmd17", save_dir, device, preprocess=preprocess)
+        super().__init__(
+            f"rmd17-{molecule}", save_dir, device, preprocess=preprocess, total=total
+        )
 
-        self.labels.set("energy", float, "kcal/mol", "potential_energy")
-        self.labels.set("forces", torch.Tensor, "kcal/mol/A", "forces")
+        self.labels.set("energy", "total energy", float, "kcal/mol")
+        self.labels.set("forces", "all forces", float, "kcal/mol/A")
         self.molecule = molecule
 
         self.atomrefs = {
@@ -247,16 +262,14 @@ class rMD17(Dataset):
                 f"Invalid molecule. Choose from {molecules}. Got {molecule}"
             )
 
-        # self._frames = self.prepare_data()
-
     def __len__(self):
         return self.total
 
     def __getitem__(self, idx):
-        return self.pre_process(self.frames[idx])
+        return self.apply_transforms(self.frames[idx])
 
     def __iter__(self):
-        return iter(map(self.pre_process, self.frames))
+        return iter(map(self.apply_transforms, self.frames))
 
     @property
     def frames(self):
@@ -284,11 +297,12 @@ class rMD17(Dataset):
         return self.parse_data(data)
 
     def _download_data(self, save_dir: Path):
-        logger.info("Downloading {} data".format(self.molecule))
+
         raw_path = save_dir / "rmd17"
         tar_path = save_dir / "rmd17.tar.gz"
         url = "https://figshare.com/ndownloader/files/23950376"
         if not raw_path.exists():
+            logger.info("Downloading {} data".format(self.molecule))
             with requests.get(url, stream=True) as response:
                 response.raise_for_status()
                 with open(tar_path, "wb") as file:
@@ -316,17 +330,17 @@ class rMD17(Dataset):
             data["coords"], data["energies"], data["forces"]
         ):
             frame = mpot.Frame()
-            frame[alias.Z] = torch.tensor(numbers, dtype=mpot.itype)
-            frame[alias.R] = torch.tensor(positions, dtype=mpot.ftype)
-            frame[alias.props_ns.name]["energy"] = torch.tensor(
-                [energies], dtype=mpot.ftype
-            )
-            frame[alias.props_ns.name]["forces"] = torch.tensor(
-                forces, dtype=mpot.ftype
-            )
-            frame[alias.n_atoms] = torch.tensor([len(numbers)], dtype=mpot.itype)
+            frame[alias.Z] = torch.tensor(numbers, dtype=Config.itype)
+            frame[alias.R] = torch.tensor(positions, dtype=Config.ftype)
+            frame["labels"]["energy"] = torch.tensor([energies], dtype=Config.ftype)
+            frame["labels"]["forces"] = torch.tensor(forces, dtype=Config.ftype)
+            frame[alias.n_atoms] = torch.tensor([len(numbers)], dtype=Config.itype)
             frame[alias.cell] = torch.zeros(3)
             frame[alias.pbc] = torch.zeros(3, dtype=torch.bool)
             frames.append(frame)
+            if len(frames) >= self.total:
+                break
+
+            self._preprocess(frame)
 
         return frames

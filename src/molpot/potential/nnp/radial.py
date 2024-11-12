@@ -19,7 +19,7 @@ class GaussianRBF(nn.Module):
     def __init__(
         self, n_rbf: int, cutoff: float, start: float = 0.0, trainable: bool = False
     ):
-        """
+        r"""
         Args:
             n_rbf: total number of Gaussian functions, :math:`N_g`.
             cutoff: center of last Gaussian function, :math:`\mu_{N_g}`
@@ -52,7 +52,7 @@ class GaussianRBFCentered(nn.Module):
     def __init__(
         self, n_rbf: int, cutoff: float, start: float = 1.0, trainable: bool = False
     ):
-        """
+        r"""
         Args:
             n_rbf: total number of Gaussian functions, :math:`N_g`.
             cutoff: width of last Gaussian function, :math:`\mu_{N_g}`
@@ -78,7 +78,7 @@ class GaussianRBFCentered(nn.Module):
 
 
 class BesselRBF(nn.Module):
-    """
+    r"""
     Sine for radial basis functions with coulomb decay (0th order bessel).
 
     References:

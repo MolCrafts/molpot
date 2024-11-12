@@ -25,7 +25,7 @@ def _collate_frame(batch: Sequence[Frame]):
     ).reshape(batch_size, -1).to(torch.int64)  # scatter
 
     atomistic_offset = torch.cumsum(
-        torch.cat([torch.tensor([0]), n_atoms]), dim=0
+        torch.cat([torch.tensor([0]), torch.flatten(n_atoms)]), dim=0
     ).to(Config.itype)
 
     for key in [alias.pair_i, alias.pair_j, alias.bond_i, alias.bond_j]:
