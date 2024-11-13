@@ -1,12 +1,13 @@
 from itertools import product
 
+import molpot_op
 import pytest
 import torch
-import torch_scatter
 from torch.autograd import gradcheck
-from torch_scatter.testing import devices, dtypes, reductions, tensor
+from molpot_op.scatter import scatter_add, scatter_sum, scatter
+from .utils import devices, dtypes
 
-reductions = ['sum', 'add']
+reductions = ["sum", "add"]
 
 tests = [
     {
@@ -93,19 +94,19 @@ tests = [
 @pytest.mark.parametrize('test,reduce,dtype,device',
                          product(tests, reductions, dtypes, devices))
 def test_forward(test, reduce, dtype, device):
-    src = tensor(test['src'], dtype, device)
-    index = tensor(test['index'], torch.long, device)
+    src = torch.tensor(test['src'], dtype=dtype, device=device)
+    index = torch.tensor(test['index'], dtype=torch.long, device=device)
     dim = test['dim']
-    expected = tensor(test[reduce], dtype, device)
+    expected = torch.tensor(test[reduce], dtype=dtype, device=device)
 
-    fn = getattr(torch_scatter, 'scatter_' + reduce)
+    fn = getattr(molpot_op.scatter, 'scatter_' + reduce)
     jit = torch.jit.script(fn)
     out1 = fn(src, index, dim)
     out2 = jit(src, index, dim)
     if isinstance(out1, tuple):
         out1, arg_out1 = out1
         out2, arg_out2 = out2
-        arg_expected = tensor(test['arg_' + reduce], torch.long, device)
+        arg_expected = torch.tensor(test['arg_' + reduce], dtype=torch.long, device=device)
         assert torch.all(arg_out1 == arg_expected)
         assert arg_out1.tolist() == arg_out1.tolist()
     assert torch.all(out1 == expected)
@@ -115,26 +116,26 @@ def test_forward(test, reduce, dtype, device):
 @pytest.mark.parametrize('test,reduce,device',
                          product(tests, reductions, devices))
 def test_backward(test, reduce, device):
-    src = tensor(test['src'], torch.double, device)
+    src = torch.tensor(test['src'], dtype=torch.double, device=device)
     src.requires_grad_()
-    index = tensor(test['index'], torch.long, device)
+    index = torch.tensor(test['index'], dtype=torch.long, device=device)
     dim = test['dim']
 
-    assert gradcheck(torch_scatter.scatter,
+    assert gradcheck(molpot_op.scatter.scatter,
                      (src, index, dim, None, None, reduce))
 
 
 @pytest.mark.parametrize('test,reduce,dtype,device',
                          product(tests, reductions, dtypes, devices))
 def test_out(test, reduce, dtype, device):
-    src = tensor(test['src'], dtype, device)
-    index = tensor(test['index'], torch.long, device)
+    src = torch.tensor(test['src'], dtype=dtype, device=device)
+    index = torch.tensor(test['index'], dtype=torch.long, device=device)
     dim = test['dim']
-    expected = tensor(test[reduce], dtype, device)
+    expected = torch.tensor(test[reduce], dtype=dtype, device=device)
 
     out = torch.full_like(expected, -2)
 
-    getattr(torch_scatter, 'scatter_' + reduce)(src, index, dim, out)
+    getattr(molpot_op.scatter, 'scatter_' + reduce)(src, index, dim, out)
 
     if reduce == 'sum' or reduce == 'add':
         expected = expected - 2
@@ -155,19 +156,19 @@ def test_out(test, reduce, dtype, device):
 @pytest.mark.parametrize('test,reduce,dtype,device',
                          product(tests, reductions, dtypes, devices))
 def test_non_contiguous(test, reduce, dtype, device):
-    src = tensor(test['src'], dtype, device)
-    index = tensor(test['index'], torch.long, device)
+    src = torch.tensor(test['src'], dtype=dtype, device=device)
+    index = torch.tensor(test['index'], dtype=torch.long, device=device)
     dim = test['dim']
-    expected = tensor(test[reduce], dtype, device)
+    expected = torch.tensor(test[reduce], dtype=dtype, device=device)
 
     if src.dim() > 1:
         src = src.transpose(0, 1).contiguous().transpose(0, 1)
     if index.dim() > 1:
         index = index.transpose(0, 1).contiguous().transpose(0, 1)
 
-    out = getattr(torch_scatter, 'scatter_' + reduce)(src, index, dim)
+    out = getattr(molpot_op.scatter, 'scatter_' + reduce)(src, index, dim)
     if isinstance(out, tuple):
         out, arg_out = out
-        arg_expected = tensor(test['arg_' + reduce], torch.long, device)
+        arg_expected = torch.tensor(test['arg_' + reduce], dtype=torch.long, device=device)
         assert torch.all(arg_out == arg_expected)
     assert torch.all(out == expected)

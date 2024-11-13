@@ -17,12 +17,15 @@ class NeighborList(Transform):
         cell = tensordict[alias.cell]
         xyz = tensordict[alias.xyz]
 
+        if torch.allclose(cell, torch.zeros_like(cell)):
+            cell = None
+
         neighbors, deltas, distances, number_found_pairs = get_neighbor_pairs(
             xyz, self.cutoff, box_vectors=cell
         )
 
-        tensordict[alias.pair_i] = neighbors[0].to(torch.int64)  # for scatter 
-        tensordict[alias.pair_j] = neighbors[1].to(torch.int64)  # for scatter 
+        tensordict[alias.pair_i] = neighbors[0][neighbors[0] > -1].to(torch.int64)  # for scatter 
+        tensordict[alias.pair_j] = neighbors[1][neighbors[1] > -1].to(torch.int64)  # for scatter 
         tensordict[alias.pair_diff] = deltas.to(Config.ftype)
         tensordict[alias.pair_dist] = distances.to(Config.ftype)
         return tensordict

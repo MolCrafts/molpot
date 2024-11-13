@@ -1,5 +1,7 @@
-from torch import empty, ops, Tensor
 from typing import Optional, Tuple
+
+import torch
+from torch import Tensor, empty, ops
 
 
 def get_neighbor_pairs(
@@ -141,6 +143,9 @@ def get_neighbor_pairs(
 
     if box_vectors is None:
         box_vectors = empty((0, 0), device=positions.device, dtype=positions.dtype)
+    assert isinstance(box_vectors, Tensor), TypeError(f"box_vectors must be a torch.Tensor, but got {type(box_vectors)}")
+    if box_vectors.ndim == 1:
+        box_vectors = torch.diag(box_vectors)
     neighbors, deltas, distances, number_found_pairs = ops.neighbors.getNeighborPairs(
         positions, cutoff, max_num_pairs, box_vectors, check_errors
     )
