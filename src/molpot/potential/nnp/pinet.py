@@ -89,11 +89,7 @@ class PILayer(nn.Module):
         prop_j = prop[pair_j]
 
         inter = prop_i + prop_j
-        print(inter.shape)
         inter = self.mlp(inter)
-        print(inter.shape)
-        print(inter.reshape(-1, prop_i.shape[-1], basis.shape[-1]).shape)
-        print(basis.shape)
         inter = torch.einsum(
             "pcb, pb->pc", inter.reshape(-1, prop_i.shape[-1], basis.shape[-1]), basis
         )  # pcb := (n_pairs, n_features, n_basis)
@@ -312,9 +308,7 @@ class PiNet(nn.Module):
 
         self.embedding = nn.Embedding(max_atomtypes, max_atomtypes, padding_idx=0)
 
-        print(pi_nodes, self.n_basis)
         pi_nodes[-1] *= self.n_basis
-        print(pi_nodes)
         self.before_gc_block_layer = nn.Linear(max_atomtypes, pp_nodes[0])
 
         self.gc_blocks = nn.ModuleList(
