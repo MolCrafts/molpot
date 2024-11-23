@@ -6,16 +6,10 @@ import torch.nn.functional as F
 
 import molpot.potential.nnp as nnp
 
-__all__ = ["build_mlp", "build_gated_equivariant_mlp"]
-
 
 def build_mlp(
-    n_in: int,
-    n_out: int,
-    n_hidden: int | Sequence[int] | None = None,
-    n_layers: int = 2,
+    *n_neurons: int,
     activation: Callable = F.silu,
-    use_bias: bool = True,
     last_bias: bool = True,
     last_zero_init: bool = False,
 ) -> nn.Module:
@@ -35,27 +29,11 @@ def build_mlp(
             the same activation function except the output layer that does not apply
             any activation function.
     """
-    # get list of number of nodes in input, hidden & output layers
-    if n_hidden is None:
-        c_neurons = n_in
-        n_neurons = []
-        for i in range(n_layers):
-            n_neurons.append(c_neurons)
-            c_neurons = max(n_out, c_neurons // 2)
-        n_neurons.append(n_out)
-    else:
-        # get list of number of nodes hidden layers
-        if type(n_hidden) is int:
-            n_hidden = [n_hidden] * (n_layers - 1)
-        else:
-            n_hidden = list(n_hidden)
-            n_layers = len(n_hidden) + 1
-        n_neurons = [n_in] + n_hidden + [n_out]
-
     # assign a Dense layer (with activation function) to each hidden layer
+    n_layers = len(n_neurons) - 1
     layers = [
-        nnp.Dense(n_neurons[i], n_neurons[i + 1], activation=activation, bias=use_bias)
-        for i in range(n_layers - 1)
+        nnp.Dense(n_neurons[i], n_neurons[i + 1], activation=activation, bias=False)
+        for i in range(n_layers - 2)
     ]
     # assign a Dense layer (without activation function) to the output layer
 
@@ -76,7 +54,6 @@ def build_mlp(
     # put all layers together to make the network
     out_net = nn.Sequential(*layers)
     return out_net
-
 
 def build_gated_equivariant_mlp(
     n_in: int,

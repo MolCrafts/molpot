@@ -118,7 +118,8 @@ atomid = atoms_ns.set("idx", "atom index", int)
 molid = atoms_ns.set("molid", "molecule index", int)
 xyz = R = atoms_ns.set("R", "atom coordinates", float, shape=(None, 3))
 Z = atoms_ns.set("Z", "atomic number", int)
-atom_batch_mask = atoms_ns.set("atom_batch_mask", "atoms batch mask", int)
+atom_batch_mask = atoms_ns.set("atom_batch_mask", "atoms batch mask", torch.int64)
+atom_offset = atoms_ns.set("atomistic_offset", "atomistic offset", torch.int64)
 
 # cell section
 pbc = default_ns.set("pbc", "periodic boundary condition", bool, shape=(3,))[1:]
@@ -133,11 +134,13 @@ bond_dist = bonds_ns.set("dist", "bond distance", float, unit="angstrom")
 
 # # pairs section
 pairs_ns = NameSpace("pairs")
+pairs = pairs_ns.name
 pair_i = pairs_ns.set("i", "pair atom index i", int)
 pair_j = pairs_ns.set("j", "pair atom index j", int)
 pair_diff = pairs_ns.set("diff", "pair displacement", float, shape=(None, 3))
 pair_dist = pairs_ns.set("dist", "pair distance", float, shape=(None, 3))
-# pair_offset = pairs_ns.set("offset", "offsets", int)
+pair_batch_mask = pairs_ns.set("pair_batch_mask", "pairs batch mask", int)
+pair_offset = pairs_ns.set("pair_offset", "pairs offset", int)
 
 # prop section
 props_ns = NameSpace("props")

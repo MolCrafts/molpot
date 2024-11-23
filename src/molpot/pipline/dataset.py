@@ -35,6 +35,7 @@ class Dataset(torch.utils.data.Dataset):
     def __init__(
         self,
         name: str,
+        frames: list[mpot.Frame],
         save_dir: Path | None = None,
         device: str = "cpu",
         preprocess: list[Module] = [],
@@ -42,22 +43,20 @@ class Dataset(torch.utils.data.Dataset):
     ):
         super().__init__()
         self.name = name
-        save_dir = Path(save_dir)
-        if save_dir:
+        if save_dir is not None:
+            save_dir = Path(save_dir)
             if not save_dir.exists():
                 self.save_dir = Path(save_dir)
                 self.save_dir.mkdir(parents=True, exist_ok=True)
             self.save_dir = save_dir
-        else:
-            self.save_dir = None
         self.device = device
         self.labels = NameSpace(name)
         self._preprocess = torch.nn.Sequential(*preprocess)
 
         self.transforms = torch.nn.Sequential()
 
-        self._frames = []
-        self._total = None
+        self._frames = frames
+        self._total = total or len(frames)
 
     @property
     def frames(self):
@@ -73,10 +72,13 @@ class Dataset(torch.utils.data.Dataset):
         pass
 
     def __len__(self):
-        pass
+        return self._total
 
     def __iter__(self):
-        pass
+        return iter(map(self.apply_transforms, self.frames))
+    
+    def __getitem__(self, index):
+        return self.apply_transforms(self._frames[index])
 
     def reset(self):
         self.state = {}
@@ -95,7 +97,6 @@ class QM9(Dataset):
         remove_uncharacterized: bool = True,
         preprocess: list[Module] = [],
     ):
-        super().__init__("qm9", save_dir, device, preprocess=preprocess)
 
         self.remove_uncharacterized = remove_uncharacterized
         self.atom_ref = atom_ref
@@ -118,41 +119,11 @@ class QM9(Dataset):
         self.labels.set("Cv", float, "cal/mol/K", "heat_capacity")
 
         self.total = total
-
-        # self.frames = self._download_data(total)
+        frame = self.prepare_data(total)
+        super().__init__("qm9", frame, save_dir, device, preprocess=preprocess)
 
     def __len__(self):
         return self.total
-
-    # def _download_uncharacterized(self):
-    #     logger.info("Downloading list of uncharacterized molecules...")
-    #     at_url = "https://ndownloader.figshare.com/files/3195404"
-    #     requests.get(at_url).content
-    #     logger.info("Done.")
-
-    #     uncharacterized = []
-    #     with open(io.TextIOWrapper(io.BytesIO())) as f:
-    #         lines = f.readlines()
-    #         for line in lines[9:-1]:
-    #             uncharacterized.append(int(line.split()[0]))
-    #     return uncharacterized
-
-    # def _download_atomrefs(self, tmpdir):
-    #     logger.info("Downloading GDB-9 atom references...")
-    #     at_url = "https://ndownloader.figshare.com/files/3195395"
-    #     atomrefs = requests.get(at_url).content
-
-    #     qm9 = self.labels
-
-    #     props = [qm9.zpve, qm9.U0, qm9.U, qm9.H, qm9.G, qm9.Cv]
-    #     atref = {p: torch.zeros((100,)) for p in props}
-    #     with open(atomrefs) as f:
-    #         lines = f.readlines()
-    #         for z, l in zip([1, 6, 7, 8, 9], lines[5:10]):
-    #             for i, p in enumerate(props):
-    #                 atref[p][z] = float(l.split()[i + 1])
-    #     atref = {k: v.tolist() for k, v in atref.items()}
-    #     return atref
 
     def prepare_data(self, total):
         logger.info("start to download data...")

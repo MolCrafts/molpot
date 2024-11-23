@@ -11,3 +11,7 @@ class Frame(TensorDict):
             self['predicts'] = {}
         if 'labels' not in self:
             self['labels'] = {}
+
+    @classmethod
+    def from_frames(cls, frames):
+        return cls.maybe_dense_stack(frames).densify()

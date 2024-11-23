@@ -20,10 +20,7 @@ class Atomwise(nn.Module):
 
     def __init__(
         self,
-        n_in: int,
-        n_out: int = 1,
-        n_hidden: int | Sequence[int] | None = None,
-        n_layers: int = 2,
+        *n_neurons: int,
         activation: Callable = F.silu,
         aggregation_mode: str = "sum",
         from_key: str = "scalar_representation",
@@ -51,7 +48,8 @@ class Atomwise(nn.Module):
         self.per_atom_output_key = per_atom_output_key
         if self.per_atom_output_key is not None:
             self.model_outputs.append(self.per_atom_output_key)
-        self.n_out = n_out
+        assert len(n_neurons) > 1, ValueError("Need at least one in and one out layer")
+        self.n_out = n_neurons[-1]
 
         if aggregation_mode is None and self.per_atom_output_key is None:
             raise ValueError(
@@ -60,10 +58,7 @@ class Atomwise(nn.Module):
             )
 
         self.outnet = build_mlp(
-            n_in=n_in,
-            n_out=n_out,
-            n_hidden=n_hidden,
-            n_layers=n_layers,
+            *n_neurons,
             activation=activation,
         )
         self.aggregation_mode = aggregation_mode
