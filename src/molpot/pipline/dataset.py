@@ -35,7 +35,7 @@ class Dataset(torch.utils.data.Dataset):
     def __init__(
         self,
         name: str,
-        frames: list[mpot.Frame],
+        frames: list[mpot.Frame] = None,
         save_dir: Path | None = None,
         device: str = "cpu",
         preprocess: list[Module] = [],
@@ -76,7 +76,7 @@ class Dataset(torch.utils.data.Dataset):
 
     def __iter__(self):
         return iter(map(self.apply_transforms, self.frames))
-    
+
     def __getitem__(self, index):
         return self.apply_transforms(self._frames[index])
 
@@ -85,6 +85,10 @@ class Dataset(torch.utils.data.Dataset):
 
     def split(self, *args, **kwargs):
         return torch.utils.data.random_split(self, *args, **kwargs)
+
+    def preprocess_data(self):
+        self._frames = [self._preprocess(frame) for frame in self._frames]
+        return self._frames
 
 
 class QM9(Dataset):
@@ -171,6 +175,20 @@ class QM9(Dataset):
 
 class rMD17(Dataset):
 
+    atomrefs = {
+        "energy": [
+            0.0,
+            -313.5150902000774,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -23622.587180094913,
+            -34219.46811826416,
+            -47069.30768969713,
+        ]
+    }
+
     def __init__(
         self,
         molecule: Literal[
@@ -191,26 +209,17 @@ class rMD17(Dataset):
         preprocess: list[Module] = [],
     ):
         super().__init__(
-            f"rmd17-{molecule}", save_dir, device, preprocess=preprocess, total=total
+            f"rmd17-{molecule}",
+            None,
+            save_dir,
+            device,
+            preprocess=preprocess,
+            total=total,
         )
-
         self.labels.set("energy", "total energy", float, "kcal/mol")
         self.labels.set("forces", "all forces", float, "kcal/mol/A")
-        self.molecule = molecule
 
-        self.atomrefs = {
-            "energy": [
-                0.0,
-                -313.5150902000774,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                -23622.587180094913,
-                -34219.46811826416,
-                -47069.30768969713,
-            ]
-        }
+        self.molecule = molecule
 
         self.total = total
 
@@ -232,6 +241,10 @@ class rMD17(Dataset):
             raise ValueError(
                 f"Invalid molecule. Choose from {molecules}. Got {molecule}"
             )
+
+        self.prepare_data()
+        self.preprocess_data()
+        logger.info(f"Loaded {len(self)} frames")
 
     def __len__(self):
         return self.total
@@ -295,15 +308,15 @@ class rMD17(Dataset):
         return self.parse_data(data)
 
     def parse_data(self, data):
-        numbers = data["nuclear_charges"]
+        numbers = torch.tensor(data["nuclear_charges"], dtype=Config.itype)
         frames = []
         for positions, energies, forces in zip(
             data["coords"], data["energies"], data["forces"]
         ):
             frame = mpot.Frame()
-            frame[alias.Z] = torch.tensor(numbers, dtype=Config.itype)
+            frame[alias.Z] = numbers
             frame[alias.R] = torch.tensor(positions, dtype=Config.ftype)
-            frame["labels"]["energy"] = torch.tensor([energies], dtype=Config.ftype)
+            frame["labels"]["energy"] = torch.tensor([energies - np.array(self.atomrefs['energy'])[numbers].sum()], dtype=Config.ftype)
             frame["labels"]["forces"] = torch.tensor(forces, dtype=Config.ftype)
             frame[alias.n_atoms] = torch.tensor([len(numbers)], dtype=Config.itype)
             frame[alias.cell] = torch.zeros(3)
@@ -311,7 +324,4 @@ class rMD17(Dataset):
             frames.append(frame)
             if len(frames) >= self.total:
                 break
-
-            self._preprocess(frame)
-
         return frames

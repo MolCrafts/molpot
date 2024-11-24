@@ -306,10 +306,10 @@ class PiNet(nn.Module):
         self.cutoff_fn = cutoff_fn
         self.n_basis = self.basis_fn.n_rbf
 
-        self.embedding = nn.Embedding(max_atomtypes, max_atomtypes, padding_idx=0)
+        self.embedding = nn.Embedding(max_atomtypes, self.n_basis, padding_idx=0)
 
         pi_nodes[-1] *= self.n_basis
-        self.before_gc_block_layer = nn.Linear(max_atomtypes, pp_nodes[0])
+        self.before_gc_block_layer = nn.Linear(self.n_basis, pp_nodes[0])
 
         self.gc_blocks = nn.ModuleList(
             [GCBlock(rank, pp_nodes, pi_nodes, ii_nodes, activation) for _ in range(depth)]

@@ -93,7 +93,8 @@ class PotentialTrainer(MolpotEngine):
     ):
         super().__init__()
 
-        self.model = model.to(device)
+        self.model = model
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         self.loss_fn = loss_fn
         self.device = device
         self.non_blocking = non_blocking
@@ -109,6 +110,7 @@ class PotentialTrainer(MolpotEngine):
 
         self.metrics = {}
         self.loggers = {}
+        self.compile()
 
         self.add_engine(
             "trainer",
@@ -128,6 +130,10 @@ class PotentialTrainer(MolpotEngine):
                 model_fn=model_fn,
             ),
         )
+
+    def compile(self):
+        self.model = self.model.to(self.device)
+        self.loss_fn = self.loss_fn.to(self.device)
 
     def add_evaluator(
         self,
@@ -218,8 +224,9 @@ class PotentialTrainer(MolpotEngine):
         tb_logger.attach_output_handler(
             self.trainer,
             event_name=event_name,
-            tag="training",
+            tag="trainer",
             output_transform=lambda x: {"loss": x[-1]},
+            global_step_transform=global_step_from_engine(self.trainer),
         )
         for ename, engine in self._engines.items():
             tb_logger.attach_output_handler(
@@ -281,3 +288,7 @@ class PotentialTrainer(MolpotEngine):
                 loss.backward()
                 self.optimizer.step()
                 prof.step()
+
+    def reset(self):
+        for engine in self._engines.values():
+            engine.state = State()

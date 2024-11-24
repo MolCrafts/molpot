@@ -20,7 +20,7 @@ class Atomwise(nn.Module):
 
     def __init__(
         self,
-        *n_neurons: int,
+        n_neurons: list[int],
         activation: Callable = F.silu,
         aggregation_mode: str = "sum",
         from_key: str = "scalar_representation",
