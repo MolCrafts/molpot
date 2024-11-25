@@ -282,28 +282,28 @@ class rMD17(Dataset):
 
     def _download_data(self, save_dir: Path):
 
-        raw_path = save_dir / "rmd17"
         tar_path = save_dir / "rmd17.tar.gz"
         url = "https://figshare.com/ndownloader/files/23950376"
-        if not raw_path.exists():
+        if not tar_path.exists():
             logger.info("Downloading {} data".format(self.molecule))
             with requests.get(url, stream=True) as response:
                 response.raise_for_status()
                 with open(tar_path, "wb") as file:
                     for chunk in response.iter_content(chunk_size=8192):
                         file.write(chunk)
-        logger.info("Done.")
+            logger.info("Done.")
 
-        logger.info("Extracting data...")
-        tar = tarfile.open(tar_path)
-        tar.extract(
-            path=raw_path, member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}"
-        )
+        if not (save_dir / f"rmd17/npz_data/{self.datasets_dict[self.molecule]}").exists():
+            logger.info("Extracting data...")
+            tar = tarfile.open(tar_path)
+            tar.extract(
+                path=save_dir, member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}"
+            )
 
         logger.info("Parsing molecule {:s}".format(self.molecule))
 
         data = np.load(
-            raw_path / "rmd17" / "npz_data" / self.datasets_dict[self.molecule]
+            save_dir / "rmd17" / "npz_data" / self.datasets_dict[self.molecule]
         )
         return self.parse_data(data)
 
@@ -315,7 +315,7 @@ class rMD17(Dataset):
         ):
             frame = mpot.Frame()
             frame[alias.Z] = numbers
-            frame[alias.R] = torch.tensor(positions, dtype=Config.ftype)
+            frame[alias.R] = torch.tensor(positions, dtype=Config.ftype, requires_grad=True)
             frame["labels"]["energy"] = torch.tensor([energies - np.array(self.atomrefs['energy'])[numbers].sum()], dtype=Config.ftype)
             frame["labels"]["forces"] = torch.tensor(forces, dtype=Config.ftype)
             frame[alias.n_atoms] = torch.tensor([len(numbers)], dtype=Config.itype)

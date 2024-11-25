@@ -38,12 +38,11 @@ def _collate_frame(batch: Sequence[Frame]):
         pair_offset = torch.zeros(len(n_pairs), dtype=Config.itype)
         torch.cumsum(torch.flatten(n_pairs)[:-1], dim=0, out=pair_offset[1:]).to(Config.itype)
 
-
     coll_frame = coll_batch.apply(cancel_batch, batch_size=[])
-    coll_frame[alias.pair_i] = coll_frame[alias.pair_i] + atom_offset[pair_batch_mask]
-    coll_frame[alias.pair_j] = coll_frame[alias.pair_j] + atom_offset[pair_batch_mask]
     coll_frame[alias.atom_batch_mask] = atom_batch_mask
     coll_frame[alias.atom_offset] = atom_offset
+    coll_frame[alias.pair_i] = coll_frame[alias.pair_i] + atom_offset[pair_batch_mask]
+    coll_frame[alias.pair_j] = coll_frame[alias.pair_j] + atom_offset[pair_batch_mask]
     coll_frame[alias.pair_batch_mask] = pair_batch_mask
     coll_frame[alias.pair_offset] = pair_offset
     return coll_frame

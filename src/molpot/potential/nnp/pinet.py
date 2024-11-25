@@ -5,6 +5,7 @@ from .block import build_mlp
 from typing import Callable, Literal
 from molpot import NameSpace, alias
 from molpot_op.scatter import scatter_add
+from molpot_op import get_neighbor_pairs
 
 
 class FFLayer(nn.Module):
@@ -322,9 +323,14 @@ class PiNet(nn.Module):
         # get tensors from input dictionary
         Z = inputs[alias.Z]
         n_atoms = len(Z)
-        r_ij = inputs[alias.pair_diff]
-        d_ij = inputs[alias.pair_dist]
-        r_ij /= torch.norm(r_ij, dim=-1, keepdim=True)
+        # r_ij = inputs[alias.pair_diff]
+        # d_ij = inputs[alias.pair_dist]
+        # r_ij /= torch.norm(r_ij, dim=-1, keepdim=True)
+
+        out = torch.vmap(
+            get_neighbor_pairs, ()
+        )(inputs[alias.R], cutoff=5.0, box_vectors=inputs[alias.cell])
+
         inputs["pairs", "norm_diff"] = r_ij
 
         basis = self.basis_fn(d_ij)
