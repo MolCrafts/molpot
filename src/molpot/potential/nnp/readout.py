@@ -80,7 +80,25 @@ class Atomwise(nn.Module):
     
 class Derivative(nn.Module):
 
-    def __init__(self, fx_key, dx_key, to_key, create_graph=False, retain_graph=False):
+    def __init__(self, create_graph=False, retain_graph=True):
+        super().__init__()
+        self.create_graph = create_graph
+        self.retain_graph = retain_graph
+
+    def __call__(self, fx, dx):
+        dfdx = grad(
+            fx,
+            dx,
+            torch.ones((len(fx), ), device=fx.device),
+            create_graph=self.create_graph,
+            retain_graph=True,
+        )[0]
+        return dfdx
+
+    
+class DPairPot(nn.Module):
+
+    def __init__(self, fx_key:str, dx_key:str=alias.pair_dist, to_key:str=("predicts", "forces"), create_graph=False, retain_graph=True):
         super().__init__()
         self.fx_key = fx_key
         self.dx_key = dx_key
@@ -91,16 +109,48 @@ class Derivative(nn.Module):
     def forward(self, inputs):
         fx = inputs[self.fx_key]
         dx = inputs[self.dx_key]
-
         dfdx = grad(
             fx,
             dx,
-            torch.ones_like(fx),
+            torch.ones((len(fx), ), device=fx.device),
             create_graph=self.create_graph,
-            retain_graph=self.retain_graph,
+            retain_graph=True,
         )[0]
+        n_atoms = inputs[alias.R].shape[0]
+        dfdx = dfdx[:, None] * inputs['pairs', 'diff'] / inputs['pairs', 'dist'][:, None]
+        forces = torch.zeros((n_atoms, 3), device=fx.device)
+        forces.index_add_(0, inputs['pairs', 'i'], dfdx, alpha=-1)
 
-        inputs[self.to_key] = dfdx
+        inputs[self.to_key] = forces
+        return inputs
+    
+class DBondPot(nn.Module):
+
+    def __init__(self, fx_key:str, dx_key:str=alias.bond_dist, to_key:str=("predicts", "bond_forces"), create_graph=False, retain_graph=True):
+
+        super().__init__()
+        self.fx_key = fx_key
+        self.dx_key = dx_key
+        self.to_key = to_key
+        self.create_graph = create_graph
+        self.retain_graph = retain_graph
+
+    def __call__(self, inputs):
+        fx = inputs[self.fx_key]
+        dx = inputs[self.dx_key]
+        dfdx = grad(
+            fx,
+            dx,
+            torch.ones((len(fx), ), device=fx.device),
+            create_graph=self.create_graph,
+            retain_graph=True,
+        )[0]
+        n_atoms = inputs[alias.R].shape[0]
+        dfdx = dfdx[:, None] * inputs['bonds', 'diff'] / inputs['bonds', 'dist'][:, None]
+        forces = torch.zeros((n_atoms, 3), device=fx.device)
+        forces.index_add_(0, inputs['bonds', 'i'], dfdx, alpha=-1)
+
+        inputs[self.to_key] = forces
         return inputs
 
 

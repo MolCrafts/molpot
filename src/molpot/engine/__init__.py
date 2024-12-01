@@ -1,2 +1,1 @@
-from .trainer import PotentialTrainer
-from .utils import *
+from .potential import PotentialTrainer

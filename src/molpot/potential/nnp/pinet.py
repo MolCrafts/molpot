@@ -323,13 +323,11 @@ class PiNet(nn.Module):
         # get tensors from input dictionary
         Z = inputs[alias.Z]
         n_atoms = len(Z)
-        # r_ij = inputs[alias.pair_diff]
-        # d_ij = inputs[alias.pair_dist]
-        # r_ij /= torch.norm(r_ij, dim=-1, keepdim=True)
-
-        out = torch.vmap(
-            get_neighbor_pairs, ()
-        )(inputs[alias.R], cutoff=5.0, box_vectors=inputs[alias.cell])
+        r_ij = inputs[alias.pair_diff]
+        r_ij.requires_grad_(True)
+        d_ij = inputs[alias.pair_dist]
+        d_ij.requires_grad_(True)
+        r_ij = r_ij / torch.norm(r_ij, dim=-1, keepdim=True)
 
         inputs["pairs", "norm_diff"] = r_ij
 

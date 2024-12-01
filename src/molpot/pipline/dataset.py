@@ -26,7 +26,7 @@ class Dataset(torch.utils.data.Dataset):
         * Download / tokenize / process.
         * Clean and (maybe) save to disk.
         * Load inside Dataset.
-        * Apply transforms (rotate, tokenize, etc…).
+        * Apply processs (rotate, tokenize, etc…).
         * Wrap inside a DataLoader.
     """
 
@@ -38,7 +38,6 @@ class Dataset(torch.utils.data.Dataset):
         frames: list[mpot.Frame] = None,
         save_dir: Path | None = None,
         device: str = "cpu",
-        preprocess: list[Module] = [],
         total: int | None = None,
     ):
         super().__init__()
@@ -51,9 +50,9 @@ class Dataset(torch.utils.data.Dataset):
             self.save_dir = save_dir
         self.device = device
         self.labels = NameSpace(name)
-        self._preprocess = torch.nn.Sequential(*preprocess)
+        self._preprocess = torch.nn.Sequential()
 
-        self.transforms = torch.nn.Sequential()
+        self._processes = torch.nn.Sequential()
 
         self._frames = frames
         self._total = total or len(frames)
@@ -62,11 +61,11 @@ class Dataset(torch.utils.data.Dataset):
     def frames(self):
         return self._frames
 
-    def add_transform(self, transform):
-        self.transforms.append(transform)
+    def add_process(self, process):
+        self._processes.append(process)
 
-    def apply_transforms(self, frame):
-        return self.transforms(frame)
+    def apply_processs(self, frame):
+        return self._processes(frame)
 
     def prepare_data(self):
         pass
@@ -75,10 +74,10 @@ class Dataset(torch.utils.data.Dataset):
         return self._total
 
     def __iter__(self):
-        return iter(map(self.apply_transforms, self.frames))
+        return iter(map(self.apply_processs, self.frames))
 
     def __getitem__(self, index):
-        return self.apply_transforms(self._frames[index])
+        return self.apply_processs(self._frames[index])
 
     def reset(self):
         self.state = {}
@@ -205,15 +204,13 @@ class rMD17(Dataset):
         ],
         save_dir: str | Path,
         device: str = "cpu",
-        total: int = 1000,
-        preprocess: list[Module] = [],
+        total: int = 1000
     ):
         super().__init__(
             f"rmd17-{molecule}",
             None,
             save_dir,
             device,
-            preprocess=preprocess,
             total=total,
         )
         self.labels.set("energy", "total energy", float, "kcal/mol")
@@ -250,10 +247,10 @@ class rMD17(Dataset):
         return self.total
 
     def __getitem__(self, idx):
-        return self.apply_transforms(self.frames[idx])
+        return self.apply_processs(self.frames[idx])
 
     def __iter__(self):
-        return iter(map(self.apply_transforms, self.frames))
+        return iter(map(self.apply_processs, self.frames))
 
     @property
     def frames(self):

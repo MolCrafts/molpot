@@ -1,74 +1,18 @@
-import collections
 from functools import partial
-from typing import Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Iterable, Union
 
 import torch
-from ignite.engine import create_supervised_evaluator, create_supervised_trainer
-from ignite.engine.events import (
-    CallableEventWithFilter,
-    EventEnum,
-    Events,
-    EventsList,
-    RemovableEventHandle,
-    State,
-)
-from ignite.handlers import (
-    BasicTimeProfiler,
-    Checkpoint,
-    HandlersTimeProfiler,
-    ProgressBar,
-    TensorboardLogger,
-    Timer,
-    global_step_from_engine,
-)
+from ignite.engine import create_supervised_trainer
+from ignite.engine.events import EventEnum, Events, State
+from ignite.handlers import (BasicTimeProfiler, HandlersTimeProfiler,
+                             ProgressBar, TensorboardLogger,
+                             global_step_from_engine)
 from ignite.metrics import EpochWise, Metric, MetricUsage
-from ignite.utils import convert_tensor
-from tensordict import TensorDict
 
-from .base import MolpotEngine
-
-
-def convert_tensordict(
-    x: TensorDict,
-    device: Optional[Union[str, torch.device]] = None,
-    non_blocking: bool = False,
-) -> TensorDict:
-    """Move tensors to relevant device.
-
-    Args:
-        x: input tensor or mapping, or sequence of tensors.
-        device: device type to move ``x``.
-        non_blocking: convert a CPU Tensor with pinned memory to a CUDA Tensor
-            asynchronously with respect to the host if possible
-    """
-
-    return x.to(device=device, non_blocking=non_blocking)
-
-
-def _prepare_batch(
-    batch: TensorDict,
-    device: Optional[Union[str, torch.device]] = None,
-    non_blocking: bool = False,
-) -> Tuple[TensorDict, TensorDict]:
-    """Prepare batch for training or evaluation: pass to a device with options."""
-    return (
-        convert_tensordict(batch, device=device, non_blocking=non_blocking),  # data
-        convert_tensordict(
-            batch["labels"], device=device, non_blocking=non_blocking
-        ),  # y
-    )
-
-
-def trainer_output_transform(x, y, y_pred, loss):
-    return (y_pred, y, loss)
-
-
-def eval_output_transform(x, y, y_pred):
-    return (y_pred, y)
-
-
-def model_transform(output):
-    return output["predicts"]
+from ..base import MolpotEngine
+from .utils import (_prepare_batch, create_supervised_evaluator,
+                    eval_output_transform, model_transform,
+                    trainer_output_transform)
 
 
 class PotentialTrainer(MolpotEngine):
@@ -137,9 +81,9 @@ class PotentialTrainer(MolpotEngine):
 
     def add_evaluator(
         self,
-        dl=None,
-        max_epochs: int | None = None,
-        epoch_length: int | None = None,
+        dataloader=None,
+        event_name: EventEnum = Events.EPOCH_COMPLETED,
+        no_grad: bool = True,
     ) -> None:
         self.add_engine(
             "evaluator",
@@ -153,11 +97,12 @@ class PotentialTrainer(MolpotEngine):
                 output_transform=eval_output_transform,
                 amp_mode=self.amp_mode,
                 model_fn=self.model_fn,
+                no_grad=no_grad,
             ),
         )
         self.trainer.add_event_handler(
-            Events.EPOCH_COMPLETED,
-            lambda trainer: self.evaluator.run(dl, max_epochs, epoch_length),
+            event_name,
+            lambda trainer: self.evaluator.run(dataloader),
         )
 
     @property
