@@ -26,6 +26,9 @@ dev = [
     "pytest"
 ]
 
+[project.scripts]
+molpot = "molpot.cli.main:app"
+
 
 [project.urls]
 Homepage = "https://github.com/MolCrafts/molpot"

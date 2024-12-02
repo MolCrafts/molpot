@@ -1,12 +1,10 @@
-from functools import lru_cache
 import io
 import logging
 import random
 import tarfile
-import tempfile
 import time
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Sequence
 
 import numpy as np
 import requests
@@ -14,48 +12,56 @@ import torch
 from torch.nn import Module
 
 import molpot as mpot
-from molpot import NameSpace, alias, Config
-import shutil
+from molpot import Config, NameSpace, alias
 
 logger = logging.getLogger("molpot")
 
 
 class Dataset(torch.utils.data.Dataset):
-    """
-    Base class for all datasets. It includes 5 processes:
-        * Download / tokenize / process.
-        * Clean and (maybe) save to disk.
-        * Load inside Dataset.
-        * Apply processs (rotate, tokenize, etc…).
-        * Wrap inside a DataLoader.
-    """
 
     labels: NameSpace
 
     def __init__(
         self,
         name: str,
-        frames: list[mpot.Frame] = None,
         save_dir: Path | None = None,
+        dump_dir: Path | None = None,
         device: str = "cpu",
         total: int | None = None,
     ):
+        """
+        Modified torch.utils.data.Dataset.
+
+        Args:
+            name (str): name of the dataset
+            save_dir (Path | None, optional): determine where and if save original data. It should point to a directory or where will make a directory. Defaults to None.
+            dump_dir (Path | None, optional): determine where and if save processed data, in h5df format. Defaults to None.
+            device (str, optional): Defaults to "cpu".
+            total (int | None, optional): total  . Defaults to None.
+        """
         super().__init__()
         self.name = name
         if save_dir is not None:
-            save_dir = Path(save_dir)
-            if not save_dir.exists():
-                self.save_dir = Path(save_dir)
+            self.save_dir = Path(save_dir)
+            if not save_dir.exists():  # create save_dir
                 self.save_dir.mkdir(parents=True, exist_ok=True)
-            self.save_dir = save_dir
+        else:
+            self.save_dir = None
+
+        if dump_dir is not None:
+            self.dump_dir = Path(dump_dir)
+            if not dump_dir.exists():
+                self.dump_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            self.dump_dir = None
         self.device = device
         self.labels = NameSpace(name)
         self._preprocess = torch.nn.Sequential()
 
         self._processes = torch.nn.Sequential()
 
-        self._frames = frames
-        self._total = total or len(frames)
+        self._frames = list()
+        self._total = total or len(self._frames)
 
     @property
     def frames(self):
@@ -82,12 +88,17 @@ class Dataset(torch.utils.data.Dataset):
     def reset(self):
         self.state = {}
 
-    def split(self, *args, **kwargs):
-        return torch.utils.data.random_split(self, *args, **kwargs)
+    def split(self, lengths: Sequence[int | float], generators=None):
+        return torch.utils.data.random_split(
+            self, lengths=lengths, generator=generators
+        )
 
     def preprocess_data(self):
         self._frames = [self._preprocess(frame) for frame in self._frames]
         return self._frames
+    
+    def dump(self, dump_dir: Path):
+        frames = self._frames
 
 
 class QM9(Dataset):
@@ -202,15 +213,16 @@ class rMD17(Dataset):
             "toluene",
             "uracil",
         ],
-        save_dir: str | Path,
+        save_dir: Path | None = None,
+        dump_dir: Path | None = None,
         device: str = "cpu",
-        total: int = 1000
+        total: int = 1000,
     ):
         super().__init__(
             f"rmd17-{molecule}",
-            None,
-            save_dir,
-            device,
+            save_dir=save_dir,
+            dump_dir=dump_dir,
+            device=device,
             total=total,
         )
         self.labels.set("energy", "total energy", float, "kcal/mol")
@@ -258,11 +270,13 @@ class rMD17(Dataset):
 
     def prepare_data(self):
 
-        if self.save_dir is None or not self.save_dir.exists():
+        if self.save_dir is None:
             frames = self._fetch_data()
         else:
             frames = self._download_data(self.save_dir)
         self._frames = frames
+        if self.dump_dir is not None:
+            self.dump(self.dump_dir)
         return frames
 
     def _fetch_data(self):
@@ -290,11 +304,14 @@ class rMD17(Dataset):
                         file.write(chunk)
             logger.info("Done.")
 
-        if not (save_dir / f"rmd17/npz_data/{self.datasets_dict[self.molecule]}").exists():
+        if not (
+            save_dir / f"rmd17/npz_data/{self.datasets_dict[self.molecule]}"
+        ).exists():
             logger.info("Extracting data...")
             tar = tarfile.open(tar_path)
             tar.extract(
-                path=save_dir, member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}"
+                path=save_dir,
+                member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}",
             )
 
         logger.info("Parsing molecule {:s}".format(self.molecule))
@@ -312,8 +329,13 @@ class rMD17(Dataset):
         ):
             frame = mpot.Frame()
             frame[alias.Z] = numbers
-            frame[alias.R] = torch.tensor(positions, dtype=Config.ftype, requires_grad=True)
-            frame["labels"]["energy"] = torch.tensor([energies - np.array(self.atomrefs['energy'])[numbers].sum()], dtype=Config.ftype)
+            frame[alias.R] = torch.tensor(
+                positions, dtype=Config.ftype, requires_grad=True
+            )
+            frame["labels"]["energy"] = torch.tensor(
+                [energies - np.array(self.atomrefs["energy"])[numbers].sum()],
+                dtype=Config.ftype,
+            )
             frame["labels"]["forces"] = torch.tensor(forces, dtype=Config.ftype)
             frame[alias.n_atoms] = torch.tensor([len(numbers)], dtype=Config.itype)
             frame[alias.cell] = torch.zeros(3)
