@@ -23,7 +23,6 @@ class Dataset(torch.utils.data.Dataset):
 
     def __init__(
         self,
-        name: str,
         save_dir: Path | None = None,
         dump_dir: Path | None = None,
         device: str = "cpu",
@@ -40,7 +39,6 @@ class Dataset(torch.utils.data.Dataset):
             total (int | None, optional): total  . Defaults to None.
         """
         super().__init__()
-        self.name = name
         if save_dir is not None:
             self.save_dir = Path(save_dir)
             if not save_dir.exists():  # create save_dir
@@ -55,7 +53,7 @@ class Dataset(torch.utils.data.Dataset):
         else:
             self.dump_dir = None
         self.device = device
-        self.labels = NameSpace(name)
+        self.labels = NameSpace(self.__class__.__name__)
         self._preprocess = torch.nn.Sequential()
 
         self._processes = torch.nn.Sequential()
@@ -219,7 +217,6 @@ class rMD17(Dataset):
         total: int = 1000,
     ):
         super().__init__(
-            f"rmd17-{molecule}",
             save_dir=save_dir,
             dump_dir=dump_dir,
             device=device,
@@ -244,6 +241,9 @@ class rMD17(Dataset):
             toluene="rmd17_toluene.npz",
             uracil="rmd17_uracil.npz",
         )
+
+        self.archive_path = self.save_dir / "rmd17.tar.gz"
+        self.molecule_npz_path = self.save_dir / self.molecule / self.datasets_dict[self.molecule]
 
         molecules = list(self.datasets_dict.keys())
         if molecule not in molecules:
@@ -287,37 +287,35 @@ class rMD17(Dataset):
         rmd17_fobj.seek(0)
         rmd17_tar = tarfile.open(fileobj=rmd17_fobj, mode="r:bz2")
         data = np.load(
-            rmd17_tar.extractfile(f"rmd17/npz_data/{self.datasets_dict[self.molecule]}")
+            rmd17_tar.extractfile(self.molecule_npz_path)
         )
         return self.parse_data(data)
 
     def _download_data(self, save_dir: Path):
 
-        tar_path = save_dir / "rmd17.tar.gz"
         url = "https://figshare.com/ndownloader/files/23950376"
-        if not tar_path.exists():
+        if not self.archive_path.exists():
             logger.info("Downloading {} data".format(self.molecule))
             with requests.get(url, stream=True) as response:
                 response.raise_for_status()
-                with open(tar_path, "wb") as file:
+                with open(self.archive_path, "wb") as file:
                     for chunk in response.iter_content(chunk_size=8192):
                         file.write(chunk)
             logger.info("Done.")
 
-        if not (
-            save_dir / f"rmd17/npz_data/{self.datasets_dict[self.molecule]}"
-        ).exists():
+        if not self.molecule_npz_path.exists():
             logger.info("Extracting data...")
-            tar = tarfile.open(tar_path)
+            tar = tarfile.open(self.archive_path)
+            self.molecule_npz_path.parent.mkdir(parents=True, exist_ok=True)
             tar.extract(
-                path=save_dir,
+                path=self.molecule_npz_path,
                 member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}",
             )
 
         logger.info("Parsing molecule {:s}".format(self.molecule))
 
         data = np.load(
-            save_dir / "rmd17" / "npz_data" / self.datasets_dict[self.molecule]
+            self.molecule_npz_path
         )
         return self.parse_data(data)
 
