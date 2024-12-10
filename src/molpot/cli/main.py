@@ -8,9 +8,8 @@ app.add_typer(train, name="train")
 @app.callback(invoke_without_command=True)
 def default_welcome(ctx: typer.Context):
     version = "0.1.0"
-    typer.echo("# -------------")
     if ctx.invoked_subcommand is None:
-        typer.echo("""
+        typer.echo(r"""
                     __            __ 
    ____ ___  ____  / /___  ____  / /_
   / __ `__ \/ __ \/ / __ \/ __ \/ __/

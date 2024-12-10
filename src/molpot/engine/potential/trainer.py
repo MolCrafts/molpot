@@ -119,9 +119,16 @@ class PotentialTrainer(MolpotEngine):
         self,
         data: Iterable | None = None,
         max_epochs: int | None = None,
+        max_steps: int | None = None,
         epoch_length: int | None = None,
     ) -> State:
         state = self.trainer.run(data, max_epochs=max_epochs, epoch_length=epoch_length)
+        if max_steps:
+            @self.trainer.on(Events.ITERATION_STARTED)
+            def terminate_after_n_iterations(engine):
+                if engine.state.iteration >= max_steps:
+                    engine.terminate()
+
         for logger in self.loggers.values():
             logger.close()
         return state
