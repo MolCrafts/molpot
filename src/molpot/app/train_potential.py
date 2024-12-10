@@ -1,105 +1,89 @@
 import molpot as mpot
-from .config import ConfigProcessor
-from pydantic import BaseModel
-from ignite.metrics import MeanAbsoluteError, BatchWise
-from ignite.handlers import global_step_from_engine
-from ignite.handlers.tensorboard_logger import TensorboardLogger
-from ignite.engine.events import Events
-from pathlib import Path
+from .base import ConfigProcessor, MolPotApp
+from .utils import import_from
 
-class App(BaseModel):
-    ...
+class PotentialTrainingConfigProcessor(ConfigProcessor):
 
-
-class TrainPotential(App):
-
-    def __init__(self, model, optimizer, loss_fn, use_energy, use_forces, device):
-        super().__init__(
-            model=model,
-            optimizer=optimizer,
-            loss_fn=loss_fn,
-            use_energy=use_energy,
-            use_forces=use_forces,
-            device=device
-        )
+    def check_header(self, config):
+        return config
 
     def process(self):
+        
+        # now only single source and it's loader is supported
+        data_config = self.config["data"]
+        data_source_config = data_config["source"]
+        data_loader_config = data_config["loader"]
 
-        self.trainer = mpot.PotentialTrainer(
-            model=self.model,
-            optimizer=self.optimizer,
-            loss_fn=self.loss_fn,
-            device=self.device
-        )
+        model_config = self.config["model"]
+        trainer_config = self.config["trainer"]
 
-        if self.use_energy:
-            def get_energy(data):
-                return data[0]["energy"], data[1]["energy"]
-            self.trainer.add_metric("e_mae", MeanAbsoluteError(output_transform=get_energy),
-    target="all",
-    usage=BatchWise())
-            
-        if self.use_forces:
-            def get_forces(data):
-                return data[0]["forces"], data[1]["forces"]
-            self.trainer.add_metric(
-            "f_mae",
-            MeanAbsoluteError(output_transform=get_forces),
-            target="all",
-            usage=BatchWise(),
-        )
-            
-        self.trainer.attach_progressbar()
+        # should use a functional design?
+        dataset = self.init_dataset(data_source_config)
+        dataloaders = self.init_dataloader(data_loader_config, dataset)
+
+        model = self.init_model(model_config)
+
+        return dataset, dataloaders
+
+    def init_dataset(self, source_config: dict):
+
+        name = source_config["name"]
+        type_ = source_config["type"]
+        kwargs = source_config["kwargs"]
+
+        match type_:
+            case "builtin":
+                dataset_class = import_from(name, mpot.dataset)
+            case _:
+                raise NotImplementedError("Unknown dataset source")
+
+        dataset: mpot.Dataset = dataset_class(**kwargs)
+
+        preprocess_config = source_config.get("preprocess", [])
+
+        for proc in preprocess_config:
+            name = proc["name"]
+            kwargs = proc["kwargs"]
+            process_class = getattr(mpot.process, name)
+            dataset.add_process(process_class(**kwargs)) 
+
+        return dataset
+
+    def init_dataloader(self, loader_config: dict, dataset: mpot.Dataset):
+
+        if "split" in loader_config:
+
+            split_config = loader_config["split"]
+            loader_config: list[dict] = loader_config["loader"]
+            assert len(split_config) == len(
+                loader_config
+            ), "Number of splits and loaders do not match"
+
+            tmp = dataset.split(split_config.values())
+            subsets = {k: tmp[i] for i, k in enumerate(split_config.keys())}
+
+            subset_dataloaders = {
+                l["name"]: mpot.DataLoader(
+                    subsets[l["name"]], **loader_config["kwargs"]
+                )
+                for l in loader_config
+            }
+
+        else:
+            loader:dict = loader_config["loader"]
+            subset_dataloaders = {
+                loader["name"]: mpot.DataLoader(dataset, **loader_config["kwargs"])
+            }
+
+        return subset_dataloaders
+    
+    def init_model(self, model_config: dict):
+
+        ...
 
 
-        tb_logger = TensorboardLogger(Path("rmd17_log"))
-        tb_logger.attach_output_handler(
-            self.trainer.trainer,
-            event_name=Events.ITERATION_COMPLETED,
-            tag="trainer",
-            output_transform=lambda x: {"loss": x[-1]},
-            global_step_transform=global_step_from_engine(self.trainer.trainer),
-        )
+class PotentialTrainingApp(MolPotApp):
+    def __init__(self):
+        ...
 
-        metric_name = []
-        if self.use_energy:
-            metric_name.append("e_mae")
-        if self.use_forces:
-            metric_name.append("f_mae")
-            
-
-        tb_logger.attach_output_handler(
-            self.trainer.trainer,
-            event_name=Events.ITERATION_COMPLETED,
-            tag="trainer",
-            metric_names=["e_mae", "f_mae"],
-            global_step_transform=global_step_from_engine(self.trainer.trainer),
-        )
-
-        tb_logger.attach_output_handler(
-            self.trainer.evaluator,
-            event_name=Events.EPOCH_COMPLETED,
-            tag="evaluator",
-            metric_names=["e_mae", "f_mae"],
-            global_step_transform=global_step_from_engine(self.trainer.trainer),
-        )
-
-
-
-    @classmethod
-    def from_config(cls, config):
-        parser = ConfigProcessor(config)
-        ins = cls(
-            model=parser.model,
-            optimizer=parser.optimizer,
-            loss_fn=parser.loss_fn,
-            use_energy=parser.use_energy,
-            use_forces=parser.use_forces,
-            device=parser.device
-        )
-        return ins
-
-    def run(self, train_dl, max_epochs, eval_dl=None):
-        if eval_dl is not None:
-            self.trainer.add_evaluator(eval_dl, no_grad=False)
-        return self.trainer.run(train_dl, max_epochs)
+    
