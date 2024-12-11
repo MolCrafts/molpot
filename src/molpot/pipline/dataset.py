@@ -41,7 +41,7 @@ class Dataset(torch.utils.data.Dataset):
         super().__init__()
         if save_dir is not None:
             self.save_dir = Path(save_dir)
-            if not save_dir.exists():  # create save_dir
+            if not self.save_dir.exists():  # create save_dir
                 self.save_dir.mkdir(parents=True, exist_ok=True)
         else:
             self.save_dir = None
@@ -305,12 +305,13 @@ class rMD17(Dataset):
 
         if not self.molecule_npz_path.exists():
             logger.info("Extracting data...")
-            tar = tarfile.open(self.archive_path)
-            self.molecule_npz_path.parent.mkdir(parents=True, exist_ok=True)
-            tar.extract(
-                path=self.molecule_npz_path,
-                member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}",
-            )
+            # self.molecule_npz_path.parent.mkdir(parents=True, exist_ok=True)
+            with tarfile.open(self.archive_path) as tar:
+                tar.extract(
+                    path=self.molecule_npz_path.parent,
+                    member=f"rmd17/npz_data/{self.datasets_dict[self.molecule]}",
+                    filter = lambda member, path: member.replace(name=self.datasets_dict[self.molecule])
+                )
 
         logger.info("Parsing molecule {:s}".format(self.molecule))
 
