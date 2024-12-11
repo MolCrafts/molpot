@@ -2,17 +2,18 @@ from functools import partial
 from typing import Any, Callable, Iterable, Union
 
 import torch
-from ignite.engine import create_supervised_trainer
 from ignite.engine.events import EventEnum, Events, State
-from ignite.handlers import (BasicTimeProfiler, HandlersTimeProfiler,
-                             ProgressBar, TensorboardLogger,
-                             global_step_from_engine)
+from ignite.handlers import (
+    BasicTimeProfiler,
+    HandlersTimeProfiler,
+    ProgressBar,
+    TensorboardLogger,
+    global_step_from_engine,
+)
 from ignite.metrics import EpochWise, Metric, MetricUsage
 
 from ..base import MolpotEngine
-from .utils import (_prepare_batch, create_supervised_evaluator,
-                    eval_output_transform, model_transform,
-                    trainer_output_transform)
+from .utils import _prepare_batch, create_supervised_trainer, create_supervised_evaluator
 
 
 class PotentialTrainer(MolpotEngine):
@@ -25,10 +26,10 @@ class PotentialTrainer(MolpotEngine):
         device: Union[str, torch.device] | None = None,
         non_blocking: bool = False,
         prepare_batch: Callable = _prepare_batch,
-        model_transform: Callable[[Any], Any] = model_transform,
+        model_transform: Callable[[Any], Any] = lambda output: output,
         output_transform: Callable[
             [Any, Any, Any, torch.Tensor], Any
-        ] = trainer_output_transform,
+        ] = lambda output, loss: (output["pred"], output["label"]),
         deterministic: bool = False,
         amp_mode: str | None = None,
         scaler: Union[bool, "torch.cuda.amp.GradScaler"] = False,
@@ -38,13 +39,10 @@ class PotentialTrainer(MolpotEngine):
         super().__init__()
 
         self.model = model
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         self.loss_fn = loss_fn
         self.device = device
         self.non_blocking = non_blocking
-        self.prepare_batch = partial(
-            prepare_batch, device=device, non_blocking=non_blocking
-        )
         self.model_transform = model_transform
         self.output_transform = output_transform
         self.deterministic = deterministic
@@ -74,6 +72,26 @@ class PotentialTrainer(MolpotEngine):
                 model_fn=model_fn,
             ),
         )
+        self.add_engine(
+            "evaluator",
+            create_supervised_evaluator(
+                self.model,
+                metrics=None,
+                device=self.device,
+                non_blocking=self.non_blocking,
+                prepare_batch=self.prepare_batch,
+                model_transform=self.model_transform,
+                output_transform=eval_output_transform,
+                amp_mode=self.amp_mode,
+                model_fn=self.model_fn,
+                no_grad=no_grad,
+            ),
+        )
+        self.trainer.add_event_handler(
+            event_name,
+            lambda trainer: self.evaluator.run(dataloader),
+        )
+
 
     def compile(self):
         self.model = self.model.to(self.device)

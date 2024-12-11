@@ -22,18 +22,17 @@ class PotentialSeq(Potential):
         cls.name = name
         return super().__new__(cls)
     
-    def __init__(self, name, *modules, auto_force=False):
+    def __init__(self, name, *modules):
         super().__init__()
         self.potentials = nn.Sequential(*modules)
         self.post_process = nn.Sequential()
-        self.auto_force = auto_force
 
     def forward(self, inputs):
         for module in self.potentials:
             inputs = module(inputs)
         for module in self.post_process:
             inputs = module(inputs)
-        return inputs
+        return inputs['pred'], inputs['label']
     
     def __len__(self):
         return len(self.potentials)
