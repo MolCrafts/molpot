@@ -21,7 +21,7 @@ class DataInspector:
 
         console = Console()
         console.print(f"number of data: {self.dataset.total}")
-        table = Table(title=f"dataset: {self.dataset.name}", )
+        table = Table(title=f"dataset: {self.dataset.__class__.__name__}", )
         table.add_column("label", justify="center")
         table.add_column("type", justify="center")
         table.add_column("unit", justify="center")
