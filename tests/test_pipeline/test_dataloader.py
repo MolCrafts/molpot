@@ -1,13 +1,13 @@
 import pytest
 import torch
-from molpot.pipline.dataloader import _collate_frame
+from molpot.pipline.dataloader import _compact_collate, _nested_collate
 from molpot import alias, Config
 
 class TestDataLoader:
 
     @pytest.mark.parametrize("frames_fixture", ["gen_homogenous_frames", 
         "gen_heterogenous_frames"])
-    def test_collate_fn_on_homogeouns_frames(self, request, frames_fixture):
+    def test_compact_collate_fn(self, request, frames_fixture):
         
         frame_list = request.getfixturevalue(frames_fixture)
 
@@ -18,7 +18,7 @@ class TestDataLoader:
         nbonds = sum([len(frame[alias.bond_i]) for frame in frame_list])
 
         
-        frames = _collate_frame(frame_list)
+        frames = _compact_collate(frame_list)
         assert frames[alias.Z].shape == (natoms, )
         assert frames[alias.R].shape == (natoms, 3)
         assert frames[alias.cell].shape == (nframes*3, 3)
@@ -51,3 +51,27 @@ class TestDataLoader:
                 frames[alias.pair_j][pair_batch_mask] - atom_offset,
                 frame[alias.pair_j]
             )
+
+    @pytest.mark.parametrize("frames_fixture", ["gen_homogenous_frames", 
+        "gen_heterogenous_frames"])
+    def test_nested_collate_fn(self, request, frame_fixture):
+
+        frame_list = request.getfixturevalue(frame_fixture)
+
+        nframes = len(frame_list)
+        natom_list = torch.tensor([len(frame[alias.R]) for frame in frame_list])
+        natoms = sum(natom_list)
+        npairs = sum([len(frame[alias.pair_i]) for frame in frame_list])
+        nbonds = sum([len(frame[alias.bond_i]) for frame in frame_list])
+
+        
+        frames = _nested_collate(frame_list)
+        assert frames[alias.Z].shape == (natoms, )
+        assert frames[alias.R].shape == (natoms, 3)
+        assert frames[alias.cell].shape == (nframes*3, 3)
+
+        assert frames[alias.pair_i].shape == (npairs, )
+        assert frames[alias.pair_j].shape == (npairs, )
+
+        assert frames[alias.bond_i].shape == (nbonds, )
+        assert frames[alias.bond_j].shape == (nbonds, )

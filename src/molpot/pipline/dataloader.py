@@ -13,7 +13,7 @@ def cancel_batch(tensor_or_nested_tensor: torch.Tensor):
             return tensor_or_nested_tensor.reshape(-1, *tensor_or_nested_tensor.shape[2:])
     return tensor_or_nested_tensor.apply(cancel_batch, batch_size=[], call_on_nested=True)
 
-def _collate_frame(batch: Sequence[Frame]):
+def _compact_collate(batch: Sequence[Frame]):
 
     coll_batch = Frame.maybe_dense_stack(batch).densify()
     # batch_size = int(coll_batch.batch_size.numel())
@@ -47,10 +47,14 @@ def _collate_frame(batch: Sequence[Frame]):
     coll_frame[alias.pair_offset] = pair_offset
     return coll_frame
 
+def _nested_collate(batch: Sequence[Frame]):
+
+    ...
+
 
 class DataLoader(DataLoader):
 
     def __init__(self, *args, **kwargs):
         if "collate_fn" not in kwargs:
-            kwargs["collate_fn"] = _collate_frame
+            kwargs["collate_fn"] = _compact_collate
         super().__init__(*args, **kwargs)
