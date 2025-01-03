@@ -25,7 +25,7 @@ def cancel_batch(tensor_or_nested_tensor: torch.Tensor):
     )
 
 
-def _collate_frame(batch: Sequence[Frame]):
+def _compact_collate(batch: Sequence[Frame]):
 
     coll_batch = Frame.maybe_dense_stack(batch).densify()
     # batch_size = int(coll_batch.batch_size.numel())
@@ -69,6 +69,10 @@ def _collate_frame(batch: Sequence[Frame]):
     coll_frame[alias.atom_batch_mask] = atom_batch_mask
     coll_frame[alias.atom_offset] = atom_offset
     return coll_frame
+
+def _nested_collate(batch: Sequence[Frame]):
+
+    ...
 
 
 class MapAndCollate:

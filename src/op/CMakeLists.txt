@@ -18,6 +18,9 @@ set(SRC_FILES
     src/locality/neighbors/get_neighbor_pairs.cpp
     src/locality/neighbors/get_neighbor_pairs.cu
     src/locality/neighbors/neighbors.cpp
+    src/pot/pme/pme_cpu.cpp
+    src/pot/pme/pme_cuda.cu
+    src/pot/pme/pme.cpp
 )
 
 # Build the library
