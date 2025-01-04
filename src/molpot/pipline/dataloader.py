@@ -60,8 +60,12 @@ def _compact_collate(batch: Sequence[Frame]):
         torch.cumsum(torch.flatten(n_pairs)[:-1], dim=0, out=pair_offset[1:]).to(
             Config.itype
         )
-        coll_frame[alias.pair_i] = coll_frame[alias.pair_i] + atom_offset[pair_batch_mask]
-        coll_frame[alias.pair_j] = coll_frame[alias.pair_j] + atom_offset[pair_batch_mask]
+        coll_frame[alias.pair_i] = (
+            coll_frame[alias.pair_i] + atom_offset[pair_batch_mask]
+        )
+        coll_frame[alias.pair_j] = (
+            coll_frame[alias.pair_j] + atom_offset[pair_batch_mask]
+        )
         coll_frame[alias.pair_batch_mask] = pair_batch_mask
         coll_frame[alias.pair_offset] = pair_offset
 
@@ -70,9 +74,9 @@ def _compact_collate(batch: Sequence[Frame]):
     coll_frame[alias.atom_offset] = atom_offset
     return coll_frame
 
-def _nested_collate(batch: Sequence[Frame]):
 
-    ...
+def _nested_collate(batch: Sequence[Frame]):
+    return Frame.from_frames(batch)
 
 
 class MapAndCollate:
@@ -80,6 +84,7 @@ class MapAndCollate:
     collate.
     TODO: make this a standard utility in torchdata.nodes
     """
+
     def __init__(self, dataset, collate_fn):
         self.dataset = dataset
         self.collate_fn = collate_fn
@@ -87,7 +92,7 @@ class MapAndCollate:
     def __call__(self, batch_of_indices: list[int]):
         batch = [self.dataset[i] for i in batch_of_indices]
         return self.collate_fn(batch)
-    
+
 
 class DataLoader(tn.Loader):
 
@@ -100,7 +105,7 @@ class DataLoader(tn.Loader):
         pin_memory: bool = False,
         drop_last: bool = False,
         nodes: list[tn.BaseNode] = [],
-        collate_fn=_collate_frame,
+        collate_fn=_nested_collate,
     ):
         # Assume we're working with a map-style dataset
         assert hasattr(dataset, "__getitem__") and hasattr(dataset, "__len__")
@@ -138,6 +143,9 @@ class DataLoader(tn.Loader):
         # Insteaad, we wrap the node in a Loader, which is an iterable and handles reset. It
         # also provides state_dict and load_state_dict methods.
 
-        node = compose(*nodes)(node)
-        
+        # node = compose(*nodes)(node)
+        for _node in nodes:
+            _node.source = node
+            node = _node
+
         super().__init__(node)

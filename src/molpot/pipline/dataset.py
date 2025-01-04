@@ -14,6 +14,8 @@ from torch.nn import Module
 import molpot as mpot
 from molpot import Config, NameSpace, alias
 
+from tensordict import TensorDict
+
 from abc import abstractmethod
 
 logger = logging.getLogger("molpot")
@@ -169,7 +171,7 @@ class rMD17(MapStyleDataset):
         ],
         save_dir: Path | None = None,
         device: str = "cpu",
-        total: int|None = 1000,
+        total: int | None = 1000,
     ):
         super().__init__(
             name="rmd17",
@@ -268,14 +270,12 @@ class rMD17(MapStyleDataset):
         ):
             frame = mpot.Frame()
             frame[alias.Z] = numbers
-            frame[alias.R] = torch.tensor(
-                positions, dtype=Config.ftype, requires_grad=True
-            )
-            frame[self.labels.energy] = torch.tensor(
+            frame[alias.R] = torch.tensor(positions, dtype=torch.float32)
+            frame["labels", "energy"] = torch.tensor(
                 [energies - np.array(self.atomrefs["energy"])[numbers].sum()],
                 dtype=Config.ftype,
             )
-            frame[self.labels.forces] = torch.tensor(forces, dtype=Config.ftype)
+            frame["labels", "forces"] = torch.tensor(forces, dtype=Config.ftype)
             frame[alias.n_atoms] = torch.tensor([len(numbers)], dtype=Config.itype)
             frame[alias.cell] = torch.zeros(3)
             frame[alias.pbc] = torch.zeros(3, dtype=torch.bool)
