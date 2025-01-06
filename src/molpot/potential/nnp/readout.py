@@ -62,6 +62,9 @@ class Atomwise(nn.Module):
             activation=activation,
         )
         self.aggregation_mode = aggregation_mode
+        self.aggregate_op = {
+            "sum": torch.sum,
+        }
 
     def forward(self, inputs: dict[str, torch.Tensor]) -> tuple[dict, dict]:
         # predict atomwise contributions
@@ -73,11 +76,13 @@ class Atomwise(nn.Module):
 
         # aggregate
         if self.aggregation_mode is not None:  # TODO: only sum supported
-            y = scatter_add(y, inputs[alias.atom_batch_mask], dim=0)
+            # y = scatter_add(y, inputs[alias.atom_batch_mask], dim=0)
+            output = self.aggregate_op[self.aggregation_mode](y)
 
-        inputs[self.to_key] = torch.squeeze(y)
+        inputs[self.to_key] = torch.squeeze(output)
         return inputs
-    
+
+
 class Derivative(nn.Module):
 
     def __init__(self, create_graph=False, retain_graph=True):
@@ -89,16 +94,23 @@ class Derivative(nn.Module):
         dfdx = grad(
             fx,
             dx,
-            torch.ones((len(fx), ), device=fx.device),
+            torch.ones((len(fx),), device=fx.device),
             create_graph=self.create_graph,
             retain_graph=True,
         )[0]
         return dfdx
 
-    
+
 class DPairPot(nn.Module):
 
-    def __init__(self, fx_key:str, dx_key:str=alias.pair_dist, to_key:str=("predicts", "forces"), create_graph=False, retain_graph=True):
+    def __init__(
+        self,
+        fx_key: str,
+        dx_key: str = alias.pair_dist,
+        to_key: str = ("predicts", "forces"),
+        create_graph=False,
+        retain_graph=True,
+    ):
         super().__init__()
         self.fx_key = fx_key
         self.dx_key = dx_key
@@ -112,21 +124,31 @@ class DPairPot(nn.Module):
         dfdx = grad(
             fx,
             dx,
-            torch.ones((len(fx), ), device=fx.device),
+            torch.ones((len(fx),), device=fx.device),
             create_graph=self.create_graph,
             retain_graph=True,
         )[0]
         n_atoms = inputs[alias.R].shape[0]
-        dfdx = dfdx[:, None] * inputs['pairs', 'diff'] / inputs['pairs', 'dist'][:, None]
+        dfdx = (
+            dfdx[:, None] * inputs["pairs", "diff"] / inputs["pairs", "dist"][:, None]
+        )
         forces = torch.zeros((n_atoms, 3), device=fx.device)
-        forces.index_add_(0, inputs['pairs', 'i'], dfdx, alpha=-1)
+        forces.index_add_(0, inputs["pairs", "i"], dfdx, alpha=-1)
 
         inputs[self.to_key] = forces
         return inputs
-    
+
+
 class DBondPot(nn.Module):
 
-    def __init__(self, fx_key:str, dx_key:str=alias.bond_dist, to_key:str=("predicts", "bond_forces"), create_graph=False, retain_graph=True):
+    def __init__(
+        self,
+        fx_key: str,
+        dx_key: str = alias.bond_dist,
+        to_key: str = ("predicts", "bond_forces"),
+        create_graph=False,
+        retain_graph=True,
+    ):
 
         super().__init__()
         self.fx_key = fx_key
@@ -141,14 +163,16 @@ class DBondPot(nn.Module):
         dfdx = grad(
             fx,
             dx,
-            torch.ones((len(fx), ), device=fx.device),
+            torch.ones((len(fx),), device=fx.device),
             create_graph=self.create_graph,
             retain_graph=True,
         )[0]
         n_atoms = inputs[alias.R].shape[0]
-        dfdx = dfdx[:, None] * inputs['bonds', 'diff'] / inputs['bonds', 'dist'][:, None]
+        dfdx = (
+            dfdx[:, None] * inputs["bonds", "diff"] / inputs["bonds", "dist"][:, None]
+        )
         forces = torch.zeros((n_atoms, 3), device=fx.device)
-        forces.index_add_(0, inputs['bonds', 'i'], dfdx, alpha=-1)
+        forces.index_add_(0, inputs["bonds", "i"], dfdx, alpha=-1)
 
         inputs[self.to_key] = forces
         return inputs

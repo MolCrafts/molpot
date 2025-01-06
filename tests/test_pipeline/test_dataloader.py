@@ -1,6 +1,6 @@
 import pytest
 import torch
-from molpot.pipline.dataloader import _compact_collate, _nested_collate
+from molpot.pipeline.dataloader import _compact_collate, _nested_collate
 from molpot import alias, Config
 
 class TestDataLoader:

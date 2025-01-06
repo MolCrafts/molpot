@@ -104,7 +104,6 @@ class DataLoader(tn.Loader):
         num_workers: int = 0,
         pin_memory: bool = False,
         drop_last: bool = False,
-        nodes: list[tn.BaseNode] = [],
         collate_fn=_nested_collate,
     ):
         # Assume we're working with a map-style dataset
@@ -142,10 +141,5 @@ class DataLoader(tn.Loader):
         # on it to start a new Epoch.
         # Insteaad, we wrap the node in a Loader, which is an iterable and handles reset. It
         # also provides state_dict and load_state_dict methods.
-
-        # node = compose(*nodes)(node)
-        for _node in nodes:
-            _node.source = node
-            node = _node
 
         super().__init__(node)

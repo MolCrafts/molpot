@@ -1,72 +1,53 @@
-from molpot.utils.locality import get_neighbor_pairs
-from molpot import alias, Config
+from functools import partial
+
 import torch
-from .base import Process
+from molpot_op import get_neighbor_pairs
+from torch import nn
+
+from molpot import alias
 
 
-class NeighborList(Process):
-    def __init__(self, cutoff, max_num_pairs=-1, check_errors=False, padding=True):
+class NeighborList(nn.Module):
+
+    def __init__(
+        self,
+        cutoff: float,
+        max_num_pairs: int = -1,
+        check_errors: bool = False,
+        index_dtype: torch.dtype = torch.int32,
+        exclude_ii: bool = True,
+    ):
+        super().__init__()
         self.cutoff = cutoff
-        self.max_num_pairs = max_num_pairs
-        self.check_errors = check_errors
-        self.padding = padding
-
-    def __call__(self, tensordict):
-
-        cell = tensordict[alias.cell]
-        xyz = tensordict[alias.xyz]
-
-        if torch.allclose(cell, torch.zeros_like(cell)):
-            cell = None
-
-        neighbors, deltas, distances, number_found_pairs = get_neighbor_pairs(
-            xyz, self.cutoff, box_vectors=cell
+        self.kernel = partial(
+            get_neighbor_pairs, max_num_pairs=max_num_pairs, check_errors=check_errors
         )
-        if self.padding:
-            mask = neighbors[0] > -1
-            pair_i = neighbors[0][mask].to(torch.int64)
-            pair_j = neighbors[1][mask].to(torch.int64)
-            deltas = deltas[mask].to(Config.ftype)
-            distances = distances[mask].to(Config.ftype)
+        self.index_dtype = index_dtype
+        self.exclude_ii = exclude_ii
+
+    def forward(self, inputs):
+
+        xyz = inputs[alias.xyz]
+        if alias.cell not in inputs:
+            box = None
         else:
-            pair_i = neighbors[0].to(torch.int64)
-            pair_j = neighbors[1].to(torch.int64)
-            deltas = deltas.to(Config.ftype)
-            distances = distances.to(Config.ftype)
+            box = inputs[alias.cell]
 
-        tensordict[alias.pair_i] = pair_i  # for scatter
-        tensordict[alias.pair_j] = pair_j  # for scatter
-        tensordict[alias.pair_diff] = deltas
-        tensordict[alias.pair_dist] = distances
+        pairs, deltas, distances, n_pairs = self.kernel(
+            positions=xyz, box_vectors=box, cutoff=self.cutoff
+        )
+        pairs = pairs.to(dtype=self.index_dtype)
+        if self.exclude_ii:
+            mask = ~torch.isnan(distances)
+            pairs = pairs[:, mask]
+            deltas = deltas[mask]
+            distances = distances[mask]
+            n_pairs = mask.sum(dim=0)
 
-        return tensordict
+        inputs[alias.pair_i] = pairs[0]
+        inputs[alias.pair_j] = pairs[1]
+        inputs[alias.pair_diff] = deltas
+        inputs[alias.pair_dist] = distances
 
-class PeriodicWrapper(Process):
-    def __init__(self):
-        pass
-
-    @staticmethod
-    def wrap_diff(diff, cell):
-        """
-        wrap difference vectors to the primary cell
-
-        Args:
-            diff (torch.Tensor): difference vectors
-            cell (torch.Tensor): cell vectors
-        """
-        frac = torch.dot(diff, torch.inverse(cell))
-        frac = frac - torch.round(frac)
-        return torch.matmul(frac, cell)
-
-    def __call__(self, inputs):
-
-        if alias.bond_i in inputs:
-            bond_i = inputs[alias.bond_i]
-            bond_j = inputs[alias.bond_j]
-            cell = inputs[alias.cell]
-            bond_diff = inputs[alias.R][bond_i] - inputs[alias.R][bond_j]
-            bond_diff = self.wrap_diff(bond_diff, cell)
-            inputs[alias.bond_diff] = bond_diff
-            inputs[alias.bond_dist] = torch.norm(bond_diff, dim=-1)
+        inputs[alias.n_pairs] = torch.tensor([n_pairs], dtype=torch.int32)
         return inputs
-    

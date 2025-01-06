@@ -5,10 +5,10 @@ from .utils import *
 from . import alias, engine, inspector, process
 from .engine import PotentialTrainer
 from .inspector import DataInspector
-from .pipline import dataset
-from .pipline.dataloader import DataLoader
-from .pipline.dataset import Dataset
+from .pipeline import dataset
+from .pipeline.dataloader import DataLoader
+from .pipeline.dataset import Dataset
 from .potential import classic, nnp
-from .potential.base import Potential, PotentialDict, PotentialSeq
+from .potential.base import Potential, PotentialSeq
 from .statistic import Tracker
 from .metric import loss

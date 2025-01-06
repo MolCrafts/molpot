@@ -1,1 +1,1 @@
-from .nblist import *
+from .nblist import NeighborList

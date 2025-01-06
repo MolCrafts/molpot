@@ -9,12 +9,10 @@ from typing import Literal, Sequence, Any
 import numpy as np
 import requests
 import torch
-from torch.nn import Module
+from torch.nn import Module, Sequential
 
 import molpot as mpot
 from molpot import Config, NameSpace, alias
-
-from tensordict import TensorDict
 
 from abc import abstractmethod
 
@@ -23,9 +21,10 @@ logger = logging.getLogger("molpot")
 
 class Dataset(torch.utils.data.Dataset):
 
-    def __init__(self, name: str, save_dir: Path | None = None, device: str = "cpu"):
+    def __init__(self, name: str, save_dir: Path | None = None, device: str = "cpu", processes: list[Module] = []):
         self.labels: NameSpace = NameSpace(name)
         self.device = device
+        self._data_process = Sequential(*processes)
 
         if save_dir is not None:
             self.save_dir = Path(save_dir)
@@ -33,6 +32,9 @@ class Dataset(torch.utils.data.Dataset):
                 self.save_dir.mkdir(parents=True, exist_ok=True)
         else:
             self.save_dir = None
+
+    def process(self, frame: mpot.Frame) -> mpot.Frame:
+        return self._data_process(frame)
 
 
 class MapStyleDataset(Dataset):
@@ -172,11 +174,13 @@ class rMD17(MapStyleDataset):
         save_dir: Path | None = None,
         device: str = "cpu",
         total: int | None = 1000,
+        processes: list[Module] = [],
     ):
         super().__init__(
             name="rmd17",
             save_dir=save_dir,
             device=device,
+            processes=processes,
         )
         self.labels.set(
             "energy", "total energy", float, "kcal/mol", (None, 1), "labels"
@@ -220,7 +224,8 @@ class rMD17(MapStyleDataset):
             data = self._fetch_data()
         else:
             data = self._download_data()
-        self._frames = self.parse_data(data)
+        raw_frames = self.parse_data(data)
+        self._frames = [self.process(frame) for frame in raw_frames]
         return self._frames
 
     def _fetch_data(self) -> Sequence[mpot.Frame]:
@@ -277,8 +282,8 @@ class rMD17(MapStyleDataset):
             )
             frame["labels", "forces"] = torch.tensor(forces, dtype=Config.ftype)
             frame[alias.n_atoms] = torch.tensor([len(numbers)], dtype=Config.itype)
-            frame[alias.cell] = torch.zeros(3)
-            frame[alias.pbc] = torch.zeros(3, dtype=torch.bool)
+            # frame[alias.cell] = None  # no cell
+            # frame[alias.pbc] = torch.zeros(3, dtype=torch.bool)
             frames.append(frame)
             if len(frames) >= self.total:
                 break

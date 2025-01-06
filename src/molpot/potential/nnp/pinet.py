@@ -5,7 +5,6 @@ from .block import build_mlp
 from typing import Callable, Literal
 from molpot import NameSpace, alias
 from molpot_op.scatter import scatter_add
-from molpot_op import get_neighbor_pairs
 
 
 class FFLayer(nn.Module):
@@ -94,7 +93,7 @@ class PILayer(nn.Module):
         inter = torch.einsum(
             "pcb, pb->pc", inter.reshape(-1, prop_i.shape[-1], basis.shape[-1]), basis
         )  # pcb := (n_pairs, n_features, n_basis)
-        return inter[:, None, :]  # (n_pairs, n_features)
+        return inter  # (n_pairs, n_features)
 
 
 class IPLayer(nn.Module):
@@ -281,7 +280,7 @@ class PiNet(nn.Module):
         ii_nodes: list[int] = [16, 16],
         activation: Callable | None = F.tanh,
         max_atomtypes: int = 100,
-        rank: Literal[1, 3] = 3
+        rank: Literal[1, 3] = 3,
     ):
         super().__init__()
         pp_nodes = pp_nodes.copy()
@@ -313,7 +312,10 @@ class PiNet(nn.Module):
         self.before_gc_block_layer = nn.Linear(self.n_basis, pp_nodes[0])
 
         self.gc_blocks = nn.ModuleList(
-            [GCBlock(rank, pp_nodes, pi_nodes, ii_nodes, activation) for _ in range(depth)]
+            [
+                GCBlock(rank, pp_nodes, pi_nodes, ii_nodes, activation)
+                for _ in range(depth)
+            ]
         )
 
         self.res_update = ResUpdate()

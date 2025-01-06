@@ -111,10 +111,10 @@ class PotentialTrainer(MolpotEngine):
             raise ValueError("Evaluator not yet added to the trainer")
         return self._engines["evaluator"]
 
-    def add_lr_scheduler(self):
+    def add_lr_scheduler(self, scheduler):
         from ignite.handlers import LRScheduler
 
-        scheduler_handler = LRScheduler(self.optimizer)
+        scheduler_handler = LRScheduler(scheduler)
         self.trainer.add_event_handler(Events.ITERATION_STARTED, scheduler_handler)
 
     def add_checkpoint(
