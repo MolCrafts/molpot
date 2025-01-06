@@ -5,7 +5,7 @@ data/
 tmp/
 train_*/
 runs/
-log_*
+log*
 # ide
 .vscode/
 

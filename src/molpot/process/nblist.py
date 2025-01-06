@@ -46,8 +46,8 @@ class NeighborList(nn.Module):
 
         inputs[alias.pair_i] = pairs[0]
         inputs[alias.pair_j] = pairs[1]
-        inputs[alias.pair_diff] = deltas
-        inputs[alias.pair_dist] = distances
+        inputs[alias.pair_diff] = deltas.requires_grad_(True)
+        inputs[alias.pair_dist] = distances.requires_grad_(True)
 
         inputs[alias.n_pairs] = torch.tensor([n_pairs], dtype=torch.int32)
         return inputs

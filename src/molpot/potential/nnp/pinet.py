@@ -249,8 +249,8 @@ class GCBlock(nn.Module):
             prop_list.append(p3)
             n_prop_list.append(3)
 
-        prop_list = torch.concat(prop_list, dim=1)
-        prop_list = torch.split(prop_list, n_prop_list, dim=1)
+        # prop_list = torch.concat(prop_list, dim=1)
+        # prop_list = torch.split(prop_list, n_prop_list, dim=1)
         inputs["pinet", "p1"] = prop_list[0]
         if self.rank >= 3:
             p3t1 = self.scale_layer(p3, prop_list[1])
@@ -326,9 +326,9 @@ class PiNet(nn.Module):
         Z = inputs[alias.Z]
         n_atoms = len(Z)
         r_ij = inputs[alias.pair_diff]
-        r_ij.requires_grad_(True)
         d_ij = inputs[alias.pair_dist]
-        d_ij.requires_grad_(True)
+        inputs[alias.pair_i] = inputs[alias.pair_i].to(torch.int64) # for scatter
+        inputs[alias.pair_i] = inputs[alias.pair_j].to(torch.int64) 
         r_ij = r_ij / torch.norm(r_ij, dim=-1, keepdim=True)
 
         inputs["pairs", "norm_diff"] = r_ij

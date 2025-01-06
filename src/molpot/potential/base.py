@@ -11,7 +11,7 @@ class PotentialSeq(Potential, nn.Sequential):
     def __init__(self, name, *modules):
         super().__init__(*modules)
         self.name = name
-        self.kernel = torch.vmap(self.modules)
+        self.kernel = torch.vmap(self, in_dims=0)
         self.post_process = nn.Sequential()
 
     def forward(self, inputs):

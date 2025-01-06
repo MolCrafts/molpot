@@ -99,7 +99,7 @@ class DataLoader(tn.Loader):
     def __init__(
         self,
         dataset: Dataset,
-        batch_size: int,
+        batch_size: int = 1,
         shuffle: bool = True,
         num_workers: int = 0,
         pin_memory: bool = False,
@@ -124,18 +124,24 @@ class DataLoader(tn.Loader):
         # choose process or thread workers. Note that if you're not using Free-Threaded
         # Python (eg 3.13t) with -Xgil=0, then multi-threading might result in GIL contention,
         # and slow down training.
-        node = tn.ParallelMapper(
-            node,
-            map_fn=map_and_collate,
-            num_workers=num_workers,
-            method="process",  # Set this to "thread" for multi-threading
-            in_order=True,
-        )
+        if num_workers > 0:
+            node = tn.ParallelMapper(
+                node,
+                map_fn=map_and_collate,
+                num_workers=num_workers,
+                method="process",  # Set this to "thread" for multi-threading
+                in_order=True,
+            )
+            prefetch_factor=num_workers * 2
+        else:
+            node = tn.Mapper(node, map_fn=map_and_collate)
+            prefetch_factor=1
 
         # Optionally apply pin-memory, and we usually do some pre-fetching
         if pin_memory:
             node = tn.PinMemory(node)
-        node = tn.Prefetcher(node, prefetch_factor=num_workers * 2)
+        node = tn.Prefetcher(node, prefetch_factor=prefetch_factor)
+        
 
         # Note that node is an iterator, and once it's exhausted, you'll need to call .reset()
         # on it to start a new Epoch.
