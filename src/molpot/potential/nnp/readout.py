@@ -3,28 +3,31 @@ from typing import Callable, Sequence
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import grad
-
-from .block import build_mlp
 
 from molpot import alias
-from molpot_op.scatter import scatter_add
+
+from .block import build_mlp
 
 
 class Atomwise(nn.Module):
     """
     Predicts atom-wise contributions and accumulates global prediction, e.g. for the energy.
-
-    If `aggregation_mode` is None, only the per-atom predictions will be returned.
     """
+
+    reduce_op = {
+        "sum": torch.sum,
+        "avg": torch.mean,
+        "amax": torch.max,
+        "amin": torch.min,
+    }
 
     def __init__(
         self,
+        from_key: str,
+        to_key: str,
         n_neurons: list[int],
         activation: Callable = F.silu,
-        aggregation_mode: str = "sum",
-        from_key: str = "scalar_representation",
-        to_key: str = "y",
+        reduce: str = "sum",
         per_atom_output_key: str | None = None,
     ):
         """
@@ -51,66 +54,44 @@ class Atomwise(nn.Module):
         assert len(n_neurons) > 1, ValueError("Need at least one in and one out layer")
         self.n_out = n_neurons[-1]
 
-        if aggregation_mode is None and self.per_atom_output_key is None:
-            raise ValueError(
-                "If `aggregation_mode` is None, `per_atom_output_key` needs to be set,"
-                + " since no accumulated output will be returned!"
-            )
-
         self.outnet = build_mlp(
             *n_neurons,
             activation=activation,
         )
-        self.aggregation_mode = aggregation_mode
-        self.aggregate_op = {
-            "sum": torch.sum,
-        }
+        self.reduce = reduce
 
     def forward(self, inputs: dict[str, torch.Tensor]) -> tuple[dict, dict]:
         # predict atomwise contributions
-        y = self.outnet(inputs[self.from_key])
+        y = self.outnet(inputs[self.from_key])  # (n_atoms, n_out)
 
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:
             inputs[self.per_atom_output_key] = y
 
-        # aggregate
-        if self.aggregation_mode is not None:  # TODO: only sum supported
-            # y = scatter_add(y, inputs[alias.atom_batch_mask], dim=0)
-            output = self.aggregate_op[self.aggregation_mode](y)
-
-        inputs[self.to_key] = torch.squeeze(output)
+        inputs[self.to_key] = self.reduce_op[self.reduce](y, dim=0)
         return inputs
 
 
 class Derivative(nn.Module):
 
-    def __init__(self, create_graph=False, retain_graph=True):
-        super().__init__()
-        self.create_graph = create_graph
-        self.retain_graph = retain_graph
-
-    def __call__(self, fx, dx):
-        dfdx = grad(
-            fx,
-            dx,
-            torch.ones((len(fx),), device=fx.device),
-            create_graph=self.create_graph,
-            retain_graph=True,
-        )[0]
-        return dfdx
-
-
-class DPairPot(nn.Module):
-
     def __init__(
         self,
         fx_key: str,
-        dx_key: str = alias.pair_dist,
-        to_key: str = ("predicts", "forces"),
+        dx_key: str,
+        to_key: str,
         create_graph=False,
         retain_graph=True,
     ):
+        """
+        Derivate `fx_key` w.r.t. `dx_key` and store the result in `to_key`. `retrain_graph` is set to True if need to compute higher order derivatives or derivate multiple times.
+
+        Args:
+            fx_key (str): _description_
+            dx_key (str): _description_
+            to_key (str): _description_
+            create_graph (bool, optional): _description_. Defaults to False.
+            retain_graph (bool, optional): _description_. Defaults to True.
+        """
         super().__init__()
         self.fx_key = fx_key
         self.dx_key = dx_key
@@ -119,265 +100,24 @@ class DPairPot(nn.Module):
         self.retain_graph = retain_graph
 
     def forward(self, inputs):
-        fx = inputs[self.fx_key]
-        dx = inputs[self.dx_key]
-        dfdx = grad(
-            fx,
-            dx,
-            torch.ones((len(fx),), device=fx.device),
-            create_graph=self.create_graph,
-            retain_graph=True,
-        )[0]
-        n_atoms = inputs[alias.R].shape[0]
-        dfdx = (
-            dfdx[:, None] * inputs["pairs", "diff"] / inputs["pairs", "dist"][:, None]
-        )
-        forces = torch.zeros((n_atoms, 3), device=fx.device)
-        forces.index_add_(0, inputs["pairs", "i"], dfdx, alpha=-1)
+        # fx = inputs[self.fx_key]
+        # dx = inputs[self.dx_key]
+        # dfdx = torch.autograd.grad(
+        #     fx,
+        #     dx,
+        #     create_graph=self.create_graph,
+        #     retain_graph=True,
+        # )[0]
 
-        inputs[self.to_key] = forces
+        # def _batch(dfdx, pairs, diff, dist):
+        #     return torch.index_add(
+        #         torch.zeros_like(inputs[alias.R][0]), 0, pairs, dfdx, alpha=-1
+        #     )
+
+        # inputs[self.to_key] = torch.vmap(_batch, (0, 0, 0, 0))(
+        #     dfdx, inputs["pairs", "i"], inputs["pairs", "diff"], inputs["pairs", "dist"]
+        # )
+
+        
+
         return inputs
-
-
-class DBondPot(nn.Module):
-
-    def __init__(
-        self,
-        fx_key: str,
-        dx_key: str = alias.bond_dist,
-        to_key: str = ("predicts", "bond_forces"),
-        create_graph=False,
-        retain_graph=True,
-    ):
-
-        super().__init__()
-        self.fx_key = fx_key
-        self.dx_key = dx_key
-        self.to_key = to_key
-        self.create_graph = create_graph
-        self.retain_graph = retain_graph
-
-    def __call__(self, inputs):
-        fx = inputs[self.fx_key]
-        dx = inputs[self.dx_key]
-        dfdx = grad(
-            fx,
-            dx,
-            torch.ones((len(fx),), device=fx.device),
-            create_graph=self.create_graph,
-            retain_graph=True,
-        )[0]
-        n_atoms = inputs[alias.R].shape[0]
-        dfdx = (
-            dfdx[:, None] * inputs["bonds", "diff"] / inputs["bonds", "dist"][:, None]
-        )
-        forces = torch.zeros((n_atoms, 3), device=fx.device)
-        forces.index_add_(0, inputs["bonds", "i"], dfdx, alpha=-1)
-
-        inputs[self.to_key] = forces
-        return inputs
-
-
-# class DipoleMoment(nn.Module):
-#     """
-#     Predicts dipole moments from latent partial charges and (optionally) local, atomic dipoles.
-#     The latter requires a representation supplying (equivariant) vector features.
-
-#     References:
-
-#     .. [#painn1] Schütt, Unke, Gastegger.
-#        Equivariant message passing for the prediction of tensorial Alias and molecular spectra.
-#        ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
-#     .. [#irspec] Gastegger, Behler, Marquetand.
-#        Machine learning molecular dynamics for the simulation of infrared spectra.
-#        Chemical science 8.10 (2017): 6924-6935.
-#     .. [#dipole] Veit et al.
-#        Predicting molecular dipole moments by combining atomic partial charges and atomic dipoles.
-#        The Journal of Chemical Physics 153.2 (2020): 024113.
-#     """
-
-#     def __init__(
-#         self,
-#         n_in: int,
-#         n_hidden: int | Sequence[int] | None = None,
-#         n_layers: int = 2,
-#         activation: Callable = F.silu,
-#         predict_magnitude: bool = False,
-#         return_charges: bool = False,
-#         dipole_key: str = Alias.dipole_moment,
-#         charges_key: str = Alias.partial_charges,
-#         correct_charges: bool = True,
-#         use_vector_representation: bool = False,
-#     ):
-#         """
-#         Args:
-#             n_in: input dimension of representation
-#             n_hidden: size of hidden layers.
-#                 If an integer, same number of node is used for all hidden layers
-#                 resulting in a rectangular network.
-#                 If None, the number of neurons is divided by two after each layer
-#                 starting n_in resulting in a pyramidal network.
-#             n_layers: number of layers.
-#             activation: activation function
-#             predict_magnitude: If true, calculate magnitude of dipole
-#             return_charges: If true, return latent partial charges
-#             dipole_key: the key under which the dipoles will be stored
-#             charges_key: the key under which partial charges will be stored
-#             correct_charges: If true, forces the sum of partial charges to be the total
-#                 charge, if provided, and zero otherwise.
-#             use_vector_representation: If true, use vector representation to predict
-#                 local, atomic dipoles.
-#         """
-#         super().__init__()
-
-#         self.dipole_key = dipole_key
-#         self.charges_key = charges_key
-#         self.return_charges = return_charges
-#         self.model_outputs = [dipole_key]
-#         if self.return_charges:
-#             self.model_outputs.append(charges_key)
-
-#         self.predict_magnitude = predict_magnitude
-#         self.use_vector_representation = use_vector_representation
-#         self.correct_charges = correct_charges
-
-#         if use_vector_representation:
-#             self.outnet = build_gated_equivariant_mlp(
-#                 n_in=n_in,
-#                 n_out=1,
-#                 n_hidden=n_hidden,
-#                 n_layers=n_layers,
-#                 activation=activation,
-#                 sactivation=activation,
-#             )
-#         else:
-#             self.outnet = build_mlp(
-#                 n_in=n_in,
-#                 n_out=1,
-#                 n_hidden=n_hidden,
-#                 n_layers=n_layers,
-#                 activation=activation,
-#             )
-
-#     def forward(self, inputs):
-#         positions = inputs[Alias.R]
-#         l0 = inputs["scalar_representation"]
-#         natoms = inputs[Alias.n_atoms]
-#         idx_m = inputs[Alias.idx_m]
-#         maxm = int(idx_m[-1]) + 1
-
-#         if self.use_vector_representation:
-#             l1 = inputs["vector_representation"]
-#             charges, atomic_dipoles = self.outnet((l0, l1))
-#             atomic_dipoles = torch.squeeze(atomic_dipoles, -1)
-#         else:
-#             charges = self.outnet(l0)
-#             atomic_dipoles = 0.0
-
-#         if self.correct_charges:
-#             sum_charge = scatter_add(charges, idx_m, dim=0, dim_size=maxm)
-
-#             if Alias.total_charge in inputs:
-#                 total_charge = inputs[Alias.total_charge][:, None]
-#             else:
-#                 total_charge = torch.zeros_like(sum_charge)
-
-#             charge_correction = (total_charge - sum_charge) / natoms.unsqueeze(-1)
-#             charge_correction = charge_correction[idx_m]
-#             charges = charges + charge_correction
-
-#         if self.return_charges:
-#             inputs[self.charges_key] = charges
-
-#         y = positions * charges
-#         if self.use_vector_representation:
-#             y = y + atomic_dipoles
-
-#         # sum over atoms
-#         y = scatter_add(y, idx_m, dim_size=maxm)
-
-#         if self.predict_magnitude:
-#             y = torch.norm(y, dim=1, keepdim=False)
-
-#         inputs[self.dipole_key] = y
-#         return inputs
-
-
-# class Polarizability(nn.Module):
-#     """
-#     Predicts polarizability tensor using tensor rank factorization.
-#     This requires an equivariant representation, e.g. PaiNN, that provides both scalar and vectorial features.
-
-#     References:
-
-#     .. [#painn1a] Schütt, Unke, Gastegger:
-#        Equivariant message passing for the prediction of tensorial Alias and molecular spectra.
-#        ICML 2021, http://proceedings.mlr.press/v139/schutt21a.html
-#     """
-
-#     def __init__(
-#         self,
-#         n_in: int,
-#         n_hidden: int | Sequence[int] | None = None,
-#         n_layers: int = 2,
-#         activation: Callable = F.silu,
-#         polarizability_key: str = Alias.polarizability,
-#     ):
-#         """
-#         Args:
-#             n_in: input dimension of representation
-#             n_hidden: size of hidden layers.
-#                 If an integer, same number of node is used for all hidden layers resulting
-#                 in a rectangular network.
-#                 If None, the number of neurons is divided by two after each layer starting
-#                 n_in resulting in a pyramidal network.
-#             n_layers: number of layers.
-#             activation: activation function
-#             polarizability_key: the key under which the predicted polarizability will be stored
-#         """
-#         super(Polarizability, self).__init__()
-#         self.n_in = n_in
-#         self.n_layers = n_layers
-#         self.n_hidden = n_hidden
-#         self.polarizability_key = polarizability_key
-#         self.model_outputs = [polarizability_key]
-
-#         self.outnet = build_gated_equivariant_mlp(
-#             n_in=n_in,
-#             n_out=1,
-#             n_hidden=n_hidden,
-#             n_layers=n_layers,
-#             activation=activation,
-#             sactivation=activation,
-#         )
-
-#         self.requires_dr = False
-#         self.requires_stress = False
-
-#     def forward(self, inputs):
-#         positions = inputs[Alias.R]
-#         l0 = inputs["scalar_representation"]
-#         l1 = inputs["vector_representation"]
-#         dim = l1.shape[-2]
-
-#         l0, l1 = self.outnet((l0, l1))
-
-#         # isotropic on diagonal
-#         alpha = l0[..., 0:1]
-#         size = list(alpha.shape)
-#         size[-1] = dim
-#         alpha = alpha.expand(*size)
-#         alpha = torch.diag_embed(alpha)
-
-#         # add anisotropic components
-#         mur = l1[..., None, 0] * positions[..., None, :]
-#         alpha_c = mur + mur.transpose(-2, -1)
-#         alpha = alpha + alpha_c
-
-#         # sum over atoms
-#         idx_m = inputs[Alias.idx_m]
-#         maxm = int(idx_m[-1]) + 1
-#         alpha = scatter_add(alpha, idx_m, dim=0, dim_size=maxm)
-
-#         inputs[self.polarizability_key] = alpha
-#         return inputs

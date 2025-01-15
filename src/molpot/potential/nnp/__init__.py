@@ -5,4 +5,3 @@ from .equivariant import *
 from .pinet import *
 from .radial import *
 from .readout import *
-from .schnet import *
