@@ -1,7 +1,6 @@
-from molpot.potential.base import Potential
 import torch
 
-class Harmonic(Potential):
+class Harmonic(torch.nn.Module):
 
     name = "AngleHarmonic"
 

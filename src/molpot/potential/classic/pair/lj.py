@@ -1,9 +1,6 @@
 import torch
-from molpot.potential.base import Potential
-from molpot import alias
 
-
-class LJ126(Potential):
+class LJ126(torch.nn.Module):
 
     name = "LJ126"
 

@@ -14,6 +14,9 @@ class Atomwise(nn.Module):
     Predicts atom-wise contributions and accumulates global prediction, e.g. for the energy.
     """
 
+    in_keys = []
+    out_keys = []
+
     reduce_op = {
         "sum": torch.sum,
         "avg": torch.mean,
@@ -23,8 +26,8 @@ class Atomwise(nn.Module):
 
     def __init__(
         self,
-        from_key: str,
-        to_key: str,
+        in_keys: str,
+        out_keys: str,
         n_neurons: list[int],
         activation: Callable = F.silu,
         reduce: str = "sum",
@@ -41,13 +44,13 @@ class Atomwise(nn.Module):
                 n_in resulting in a pyramidal network.
             n_layers: number of layers.
             aggregation_mode: one of {sum, avg} (default: sum)
-            to_key: the key under which the result will be stored
+            out_keys: the key under which the result will be stored
             per_atom_output_key: If not None, the key under which the per-atom result will be stored
         """
         super().__init__()
-        self.from_key = from_key
-        self.to_key = to_key
-        self.model_outputs = [to_key]
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+        self.model_outputs = [out_keys]
         self.per_atom_output_key = per_atom_output_key
         if self.per_atom_output_key is not None:
             self.model_outputs.append(self.per_atom_output_key)
@@ -60,16 +63,16 @@ class Atomwise(nn.Module):
         )
         self.reduce = reduce
 
-    def forward(self, inputs: dict[str, torch.Tensor]) -> tuple[dict, dict]:
+    def forward(self, *inputs) -> tuple[dict, dict]:
         # predict atomwise contributions
-        y = self.outnet(inputs[self.from_key])  # (n_atoms, n_out)
+        y = self.outnet(inputs[0])  # (n_atoms, n_out)
 
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:
             inputs[self.per_atom_output_key] = y
 
-        inputs[self.to_key] = self.reduce_op[self.reduce](y, dim=0)
-        return inputs
+        result = self.reduce_op[self.reduce](y, dim=0)
+        return result
 
 
 class Derivative(nn.Module):
@@ -78,45 +81,45 @@ class Derivative(nn.Module):
         self,
         fx_key: str,
         dx_key: str,
-        to_key: str,
+        out_keys: str,
         create_graph=False,
         retain_graph=True,
     ):
         """
-        Derivate `fx_key` w.r.t. `dx_key` and store the result in `to_key`. `retrain_graph` is set to True if need to compute higher order derivatives or derivate multiple times.
+        Derivate `fx_key` w.r.t. `dx_key` and store the result in `out_keys`. `retrain_graph` is set to True if need to compute higher order derivatives or derivate multiple times.
 
         Args:
             fx_key (str): _description_
             dx_key (str): _description_
-            to_key (str): _description_
+            out_keys (str): _description_
             create_graph (bool, optional): _description_. Defaults to False.
             retain_graph (bool, optional): _description_. Defaults to True.
         """
         super().__init__()
         self.fx_key = fx_key
         self.dx_key = dx_key
-        self.to_key = to_key
+        self.out_keys = out_keys
         self.create_graph = create_graph
         self.retain_graph = retain_graph
 
     def forward(self, inputs):
-        # fx = inputs[self.fx_key]
-        # dx = inputs[self.dx_key]
-        # dfdx = torch.autograd.grad(
-        #     fx,
-        #     dx,
-        #     create_graph=self.create_graph,
-        #     retain_graph=True,
-        # )[0]
+        fx = inputs[self.fx_key]
+        dx = inputs[self.dx_key]
+        dfdx, = torch.autograd.grad(
+            fx,
+            dx,
+            create_graph=self.create_graph,
+            retain_graph=True
+        )
 
-        # def _batch(dfdx, pairs, diff, dist):
-        #     return torch.index_add(
-        #         torch.zeros_like(inputs[alias.R][0]), 0, pairs, dfdx, alpha=-1
-        #     )
+        def _batch(dfdx, pairs, diff, dist):
+            return torch.index_add(
+                torch.zeros_like(inputs[alias.R][0]), 0, pairs, dfdx, alpha=-1
+            )
 
-        # inputs[self.to_key] = torch.vmap(_batch, (0, 0, 0, 0))(
-        #     dfdx, inputs["pairs", "i"], inputs["pairs", "diff"], inputs["pairs", "dist"]
-        # )
+        inputs[self.out_keys] = torch.vmap(_batch, (0, 0, 0, 0))(
+            dfdx, inputs["pairs", "i"], inputs["pairs", "diff"], inputs["pairs", "dist"]
+        )
 
         
 

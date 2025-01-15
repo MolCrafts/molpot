@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from .block import build_mlp
 from typing import Callable, Literal
 from molpot import NameSpace, alias
-
+from tensordict.nn import TensorDictModule
 
 class FFLayer(nn.Module):
     r"""`FFLayer` is a shortcut to create a multi-layer perceptron (MLP) or a
@@ -230,37 +230,31 @@ class GCBlock(nn.Module):
         super().__init__()
         self.rank = rank
         self.p1_layer = InvarLayer(pp_nodes, pi_nodes, ii_nodes, activation)
-        self.p3_layer = EqvarLayer([pp_nodes[0], pp_nodes[-1]])
+        # self.p3_layer = EqvarLayer([pp_nodes[0], pp_nodes[-1]])
 
-        self.scale_layer = ScaleLayer()
-        self.dot_layer = SelfDotLayer()
+        # self.scale_layer = ScaleLayer()
+        # self.dot_layer = SelfDotLayer()
 
-    def forward(self, inputs) -> dict[str, torch.Tensor]:
-        pair_i = inputs[alias.pair_i]
-        pair_j = inputs[alias.pair_j]
-        basis = inputs["pinet", "basis"]
-        p1 = inputs["pinet", "p1"]
+    def forward(self, p1, pair_i, pair_j, basis) -> dict[str, torch.Tensor]:
         p1, i1 = self.p1_layer(pair_i, pair_j, p1, basis)
-        # inputs["pinet", "p1"] = p1
-        inputs["pinet", "i1"] = i1
-        prop_list = [p1]
-        n_prop_list = [1]
-        if self.rank >= 3:
-            p3 = inputs["pinet", "p3"]
-            diff_p3 = inputs["pairs", "norm_diff"]
-            p3, i3 = self.p3_layer(pair_i, pair_j, p3, diff_p3, i1)
-            inputs["pinet", "i3"] = i3
-            prop_list.append(p3)
-            n_prop_list.append(3)
+        # prop_list = [p1]
+        # n_prop_list = [1]
+        # if self.rank >= 3:
+        #     p3 = inputs["pinet", "p3"]
+        #     diff_p3 = inputs["pairs", "norm_diff"]
+        #     p3, i3 = self.p3_layer(pair_i, pair_j, p3, diff_p3, i1)
+        #     inputs["pinet", "i3"] = i3
+        #     prop_list.append(p3)
+        #     n_prop_list.append(3)
 
         # prop_list = torch.concat(prop_list, dim=1)
         # prop_list = torch.split(prop_list, n_prop_list, dim=1)
-        inputs["pinet", "p1"] = prop_list[0]
-        if self.rank >= 3:
-            p3t1 = self.scale_layer(p3, prop_list[1])
-            inputs["pinet", "p3"] = p3t1
+        # inputs["pinet", "p1"] = prop_list[0]
+        # if self.rank >= 3:
+        #     p3t1 = self.scale_layer(p3, prop_list[1])
+        #     inputs["pinet", "p3"] = p3t1
 
-        return inputs
+        return p1, i1
 
 
 class ResUpdate(nn.Module):
@@ -273,6 +267,9 @@ class ResUpdate(nn.Module):
 
 
 class PiNet(nn.Module):
+
+    in_keys = [alias.Z, alias.pair_diff, alias.pair_i, alias.pair_j]
+    out_keys = [("pinet", "p1"), ("pinet", "i1")]
 
     def __init__(
         self,
@@ -325,38 +322,36 @@ class PiNet(nn.Module):
 
         self.res_update = ResUpdate()
 
-    def forward(self, inputs: dict[str, torch.Tensor]) -> None:
+    def forward(self, Z, pair_diff, pair_i, pair_j) -> None:
 
-        # get tensors from input dictionary
-        Z = inputs[alias.Z]
-        n_atoms = len(Z)
-        r_ij = inputs[alias.pair_diff]
-        # d_ij = inputs[alias.pair_dist]
-        d_ij = torch.norm(r_ij, dim=-1)
-        inputs[alias.pair_i] = inputs[alias.pair_i].to(torch.int64) # for scatter
-        inputs[alias.pair_i] = inputs[alias.pair_j].to(torch.int64) 
-        r_ij = r_ij / d_ij[:, None]
+        # n_atoms = len(Z)
+        pair_dist = torch.norm(pair_diff, dim=-1)
+        pair_i = pair_i.to(torch.int64) # for scatter
+        pair_j = pair_j.to(torch.int64) 
+        norm_pair_diff = pair_diff / pair_dist[:, None]
+        # inputs['pairs', 'norm_diff'] = norm_pair_diff
 
-        inputs["pairs", "norm_diff"] = r_ij
+        basis = self.basis_fn(pair_dist)
+        fc = self.cutoff_fn(pair_dist)
 
-        basis = self.basis_fn(d_ij)
-        fc = self.cutoff_fn(d_ij)
-
-        inputs["pinet", "basis"] = basis * fc[..., None]
+        basis = basis * fc[..., None]
+        # inputs['pinet', 'basis'] = basis
         p1 = self.embedding(Z)
 
         p1 = self.before_gc_block_layer(p1)
-        if self.rank >= 3:
-            p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], device=p1.device)
-            inputs["pinet", "p3"] = p3
+        # if self.rank >= 3:
+        #     p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], device=p1.device)
+            # inputs["pinet", "p3"] = p3
 
-        inputs["pinet", "p1"] = p1
+        # inputs["pinet", "p1"] = p1
         
         for i in range(self.depth):
-            inputs = self.gc_blocks[i](inputs)
-            inputs["pinet", "p1"] = self.res_update(inputs["pinet", "p1"], p1)
-            p1 = inputs["pinet", "p1"]
-            if self.rank >= 3:
-                inputs["pinet", "p3"] = self.res_update(inputs["pinet", "p3"], p3)
-                p3 = inputs["pinet", "p3"]
-        return inputs
+            new_p1, i1 = self.gc_blocks[i](p1, pair_i, pair_j, basis)
+            p1 = self.res_update(new_p1, p1)
+            # if self.rank >= 3:
+            #     inputs["pinet", "p3"] = self.res_update(inputs["pinet", "p3"], p3)
+            #     p3 = inputs["pinet", "p3"]
+        return {
+            ("pinet", "p1"): p1,
+            ("pinet", "i1"): i1
+        }

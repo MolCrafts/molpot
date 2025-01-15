@@ -1,22 +1,20 @@
 import torch
 import torch.nn as nn
 
-class Potential:
-    ...
-    
-class PotentialSeq(Potential, nn.Sequential):
-    
-    def __init__(self, name, *modules):
-        super().__init__(*modules)
-        self.name = name
-        self.kernel = torch.vmap(self, in_dims=0)
-        self.post_process = nn.Sequential()
+from tensordict import TensorDict
+from tensordict.nn import TensorDictSequential, TensorDictModule
 
-    def append_post_process(self, module):
-        self.post_process.append(module)
+class PotentialSeq(nn.Module):
+
+    def __init__(self, *modules):
+        super().__init__()
+        td_modules = [TensorDictModule(module, in_keys=module.in_keys, out_keys=module.out_keys) for module in modules]
+        self.kernel = TensorDictSequential(*td_modules)
+        self.derivative = None
 
     def forward(self, inputs):
-        inputs = self.kernel(inputs)
-        inputs = self.post_process(inputs)
-        return inputs['pred'], inputs['label']
-    
+        inputs = torch.vmap(self.kernel, in_dims=(0, ))(inputs)
+        if self.derivative is not None:
+            inputs = self.derivative(inputs)
+
+        return inputs["predicts"], inputs["labels"]
