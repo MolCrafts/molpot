@@ -112,15 +112,18 @@ class Derivative(nn.Module):
             retain_graph=True
         )
 
-        def _batch(dfdx, pairs, diff, dist):
-            return torch.index_add(
-                torch.zeros_like(inputs[alias.R][0]), 0, pairs, dfdx, alpha=-1
+        def _batch(dfdx, i, j):
+            dfdx_per_atom = torch.zeros_like(inputs[alias.R][0])
+            dfdx_per_atom = torch.index_add(
+                dfdx_per_atom, 0, i, dfdx, alpha=-1
             )
+            dfdx_per_atom = torch.index_add(
+                dfdx_per_atom, 0, j, dfdx
+            )
+            return dfdx_per_atom
 
-        inputs[self.out_keys] = torch.vmap(_batch, (0, 0, 0, 0))(
-            dfdx, inputs["pairs", "i"], inputs["pairs", "diff"], inputs["pairs", "dist"]
+        inputs[self.out_keys] = torch.vmap(_batch, (0, 0, 0))(
+            dfdx, inputs["pairs", "i"], inputs["pairs", "i"]
         )
-
-        
 
         return inputs

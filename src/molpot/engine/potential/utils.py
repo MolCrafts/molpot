@@ -3,12 +3,10 @@ from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
 
 import torch
 
-import ignite.distributed as idist
 from ignite.engine.deterministic import DeterministicEngine
 from ignite.engine.engine import Engine
-from ignite.metrics import Metric
-from ignite.utils import convert_tensor
 from ignite.engine import _check_arg
+
 
 class MultiTargetLoss(torch.nn.Module):
 
@@ -23,14 +21,26 @@ class MultiTargetLoss(torch.nn.Module):
             loss += weight * self.loss_kernel(pred[key], label[target])
         return loss
 
+
 def _prepare_batch(
     batch: Sequence[torch.Tensor],
     device: Optional[Union[str, torch.device]] = None,
     non_blocking: bool = False,
 ) -> Tuple[Union[torch.Tensor, Sequence, Mapping, str, bytes], ...]:
     """Prepare batch for training or evaluation: pass to a device with options."""
-    return convert_tensor(batch, device=device, non_blocking=non_blocking)
+    return batch.to(device=device, non_blocking=non_blocking)
 
+def _model_transform(output):
+    return (output["predicts"], output["labels"])
+
+def _train_output_transform(predicts, labels, loss):
+    return {"predicts": predicts, "labels": labels, "loss": loss.item()}
+
+def _eval_output_transform(predicts, labels):
+    return {
+        "predicts": predicts,
+        "labels": labels,
+    }
 
 def supervised_training_step(
     model: torch.nn.Module,
@@ -39,10 +49,10 @@ def supervised_training_step(
     device: Optional[Union[str, torch.device]] = None,
     non_blocking: bool = False,
     prepare_batch: Callable = _prepare_batch,
-    model_transform: Callable[[Any], Any] = lambda output: output,
+    model_transform: Callable[[Any], Any] = _model_transform,
     output_transform: Callable[
         [Any, Any, Any, torch.Tensor], Any
-    ] = lambda output, loss: (output["pred"], output["label"]),
+    ] = _train_output_transform,
     gradient_accumulation_steps: int = 1,
     model_fn: Callable[[torch.nn.Module, Any], Any] = lambda model, x: model(x),
 ) -> Callable:
@@ -107,14 +117,14 @@ def supervised_training_step(
         model.train()
         inputs = prepare_batch(batch, device=device, non_blocking=non_blocking)
         outputs = model_fn(model, inputs)
-        outputs = model_transform(outputs)
-        loss = loss_fn(outputs["pred"], outputs["label"])
+        outputs = model_transform(outputs)  # (predicts, labels)
+        loss = loss_fn(*outputs)
         if gradient_accumulation_steps > 1:
             loss = loss / gradient_accumulation_steps
         loss.backward()
         if engine.state.iteration % gradient_accumulation_steps == 0:
             optimizer.step()
-        return output_transform(outputs, loss * gradient_accumulation_steps)
+        return output_transform(*outputs, loss * gradient_accumulation_steps)
 
     return update
 
@@ -126,14 +136,10 @@ def create_supervised_trainer(
     device: Optional[Union[str, torch.device]] = None,
     non_blocking: bool = False,
     prepare_batch: Callable = _prepare_batch,
-    model_transform: Callable[[Any], Any] = lambda output: output,
+    model_transform: Callable[[Any], Any] = _model_transform,
     output_transform: Callable[
         [Any, Any, Any, torch.Tensor], Any
-    ] = lambda output, loss: {
-        "y_pred": output["pred"],
-        "y_true": output["label"],
-        "loss": loss.item(),
-    },
+    ] = _train_output_transform,
     deterministic: bool = False,
     amp_mode: Optional[str] = None,
     scaler: Union[bool, "torch.cuda.amp.GradScaler"] = False,
@@ -326,17 +332,14 @@ def create_supervised_trainer(
 
     return trainer
 
+
 def supervised_evaluation_step(
     model: torch.nn.Module,
     device: Optional[Union[str, torch.device]] = None,
     non_blocking: bool = False,
     prepare_batch: Callable = _prepare_batch,
-    model_transform: Callable[[Any], Any] = lambda output: output,
-    output_transform: Callable[[Any, Any, Any], Any] = lambda output, loss: {
-        "y_pred": output["pred"],
-        "y_true": output["label"],
-        "loss": loss.item(),
-    },
+    model_transform: Callable[[Any], Any] = _model_transform,
+    output_transform: Callable[[Any, Any, Any], Any] = _eval_output_transform,
     model_fn: Callable[[torch.nn.Module, Any], Any] = lambda model, x: model(x),
     grad_context: Callable = torch.no_grad,
 ) -> Callable:
@@ -378,16 +381,17 @@ def supervised_evaluation_step(
         Added `model_fn` to customize model's application on the sample
     """
 
-    def evaluate_step(engine: Engine, batch: Sequence[torch.Tensor]) -> Union[Any, Tuple[torch.Tensor]]:
+    def evaluate_step(
+        engine: Engine, batch: Sequence[torch.Tensor]
+    ) -> Union[Any, Tuple[torch.Tensor]]:
         model.eval()
         with grad_context():
-            x, y = prepare_batch(batch, device=device, non_blocking=non_blocking)
-            output = model_fn(model, x)
+            inputs = prepare_batch(batch, device=device, non_blocking=non_blocking)
+            output = model_fn(model, inputs)
             y_pred = model_transform(output)
-            return output_transform(x, y, y_pred)
+            return output_transform(*y_pred)
 
     return evaluate_step
-
 
 
 def create_supervised_evaluator(
@@ -395,12 +399,8 @@ def create_supervised_evaluator(
     device: Optional[Union[str, torch.device]] = None,
     non_blocking: bool = False,
     prepare_batch: Callable = _prepare_batch,
-    model_transform: Callable[[Any], Any] = lambda output: output,
-    output_transform: Callable[[Any, Any, Any], Any] = lambda output, loss: {
-        "y_pred": output["pred"],
-        "y_true": output["label"],
-        "loss": loss.item(),
-    },
+    model_transform: Callable[[Any], Any] = _model_transform,
+    output_transform: Callable[[Any, Any, Any], Any] =_eval_output_transform,
     amp_mode: Optional[str] = None,
     model_fn: Callable[[torch.nn.Module, Any], Any] = lambda model, x: model(x),
     no_grad: bool = True,

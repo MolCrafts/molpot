@@ -8,4 +8,5 @@ class Frame(TensorDict):
 
     @classmethod
     def from_frames(cls, frames, layout=torch.jagged):
-        return cls.maybe_dense_stack(frames).densify(layout=layout)
+        td = cls.maybe_dense_stack(frames).densify(layout=layout)
+        return td

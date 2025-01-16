@@ -14,7 +14,6 @@ from ignite.metrics import EpochWise, Metric, MetricUsage
 
 from ..base import MolpotEngine
 from .utils import (
-    _prepare_batch,
     create_supervised_trainer,
     create_supervised_evaluator,
 )
@@ -29,16 +28,6 @@ class PotentialTrainer(MolpotEngine):
         loss_fn: Union[Callable[[Any, Any], torch.Tensor], torch.nn.Module],
         device: Union[str, torch.device] | None = None,
         non_blocking: bool = False,
-        prepare_batch: Callable = _prepare_batch,
-        model_transform: Callable[[Any], Any] = lambda output: output,
-        train_output_transform: Callable[
-            [Any, Any, Any, torch.Tensor], Any
-        ] = lambda output, loss: (output["pred"], output["label"]),
-        eval_output_transform: Callable[[Any, Any, Any], Any] = lambda output, loss: {
-            "y_pred": output["pred"],
-            "y_true": output["label"],
-            "loss": loss.item(),
-        },
         deterministic: bool = False,
         amp_mode: str | None = None,
         scaler: Union[bool, "torch.cuda.amp.GradScaler"] = False,
@@ -53,7 +42,6 @@ class PotentialTrainer(MolpotEngine):
         self.loss_fn = loss_fn
         self.device = device
         self.non_blocking = non_blocking
-        self.model_transform = model_transform
         # self.output_transform = output_transform
         self.deterministic = deterministic
         self.amp_mode = amp_mode
@@ -72,9 +60,6 @@ class PotentialTrainer(MolpotEngine):
                 loss_fn,
                 device=device,
                 non_blocking=non_blocking,
-                prepare_batch=prepare_batch,
-                model_transform=model_transform,
-                output_transform=train_output_transform,
                 deterministic=deterministic,
                 amp_mode=amp_mode,
                 scaler=scaler,
@@ -88,9 +73,6 @@ class PotentialTrainer(MolpotEngine):
                 self.model,
                 device=self.device,
                 non_blocking=self.non_blocking,
-                prepare_batch=prepare_batch,
-                model_transform=self.model_transform,
-                output_transform=eval_output_transform,
                 amp_mode=self.amp_mode,
                 model_fn=self.model_fn,
                 no_grad=no_grad_eval,
@@ -198,6 +180,7 @@ class PotentialTrainer(MolpotEngine):
                     engine.terminate() if engine.state.iteration >= max_steps else None
                 ),
             )
+            max_epochs = torch.inf  # TODO: inferring max_epochs from max_steps
 
         state = self.trainer.run(
             train_data, max_epochs=max_epochs, epoch_length=epoch_length
@@ -251,7 +234,7 @@ class PotentialTrainer(MolpotEngine):
             self.trainer,
             event_name=event_name,
             tag="trainer",
-            output_transform=lambda x: {"loss": x[-1]},
+            output_transform=lambda x: {"loss": x["loss"]},
             global_step_transform=global_step_from_engine(self.trainer),
         )
         for ename, engine in self._engines.items():

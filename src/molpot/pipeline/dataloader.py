@@ -124,7 +124,7 @@ class DataLoader(tn.Loader):
         # choose process or thread workers. Note that if you're not using Free-Threaded
         # Python (eg 3.13t) with -Xgil=0, then multi-threading might result in GIL contention,
         # and slow down training.
-        if num_workers > 0:
+        if num_workers > 1:
             node = tn.ParallelMapper(
                 node,
                 map_fn=map_and_collate,

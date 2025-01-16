@@ -328,7 +328,7 @@ class PiNet(nn.Module):
         pair_dist = torch.norm(pair_diff, dim=-1)
         pair_i = pair_i.to(torch.int64) # for scatter
         pair_j = pair_j.to(torch.int64) 
-        norm_pair_diff = pair_diff / pair_dist[:, None]
+        norm_pair_diff = pair_diff / pair_dist[..., None]
         # inputs['pairs', 'norm_diff'] = norm_pair_diff
 
         basis = self.basis_fn(pair_dist)
