@@ -4,8 +4,6 @@ from typing import Any, Callable, Iterable, Union
 import torch
 from ignite.engine.events import EventEnum, Events, State
 from ignite.handlers import (
-    BasicTimeProfiler,
-    HandlersTimeProfiler,
     ProgressBar,
     TensorboardLogger,
     global_step_from_engine,
@@ -17,6 +15,7 @@ from .utils import (
     create_supervised_trainer,
     create_supervised_evaluator,
 )
+from collections import defaultdict
 
 
 class PotentialTrainer(MolpotEngine):
@@ -48,10 +47,6 @@ class PotentialTrainer(MolpotEngine):
         self.model_fn = model_fn
         self.optimizer = optimizer
 
-        self.metrics = {}
-        self.loggers = {}
-        self.compile()
-
         self.add_engine(
             "trainer",
             create_supervised_trainer(
@@ -78,7 +73,9 @@ class PotentialTrainer(MolpotEngine):
                 no_grad=no_grad_eval,
             ),
         )
-
+        
+        self.metrics = defaultdict(dict)
+        self.loggers = {}
     def compile(self):
         self.model = self.model.to(self.device)
         self.loss_fn = self.loss_fn.to(self.device)
@@ -95,7 +92,6 @@ class PotentialTrainer(MolpotEngine):
 
     def add_lr_scheduler(self, scheduler):
         from ignite.handlers import LRScheduler
-
         scheduler_handler = LRScheduler(scheduler)
         self.trainer.add_event_handler(Events.ITERATION_STARTED, scheduler_handler)
 
@@ -136,6 +132,9 @@ class PotentialTrainer(MolpotEngine):
                 include_self=include_self,
                 greater_or_equal=greater_or_equal,
                 save_on_rank=save_on_rank,
+            )
+            self.trainer.add_event_handler(
+                Events.ITERATION_COMPLETED(every=n_every), handler
             )
 
         if n_epoch is not None:
@@ -195,56 +194,41 @@ class PotentialTrainer(MolpotEngine):
         name: str,
         metric: Metric,
         usage: str | MetricUsage = EpochWise(),
-        target: str = "all",
+        engine: str = "trainer",
     ) -> None:
-        assert isinstance(metric, Metric)
-        assert isinstance(usage, MetricUsage)
-        assert isinstance(target, str)
-        match target:
-            case "all":
-                for engine in self._engines.values():
-                    metric.attach(engine, name, usage)
-            case _:
-                metric.attach(self._engines[target], name, usage)
-        self.metrics[name] = {"metric": metric, "usage": usage}
+        metric.attach(self._engines[engine], name, usage)
+        self.metrics[engine][name] = metric
 
-    def add_handler(
-        self, handler, event_name=Events.ITERATION_COMPLETED, target: str = "both"
-    ):
-        if target == "both":
-            for engine in self._engines.values():
-                engine.add_event_handler(event_name, handler)
-        else:
-            self.trainer.add_event_handler(event_name, handler)
-
-    def attach_progressbar(self, target: str = "both") -> None:
-        if target == "both":
-            for engine in self._engines.values():
-                ProgressBar().attach(engine)
-        else:
-            ProgressBar().attach(self._engines[target])
+    def enable_progressbar(self, engine: str) -> None:
+        ProgressBar().attach(self._engines[engine])
 
     def attach_tensorboard(
         self,
         log_dir: str,
-        event_name: EventEnum = Events.ITERATION_COMPLETED,
+        tag_event_map = {
+            "trainer": Events.ITERATION_COMPLETED(every=100),
+            "evaluator": Events.EPOCH_COMPLETED,
+        }
     ):
+        
         tb_logger = TensorboardLogger(log_dir)
+        # add default training loss
         tb_logger.attach_output_handler(
             self.trainer,
-            event_name=event_name,
+            event_name=tag_event_map["trainer"],
             tag="trainer",
             output_transform=lambda x: {"loss": x["loss"]},
             global_step_transform=global_step_from_engine(self.trainer),
         )
-        for ename, engine in self._engines.items():
-            tb_logger.attach_output_handler(
-                engine,
-                event_name,
-                tag=ename,
-                metric_names=list(self.metrics.keys()),
-                global_step_transform=global_step_from_engine(engine),
+        for engine_name, metric_info in self.metrics.items():
+                tb_logger.attach_output_handler(
+                self._engines[engine_name],
+                event_name=tag_event_map[engine_name],
+                tag=engine_name,
+                metric_names=list(metric_info.keys()),
+                global_step_transform=lambda e, event: self.trainer.state.iteration,
             )
+
         self.loggers["tensorboard"] = tb_logger
 
     # def attach_basic_time_profiler(self):

@@ -7,21 +7,6 @@ from ignite.engine.deterministic import DeterministicEngine
 from ignite.engine.engine import Engine
 from ignite.engine import _check_arg
 
-
-class MultiTargetLoss(torch.nn.Module):
-
-    def __init__(self, loss_kernel: torch.nn.Module, keys):
-        super().__init__()
-        self.loss_kernel = loss_kernel
-        self.keys = keys
-
-    def forward(self, pred, label):
-        loss = 0
-        for key, target, weight in self.keys:
-            loss += weight * self.loss_kernel(pred[key], label[target])
-        return loss
-
-
 def _prepare_batch(
     batch: Sequence[torch.Tensor],
     device: Optional[Union[str, torch.device]] = None,

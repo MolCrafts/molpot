@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from .block import build_mlp
 from typing import Callable, Literal
 from molpot import NameSpace, alias
-from tensordict.nn import TensorDictModule
 
 class FFLayer(nn.Module):
     r"""`FFLayer` is a shortcut to create a multi-layer perceptron (MLP) or a
