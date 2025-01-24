@@ -2,6 +2,7 @@ import typer
 from pathlib import Path
 import runpy
 from .main import app
+import importlib
 
 @app.command()
 def train(
@@ -10,5 +11,4 @@ def train(
     """
     Train a model using the specified script.
     """
-    runpy.run_path(script)
-    
+    ...
