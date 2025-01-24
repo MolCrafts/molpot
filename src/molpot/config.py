@@ -1,9 +1,11 @@
+import logging
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 import os, sys
 import torch
-import torch.distributed as dist
 from collections import defaultdict
 import numpy as np
-import logging
 
 class Config:
 
@@ -18,7 +20,7 @@ class Config:
     ftype = global_dtypes["float"]
     itype = global_dtypes["int"]
 
-    log_level: int = logging.INFO
+    logger = logging.getLogger("molpot")
 
     @classmethod
     def get_dtype(cls, dtype_name):
@@ -74,4 +76,9 @@ class Config:
 
     @classmethod
     def set_log_level(cls, level:int):
-        cls.log_level = level
+        _mapping = {
+            "INFO": logging.INFO,
+        }
+        if isinstance(level, str):
+            level = _mapping.get(level, logging.INFO)
+        cls.logger.setLevel(level)
