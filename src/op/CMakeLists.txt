@@ -9,7 +9,7 @@ find_package(CUDA QUIET)
 
 if(ENABLE_CUDA AND CUDA_FOUND)
     enable_language(CUDA)
-elif(ENABLE_CUDA AND NOT CUDA_FOUND)
+elseif(ENABLE_CUDA AND NOT CUDA_FOUND)
     message(STATUS "CUDA not found, but ENABLE_CUDA is set to ON")
     message(STATUS "Disabling CUDA")
     set(ENABLE_CUDA OFF)

@@ -118,12 +118,12 @@ class Derivative(nn.Module):
                 dfdx_per_atom, 0, i, dfdx, alpha=-1
             )
             dfdx_per_atom = torch.index_add(
-                dfdx_per_atom, 0, j, dfdx
+                dfdx_per_atom, 0, j, dfdx, alpha=+1
             )
             return dfdx_per_atom
 
         inputs[self.out_keys] = torch.vmap(_batch, (0, 0, 0))(
-            dfdx, inputs["pairs", "i"], inputs["pairs", "i"]
+            dfdx, inputs["pairs", "i"], inputs["pairs", "j"]
         )
 
         return inputs
