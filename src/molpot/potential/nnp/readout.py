@@ -17,12 +17,7 @@ class Atomwise(nn.Module):
     in_keys = []
     out_keys = []
 
-    reduce_op = {
-        "sum": torch.sum,
-        "avg": torch.mean,
-        "amax": torch.max,
-        "amin": torch.min,
-    }
+    reduce_op = {"sum": torch.index_add}
 
     def __init__(
         self,
@@ -64,6 +59,7 @@ class Atomwise(nn.Module):
         self.reduce = reduce
 
     def forward(self, *inputs) -> tuple[dict, dict]:
+        atom_batch = inputs[1]
         # predict atomwise contributions
         y = self.outnet(inputs[0])  # (n_atoms, n_out)
 
@@ -71,7 +67,12 @@ class Atomwise(nn.Module):
         if self.per_atom_output_key is not None:
             inputs[self.per_atom_output_key] = y
 
-        result = self.reduce_op[self.reduce](y, dim=0)
+        result = self.reduce_op[self.reduce](
+            torch.zeros((torch.max(atom_batch) + 1, y.shape[0]), device=y, dtype=y),
+            0,
+            atom_batch,
+            y,
+        )
         return result
 
 
@@ -105,25 +106,8 @@ class Derivative(nn.Module):
     def forward(self, inputs):
         fx = inputs[self.fx_key]
         dx = inputs[self.dx_key]
-        dfdx, = torch.autograd.grad(
-            fx,
-            dx,
-            create_graph=self.create_graph,
-            retain_graph=True
-        )
-
-        def _batch(dfdx, i, j):
-            dfdx_per_atom = torch.zeros_like(inputs[alias.R][0])
-            dfdx_per_atom = torch.index_add(
-                dfdx_per_atom, 0, i, dfdx, alpha=-1
-            )
-            dfdx_per_atom = torch.index_add(
-                dfdx_per_atom, 0, j, dfdx, alpha=+1
-            )
-            return dfdx_per_atom
-
-        inputs[self.out_keys] = torch.vmap(_batch, (0, 0, 0))(
-            dfdx, inputs["pairs", "i"], inputs["pairs", "j"]
+        (dfdx,) = torch.autograd.grad(
+            fx, dx, create_graph=self.create_graph, retain_graph=True
         )
 
         return inputs
