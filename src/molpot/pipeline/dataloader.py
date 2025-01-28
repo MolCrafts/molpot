@@ -140,16 +140,15 @@ class DataLoader(tn.Loader):
                 method="process",  # Set this to "thread" for multi-threading
                 in_order=True,
             )
-            prefetch_factor=num_workers * 2
+            prefetch_factor = num_workers * 2
         else:
             node = tn.Mapper(node, map_fn=map_and_collate)
-            prefetch_factor=1
+            prefetch_factor = 1
 
         # Optionally apply pin-memory, and we usually do some pre-fetching
         if pin_memory:
             node = tn.PinMemory(node)
         node = tn.Prefetcher(node, prefetch_factor=prefetch_factor)
-        
 
         # Note that node is an iterator, and once it's exhausted, you'll need to call .reset()
         # on it to start a new Epoch.

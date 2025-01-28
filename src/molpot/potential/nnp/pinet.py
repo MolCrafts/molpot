@@ -5,6 +5,7 @@ from .block import build_mlp
 from typing import Callable, Literal
 from molpot import NameSpace, alias
 
+
 class FFLayer(nn.Module):
     r"""`FFLayer` is a shortcut to create a multi-layer perceptron (MLP) or a
     feed-forward network. A `FFLayer` takes one tensor as input of arbitratry
@@ -111,10 +112,7 @@ class IPLayer(nn.Module):
 
     def forward(self, i1, pair_i, p1):
         return torch.index_add(
-            torch.zeros_like(p1, dtype=p1.dtype, device=p1.device),
-            0,
-            pair_i,
-            i1
+            torch.zeros_like(p1, dtype=p1.dtype, device=p1.device), 0, pair_i, i1
         )
 
 
@@ -234,7 +232,9 @@ class GCBlock(nn.Module):
         # self.scale_layer = ScaleLayer()
         # self.dot_layer = SelfDotLayer()
 
-    def forward(self, p1, atom_batch, pair_i, pair_j, pair_batch, basis) -> dict[str, torch.Tensor]:
+    def forward(
+        self, p1, atom_batch, pair_i, pair_j, pair_batch, basis
+    ) -> dict[str, torch.Tensor]:
         p1, i1 = self.p1_layer(pair_i, pair_j, p1, basis)
         # prop_list = [p1]
         # n_prop_list = [1]
@@ -267,7 +267,15 @@ class ResUpdate(nn.Module):
 
 class PiNet(nn.Module):
 
-    in_keys = [alias.Z, alias.pair_diff, alias.pair_i, alias.pair_j]
+    in_keys = [
+        alias.Z,
+        alias.atom_batch,
+        alias.pair_dist,
+        alias.pair_diff,
+        alias.pair_i,
+        alias.pair_j,
+        alias.pair_batch,
+    ]
     out_keys = [("pinet", "p1"), ("pinet", "i1")]
 
     def __init__(
@@ -321,12 +329,14 @@ class PiNet(nn.Module):
 
         self.res_update = ResUpdate()
 
-    def forward(self, Z, atom_mask, pair_dist, pair_diff, pair_i, pair_j, pair_mask) -> None:
+    def forward(
+        self, Z, atom_batch, pair_dist, pair_diff, pair_i, pair_j, pair_mask
+    ) -> None:
 
-        pair_dist = torch.norm(pair_diff, dim=-1)
-        pair_i = pair_i.to(torch.int64) # for scatter
-        pair_j = pair_j.to(torch.int64) 
-        norm_pair_diff = pair_diff / pair_dist[..., None]
+        pair_dist.requires_grad_(True)
+        pair_i = pair_i.to(torch.int64)  # for scatter
+        pair_j = pair_j.to(torch.int64)
+        # norm_pair_diff = pair_diff / pair_dist[..., None]
 
         basis = self.basis_fn(pair_dist)
         fc = self.cutoff_fn(pair_dist)
@@ -335,20 +345,19 @@ class PiNet(nn.Module):
         p1 = self.embedding(Z)
 
         # (n_atoms, ) -> (n_atoms, n_basis)
-        p1 = self.before_gc_block_layer(p1)  
+        p1 = self.before_gc_block_layer(p1)
         # if self.rank >= 3:
         #     p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], device=p1.device)
-            # inputs["pinet", "p3"] = p3
+        # inputs["pinet", "p3"] = p3
 
         # inputs["pinet", "p1"] = p1
-        
+
         for i in range(self.depth):
-            new_p1, i1 = self.gc_blocks[i](p1, atom_mask, pair_i, pair_j, pair_mask, basis)
+            new_p1, i1 = self.gc_blocks[i](
+                p1, atom_batch, pair_i, pair_j, pair_mask, basis
+            )
             p1 = self.res_update(new_p1, p1)
             # if self.rank >= 3:
             #     inputs["pinet", "p3"] = self.res_update(inputs["pinet", "p3"], p3)
             #     p3 = inputs["pinet", "p3"]
-        return {
-            ("pinet", "p1"): p1,
-            ("pinet", "i1"): i1
-        }
+        return {("pinet", "p1"): p1, ("pinet", "i1"): i1}
