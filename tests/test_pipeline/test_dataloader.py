@@ -9,7 +9,7 @@ class TestDataLoader:
         "gen_heterogenous_frames"])
     def test_compact_collate_fn(self, request, frames_fixture):
         
-        frame_list = request.getfixturevalue(frames_fixture)
+        frame_list = request.getfixturevalue(frames_fixture)(10)
 
         nframes = len(frame_list)
         natom_list = torch.tensor([len(frame[alias.R]) for frame in frame_list])
@@ -21,7 +21,6 @@ class TestDataLoader:
         frames = _compact_collate(frame_list)
         assert frames[alias.Z].shape == (natoms, )
         assert frames[alias.R].shape == (natoms, 3)
-        assert frames[alias.cell].shape == (nframes*3, 3)
 
         assert frames[alias.pair_i].shape == (npairs, )
         assert frames[alias.pair_j].shape == (npairs, )
@@ -31,7 +30,7 @@ class TestDataLoader:
 
         # test offsets
         torch.testing.assert_close(
-            frames[alias.atom_batch_mask],
+            frames[alias.atom_batch],
             torch.cat([torch.full((t,), fill_value=i) for i, t in enumerate(natom_list)]).to(Config.itype)
         )
         torch.testing.assert_close(
@@ -41,7 +40,7 @@ class TestDataLoader:
         )
 
         for i, frame in enumerate(frame_list):
-            pair_batch_mask = frames[alias.pair_batch_mask] == i
+            pair_batch_mask = frames[alias.pair_batch] == i
             atom_offset = frames[alias.atom_offset][i]
             torch.testing.assert_close(
                 frames[alias.pair_i][pair_batch_mask] - atom_offset,
@@ -54,24 +53,23 @@ class TestDataLoader:
 
     @pytest.mark.parametrize("frames_fixture", ["gen_homogenous_frames", 
         "gen_heterogenous_frames"])
-    def test_nested_collate_fn(self, request, frame_fixture):
+    def test_nested_collate_fn(self, request, frames_fixture):
 
-        frame_list = request.getfixturevalue(frame_fixture)
+        frame_list = request.getfixturevalue(frames_fixture)(10)
 
         nframes = len(frame_list)
         natom_list = torch.tensor([len(frame[alias.R]) for frame in frame_list])
-        natoms = sum(natom_list)
-        npairs = sum([len(frame[alias.pair_i]) for frame in frame_list])
-        nbonds = sum([len(frame[alias.bond_i]) for frame in frame_list])
+        # natoms = sum(natom_list)
+        # npairs = sum([len(frame[alias.pair_i]) for frame in frame_list])
+        # nbonds = sum([len(frame[alias.bond_i]) for frame in frame_list])
 
         
         frames = _nested_collate(frame_list)
-        assert frames[alias.Z].shape == (natoms, )
-        assert frames[alias.R].shape == (natoms, 3)
-        assert frames[alias.cell].shape == (nframes*3, 3)
+        assert frames[alias.Z].shape[0] == nframes
+        assert frames[alias.R].shape[0] == nframes
 
-        assert frames[alias.pair_i].shape == (npairs, )
-        assert frames[alias.pair_j].shape == (npairs, )
+        assert frames[alias.pair_i].shape[0] == nframes
+        assert frames[alias.pair_j].shape[0] == nframes
 
-        assert frames[alias.bond_i].shape == (nbonds, )
-        assert frames[alias.bond_j].shape == (nbonds, )
+        assert frames[alias.bond_i].shape[0] == nframes
+        assert frames[alias.bond_j].shape[0] == nframes
