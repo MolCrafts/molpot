@@ -15,7 +15,7 @@ def compose(*funcs):
 def cancel_batch(tensor_or_nested_tensor: torch.Tensor):
     if isinstance(tensor_or_nested_tensor, torch.Tensor):
         if tensor_or_nested_tensor.is_nested:
-            return torch.concat([td for td in tensor_or_nested_tensor])
+            return torch.concat(tensor_or_nested_tensor.unbind())
         else:
             return tensor_or_nested_tensor.reshape(
                 -1, *tensor_or_nested_tensor.shape[2:]
@@ -26,7 +26,14 @@ def cancel_batch(tensor_or_nested_tensor: torch.Tensor):
 
 
 def _compact_collate(batch: Sequence[Frame]):
+    """collate a batch of frames into a single frame, with batch masks and offsets. no nested tensors.
 
+    Args:
+        batch (Sequence[Frame]): _description_
+
+    Returns:
+        _type_: _description_
+    """
     coll_batch = Frame.maybe_dense_stack(batch).densify()
     # batch_size = int(coll_batch.batch_size.numel())
 
@@ -39,12 +46,16 @@ def _compact_collate(batch: Sequence[Frame]):
 
     atom_batch = torch.cat(
         [torch.full((t,), fill_value=i) for i, t in enumerate(n_atoms)]
-    ).to(alias.atom_batch.dtype)
+    ).to(Config.itype)
 
     atom_offset = torch.zeros(len(n_atoms), dtype=Config.itype)
     torch.cumsum(torch.flatten(n_atoms)[:-1], dim=0, out=atom_offset[1:]).to(
         Config.itype
     )
+
+    coll_frame = coll_batch.apply(cancel_batch, batch_size=[])
+    coll_frame[alias.atom_batch] = atom_batch
+    coll_frame[alias.atom_offset] = atom_offset
 
     if alias.pairs in coll_batch:
         n_pairs = torch.tensor(
@@ -61,17 +72,14 @@ def _compact_collate(batch: Sequence[Frame]):
             Config.itype
         )
         coll_frame[alias.pair_i] = (
-            coll_frame[alias.pair_i] + atom_offset[pair_batch]
+            torch.concat(coll_batch[alias.pair_i].unbind()) + atom_offset[pair_batch]
         )
         coll_frame[alias.pair_j] = (
-            coll_frame[alias.pair_j] + atom_offset[pair_batch]
+            torch.concat(coll_batch[alias.pair_j].unbind()) + atom_offset[pair_batch]
         )
         coll_frame[alias.pair_batch] = pair_batch
         coll_frame[alias.pair_offset] = pair_offset
 
-    coll_frame = coll_batch.apply(cancel_batch, batch_size=[])
-    coll_frame[alias.atom_batch] = atom_batch
-    coll_frame[alias.atom_offset] = atom_offset
     return coll_frame
 
 
