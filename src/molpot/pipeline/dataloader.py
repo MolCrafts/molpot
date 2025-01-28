@@ -37,9 +37,9 @@ def _compact_collate(batch: Sequence[Frame]):
     else:
         n_atoms = coll_batch[alias.n_atoms]
 
-    atom_batch_mask = torch.cat(
+    atom_batch = torch.cat(
         [torch.full((t,), fill_value=i) for i, t in enumerate(n_atoms)]
-    ).to(alias.atoms_ns["atom_batch_mask"].dtype)
+    ).to(alias.atom_batch.dtype)
 
     atom_offset = torch.zeros(len(n_atoms), dtype=Config.itype)
     torch.cumsum(torch.flatten(n_atoms)[:-1], dim=0, out=atom_offset[1:]).to(
@@ -50,7 +50,7 @@ def _compact_collate(batch: Sequence[Frame]):
         n_pairs = torch.tensor(
             [len(frame[alias.pair_i]) for frame in batch], dtype=Config.itype
         )
-        pair_batch_mask = torch.cat(
+        pair_batch = torch.cat(
             [
                 torch.full((t,), fill_value=i)
                 for i, t in enumerate([len(frame[alias.pair_i]) for frame in batch])
@@ -61,16 +61,16 @@ def _compact_collate(batch: Sequence[Frame]):
             Config.itype
         )
         coll_frame[alias.pair_i] = (
-            coll_frame[alias.pair_i] + atom_offset[pair_batch_mask]
+            coll_frame[alias.pair_i] + atom_offset[pair_batch]
         )
         coll_frame[alias.pair_j] = (
-            coll_frame[alias.pair_j] + atom_offset[pair_batch_mask]
+            coll_frame[alias.pair_j] + atom_offset[pair_batch]
         )
-        coll_frame[alias.pair_batch_mask] = pair_batch_mask
+        coll_frame[alias.pair_batch] = pair_batch
         coll_frame[alias.pair_offset] = pair_offset
 
     coll_frame = coll_batch.apply(cancel_batch, batch_size=[])
-    coll_frame[alias.atom_batch_mask] = atom_batch_mask
+    coll_frame[alias.atom_batch] = atom_batch
     coll_frame[alias.atom_offset] = atom_offset
     return coll_frame
 
@@ -104,7 +104,7 @@ class DataLoader(tn.Loader):
         num_workers: int = 0,
         pin_memory: bool = False,
         drop_last: bool = False,
-        collate_fn=_nested_collate,
+        collate_fn=_compact_collate,
     ):
         # Assume we're working with a map-style dataset
         assert hasattr(dataset, "__getitem__") and hasattr(dataset, "__len__")

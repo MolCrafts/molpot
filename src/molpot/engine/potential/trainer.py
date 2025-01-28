@@ -16,7 +16,7 @@ from .utils import (
     create_supervised_evaluator,
 )
 from collections import defaultdict
-
+from pathlib import Path
 
 class PotentialTrainer(MolpotEngine):
 
@@ -76,6 +76,7 @@ class PotentialTrainer(MolpotEngine):
         
         self.metrics = defaultdict(dict)
         self.loggers = {}
+
     def compile(self):
         self.model = self.model.to(self.device)
         self.loss_fn = self.loss_fn.to(self.device)
@@ -93,12 +94,12 @@ class PotentialTrainer(MolpotEngine):
     def add_lr_scheduler(self, scheduler):
         from ignite.handlers import LRScheduler
         scheduler_handler = LRScheduler(scheduler)
-        self.trainer.add_event_handler(Events.ITERATION_STARTED, scheduler_handler)
+        self.trainer.add_event_handler(Events.ITERATION_COMPLETED(every=10000), scheduler_handler)
 
     def add_checkpoint(
         self,
         save_dir,
-        n_every=None,
+        n_every=int(1e5),
         n_epoch=None,
         filename_prefix="",
         score_function=None,
@@ -208,10 +209,16 @@ class PotentialTrainer(MolpotEngine):
         tag_event_map = {
             "trainer": Events.ITERATION_COMPLETED(every=100),
             "evaluator": Events.EPOCH_COMPLETED,
-        }
+        },
+        force_clean = False
     ):
-        
+        log_dir = Path(log_dir)
+        if log_dir.exists():
+            for log in log_dir.iterdir():
+                log.unlink()
+
         tb_logger = TensorboardLogger(log_dir)
+        
         # add default training loss
         tb_logger.attach_output_handler(
             self.trainer,

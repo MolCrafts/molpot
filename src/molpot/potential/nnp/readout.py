@@ -17,12 +17,7 @@ class Atomwise(nn.Module):
     in_keys = []
     out_keys = []
 
-    reduce_op = {
-        "sum": torch.sum,
-        "avg": torch.mean,
-        "amax": torch.max,
-        "amin": torch.min,
-    }
+    reduce_op = {"sum": torch.index_add}
 
     def __init__(
         self,
@@ -64,6 +59,7 @@ class Atomwise(nn.Module):
         self.reduce = reduce
 
     def forward(self, *inputs) -> tuple[dict, dict]:
+        atom_batch = inputs[1]
         # predict atomwise contributions
         y = self.outnet(inputs[0])  # (n_atoms, n_out)
 
@@ -71,17 +67,22 @@ class Atomwise(nn.Module):
         if self.per_atom_output_key is not None:
             inputs[self.per_atom_output_key] = y
 
-        result = self.reduce_op[self.reduce](y, dim=0)
+        result = self.reduce_op[self.reduce](
+            torch.zeros((torch.max(atom_batch) + 1, y.shape[0]), device=y, dtype=y),
+            0,
+            atom_batch,
+            y,
+        )
         return result
 
 
-class Derivative(nn.Module):
+class PairForce(nn.Module):
 
     def __init__(
         self,
         fx_key: str,
-        dx_key: str,
-        out_keys: str,
+        dx_key: str = alias.pair_dist,
+        out_keys: str = alias.pair_force,
         create_graph=False,
         retain_graph=True,
     ):
@@ -105,25 +106,30 @@ class Derivative(nn.Module):
     def forward(self, inputs):
         fx = inputs[self.fx_key]
         dx = inputs[self.dx_key]
-        dfdx, = torch.autograd.grad(
-            fx,
-            dx,
-            create_graph=self.create_graph,
-            retain_graph=True
+        (dfdx,) = torch.autograd.grad(
+            fx, dx, create_graph=self.create_graph, retain_graph=True
         )
 
-        def _batch(dfdx, i, j):
-            dfdx_per_atom = torch.zeros_like(inputs[alias.R][0])
-            dfdx_per_atom = torch.index_add(
-                dfdx_per_atom, 0, i, dfdx, alpha=-1
-            )
-            dfdx_per_atom = torch.index_add(
-                dfdx_per_atom, 0, j, dfdx
-            )
-            return dfdx_per_atom
-
-        inputs[self.out_keys] = torch.vmap(_batch, (0, 0, 0))(
-            dfdx, inputs["pairs", "i"], inputs["pairs", "i"]
+        pair_force = torch.zeros_like(inputs[alias.pair_i])
+        pair_force = torch.index_add(
+            pair_force,
+            0,
+            inputs[alias.pair_i],
+            dfdx,
+        )
+        pair_force = torch.index_add(
+            pair_force,
+            0,
+            inputs[alias.pair_j],
+            -dfdx,
         )
 
-        return inputs
+        atom_force = torch.index_add(
+            torch.zeros(
+                (torch.max(inputs[alias.atom_batch]) + 1, 3), device=pair_force.device
+            ),
+            0,
+            inputs[alias.pair_i],
+            pair_force,
+        )
+        return atom_force
