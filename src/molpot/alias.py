@@ -139,6 +139,7 @@ pair_i = pairs_ns.set("i", "pair atom index i", int)
 pair_j = pairs_ns.set("j", "pair atom index j", int)
 pair_diff = pairs_ns.set("diff", "pair displacement", float, shape=(None, 3))
 pair_dist = pairs_ns.set("dist", "pair distance", float, shape=(None, 3))
+pair_force = pairs_ns.set("force", "pair force", float, shape=(None, 3))
 pair_batch = pairs_ns.set("pair_batch", "pairs batch mask", int)
 pair_offset = pairs_ns.set("pair_offset", "pairs offset", int)
 

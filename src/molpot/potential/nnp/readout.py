@@ -76,13 +76,13 @@ class Atomwise(nn.Module):
         return result
 
 
-class Derivative(nn.Module):
+class PairForce(nn.Module):
 
     def __init__(
         self,
         fx_key: str,
-        dx_key: str,
-        out_keys: str,
+        dx_key: str = alias.pair_dist,
+        out_keys: str = alias.pair_force,
         create_graph=False,
         retain_graph=True,
     ):
@@ -110,4 +110,26 @@ class Derivative(nn.Module):
             fx, dx, create_graph=self.create_graph, retain_graph=True
         )
 
-        return inputs
+        pair_force = torch.zeros_like(inputs[alias.pair_i])
+        pair_force = torch.index_add(
+            pair_force,
+            0,
+            inputs[alias.pair_i],
+            dfdx,
+        )
+        pair_force = torch.index_add(
+            pair_force,
+            0,
+            inputs[alias.pair_j],
+            -dfdx,
+        )
+
+        atom_force = torch.index_add(
+            torch.zeros(
+                (torch.max(inputs[alias.atom_batch]) + 1, 3), device=pair_force.device
+            ),
+            0,
+            inputs[alias.pair_i],
+            pair_force,
+        )
+        return atom_force

@@ -321,7 +321,7 @@ class PiNet(nn.Module):
 
         self.res_update = ResUpdate()
 
-    def forward(self, Z, atom_mask, pair_diff, pair_i, pair_j, pair_mask) -> None:
+    def forward(self, Z, atom_mask, pair_dist, pair_diff, pair_i, pair_j, pair_mask) -> None:
 
         pair_dist = torch.norm(pair_diff, dim=-1)
         pair_i = pair_i.to(torch.int64) # for scatter
