@@ -8,7 +8,8 @@ class MultiTargetLoss(torch.nn.Module):
         self.keys = keys
 
     def forward(self, pred, label):
-        loss = 0
-        for key, target, weight in self.keys:
-            loss += weight * self.loss_kernel(pred[key], label[target])
-        return loss
+        losses = [
+            weight * self.loss_kernel(pred[key], label[target])
+            for key, target, weight in self.keys
+        ]
+        return torch.sum(torch.stack(losses))
