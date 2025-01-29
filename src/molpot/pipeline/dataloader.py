@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Sequence, Iterator
 from torch.utils.data import Dataset
 import torch
 import torchdata.nodes as tn
@@ -106,7 +106,7 @@ class DataLoader(tn.Loader):
 
     def __init__(
         self,
-        dataset: Dataset,
+        dataset: Dataset | Iterator[Frame],
         batch_size: int = 1,
         shuffle: bool = True,
         num_workers: int = 0,
@@ -114,8 +114,8 @@ class DataLoader(tn.Loader):
         drop_last: bool = False,
         collate_fn=_compact_collate,
     ):
-        # Assume we're working with a map-style dataset
-        assert hasattr(dataset, "__getitem__") and hasattr(dataset, "__len__")
+        if not isinstance(dataset, Dataset):
+            dataset = tn.IterableWrapper(dataset)
         # Start with a sampler, since caller did not provide one
         sampler = RandomSampler(dataset) if shuffle else SequentialSampler(dataset)
         # Sampler wrapper converts a Sampler to a BaseNode

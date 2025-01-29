@@ -90,7 +90,7 @@ class PILayer(nn.Module):
         inter = p1_i + p1_j
         inter = self.mlp(inter)
         inter = torch.einsum(
-            "icb, ib->ic", inter.reshape(-1, p1_i.shape[-1], basis.shape[-1]), basis
+            "icb, ib->icb", inter.reshape(-1, p1_i.shape[-1], basis.shape[-1]), basis
         )  # icb := (n_pairs, n_channels, n_basis)
         return inter  # (n_pairs, n_channels)
 
@@ -131,7 +131,7 @@ class InvarLayer(nn.Module):
         self.ii_layer = FFLayer(*ii_nodes, activation=activation)
         self.ip_layer = IPLayer()
 
-    def forward(self, pair_i, pair_j, p1, basis):
+    def forward(self, p1, pair_i, pair_j, basis):
         i1 = self.pi_layer(p1, pair_i, pair_j, basis)
         i1 = self.ii_layer(i1)
         p1 = self.ip_layer(i1, pair_i, p1)
@@ -201,7 +201,7 @@ class EqvarLayer(nn.Module):
 
         self.scale_layer = ScaleLayer()
 
-    def forward(self, pair_i, pair_j, px, diff, i1):
+    def forward(self, px, pair_i, pair_j, diff, i1):
 
         ix = self.pi_layer(px, pair_i, pair_j)
         ix = self.scale_layer(ix, i1)
@@ -214,46 +214,49 @@ class EqvarLayer(nn.Module):
         return px, ix
 
 
-class GCBlock(nn.Module):
+class GCBlock1(nn.Module):
 
     def __init__(
         self,
-        rank: Literal[1, 3],
         pp_nodes: list[int],
         pi_nodes: list[int],
         ii_nodes: list[int],
         activation: Callable | None = F.tanh,
     ):
         super().__init__()
-        self.rank = rank
         self.p1_layer = InvarLayer(pp_nodes, pi_nodes, ii_nodes, activation)
         # self.p3_layer = EqvarLayer([pp_nodes[0], pp_nodes[-1]])
 
         # self.scale_layer = ScaleLayer()
         # self.dot_layer = SelfDotLayer()
 
-    def forward(
-        self, p1, atom_batch, pair_i, pair_j, pair_batch, basis
-    ) -> dict[str, torch.Tensor]:
-        p1, i1 = self.p1_layer(pair_i, pair_j, p1, basis)
-        # prop_list = [p1]
-        # n_prop_list = [1]
-        # if self.rank >= 3:
-        #     p3 = inputs["pinet", "p3"]
-        #     diff_p3 = inputs["pairs", "norm_diff"]
-        #     p3, i3 = self.p3_layer(pair_i, pair_j, p3, diff_p3, i1)
-        #     inputs["pinet", "i3"] = i3
-        #     prop_list.append(p3)
-        #     n_prop_list.append(3)
-
-        # prop_list = torch.concat(prop_list, dim=1)
-        # prop_list = torch.split(prop_list, n_prop_list, dim=1)
-        # inputs["pinet", "p1"] = prop_list[0]
-        # if self.rank >= 3:
-        #     p3t1 = self.scale_layer(p3, prop_list[1])
-        #     inputs["pinet", "p3"] = p3t1
+    def forward(self, p1, pair_i, pair_j, basis, *args) -> dict[str, torch.Tensor]:
+        p1, i1 = self.p1_layer(p1, pair_i, pair_j, basis)
 
         return p1, i1
+
+
+class GCBlock3(nn.Module):
+
+    def __init__(
+        self,
+        pp_nodes: list[int],
+        pi_nodes: list[int],
+        ii_nodes: list[int],
+        activation: Callable | None = F.tanh,
+    ):
+        super().__init__()
+
+    def forward(self, p1, p3, pair_i, pair_j, basis, diff):
+
+        p1, i1 = self.p1_layer(p1, pair_i, pair_j, basis)
+        p3, i3 = self.p3_layer(p3, pair_i, pair_j, diff, i1)
+
+        px = torch.concat([p1, p3], dim=1)
+        p1t1, p3_scale = torch.split(px, 2, dim=1)
+        p3t1 = self.scale_layer(p3, p3_scale)
+
+        return p1t1, p3t1, i1, i3
 
 
 class ResUpdate(nn.Module):
@@ -262,7 +265,7 @@ class ResUpdate(nn.Module):
         super().__init__()
 
     def forward(self, old, new):
-        return old + new
+        return tuple(new + old for new, old in zip(new, old))
 
 
 class PiNet(nn.Module):
@@ -275,7 +278,7 @@ class PiNet(nn.Module):
         alias.pair_j,
         alias.pair_batch,
     ]
-    out_keys = [("pinet", "p1"), ("pinet", "i1")]
+    # out_keys = [("pinet", "p1"), ("pinet", "i1")]
 
     def __init__(
         self,
@@ -294,6 +297,12 @@ class PiNet(nn.Module):
         pp_nodes = pp_nodes.copy()
         pi_nodes = pi_nodes.copy()
         ii_nodes = ii_nodes.copy()
+        prop_keys = [("pinet", "p1")]
+        inter_keys = [("pinet", "i1")]
+        if self.rank >= 3:
+            prop_keys.append(("pinet", "p3"))
+            inter_keys.append(("pinet", "i3"))
+        self.out_keys = prop_keys + inter_keys
         self.labels = NameSpace("pinet")
         self.labels.set(
             "p1",
@@ -319,18 +328,22 @@ class PiNet(nn.Module):
         pi_nodes[-1] *= self.n_basis
         self.before_gc_block_layer = nn.Linear(self.n_basis, pp_nodes[0])
 
+        blocks = {
+            1: GCBlock1,
+            3: GCBlock3,
+        }
+
         self.gc_blocks = nn.ModuleList(
             [
-                GCBlock(self.rank, pp_nodes, pi_nodes, ii_nodes, activation)
+                blocks[self.rank](pp_nodes, pi_nodes, ii_nodes, activation)
                 for _ in range(depth)
             ]
         )
 
         self.res_update = ResUpdate()
 
-    def forward(
-        self, Z, atom_batch, pair_diff, pair_i, pair_j, pair_mask
-    ) -> None:
+    def forward(self, Z, atom_batch, pair_diff, pair_i, pair_j, pair_mask) -> None:
+        n_atoms = len(Z)
         pair_diff.requires_grad_()
         pair_dist = torch.linalg.norm(pair_diff, dim=-1)
         pair_i = pair_i.to(torch.int64)  # for scatter
@@ -345,18 +358,12 @@ class PiNet(nn.Module):
 
         # (n_atoms, ) -> (n_atoms, n_basis)
         p1 = self.before_gc_block_layer(p1)
-        # if self.rank >= 3:
-        #     p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], device=p1.device)
-        # inputs["pinet", "p3"] = p3
-
-        # inputs["pinet", "p1"] = p1
+        props = [p1]
+        if self.rank >= 3:
+            p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], device=p1.device)
+            props.append(p3)
 
         for i in range(self.depth):
-            new_p1, i1 = self.gc_blocks[i](
-                p1, atom_batch, pair_i, pair_j, pair_mask, basis
-            )
-            p1 = self.res_update(new_p1, p1)
-            # if self.rank >= 3:
-            #     inputs["pinet", "p3"] = self.res_update(inputs["pinet", "p3"], p3)
-            #     p3 = inputs["pinet", "p3"]
-        return {("pinet", "p1"): p1, ("pinet", "i1"): i1}
+            new_props, inters = self.gc_blocks[i](*props, pair_i, pair_j, basis)
+            props = self.res_update(*new_props, *props)
+        return (*props, *inters)

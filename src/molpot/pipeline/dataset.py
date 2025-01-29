@@ -15,7 +15,7 @@ import molpot as mpot
 from molpot import Config, NameSpace, alias
 
 from abc import abstractmethod
-
+from typing import Iterator
 logger = logging.getLogger("molpot")
 
 
@@ -42,6 +42,17 @@ class Dataset(torch.utils.data.Dataset):
     def prepare(self): ...
 
     def download(self): ...
+
+class IterStyleDataset(Dataset):
+
+    def __init__(self, frames: Sequence[mpot.Frame]):
+        self.frames = frames
+
+    def __len__(self):
+        return len(self.frames)
+
+    def __getitem__(self, i: int) -> Any:
+        return self.frames[i]
 
 
 class MapStyleDataset(Dataset):
