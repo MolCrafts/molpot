@@ -194,10 +194,15 @@ class PotentialTrainer(MolpotEngine):
         name: str,
         metric: Metric,
         usage: str | MetricUsage = EpochWise(),
-        engine: str = "trainer",
+        engine: str| None = None,
     ) -> None:
-        metric.attach(self._engines[engine], name, usage)
-        self.metrics[engine][name] = metric
+        if engine:
+            metric.attach(self._engines[engine], name, usage)
+            self.metrics[engine][name] = metric
+        else:
+            for engine in self._engines:
+                metric.attach(self._engines[engine], name, usage)
+                self.metrics[engine][name] = metric
 
     def enable_progressbar(self, engine: str) -> None:
         ProgressBar().attach(self._engines[engine])

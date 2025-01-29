@@ -270,7 +270,6 @@ class PiNet(nn.Module):
     in_keys = [
         alias.Z,
         alias.atom_batch,
-        alias.pair_dist,
         alias.pair_diff,
         alias.pair_i,
         alias.pair_j,
@@ -330,10 +329,10 @@ class PiNet(nn.Module):
         self.res_update = ResUpdate()
 
     def forward(
-        self, Z, atom_batch, pair_dist, pair_diff, pair_i, pair_j, pair_mask
+        self, Z, atom_batch, pair_diff, pair_i, pair_j, pair_mask
     ) -> None:
-
-        pair_dist.requires_grad_(True)
+        pair_diff.requires_grad_()
+        pair_dist = torch.linalg.norm(pair_diff, dim=-1)
         pair_i = pair_i.to(torch.int64)  # for scatter
         pair_j = pair_j.to(torch.int64)
         # norm_pair_diff = pair_diff / pair_dist[..., None]
