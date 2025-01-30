@@ -114,8 +114,7 @@ class DataLoader(tn.Loader):
         drop_last: bool = False,
         collate_fn=_compact_collate,
     ):
-        if not isinstance(dataset, Dataset):
-            dataset = tn.IterableWrapper(dataset)
+
         # Start with a sampler, since caller did not provide one
         sampler = RandomSampler(dataset) if shuffle else SequentialSampler(dataset)
         # Sampler wrapper converts a Sampler to a BaseNode

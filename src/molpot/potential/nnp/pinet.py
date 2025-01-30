@@ -90,9 +90,9 @@ class PILayer(nn.Module):
         inter = p1_i + p1_j
         inter = self.mlp(inter)
         inter = torch.einsum(
-            "icb, ib->icb", inter.reshape(-1, p1_i.shape[-1], basis.shape[-1]), basis
+            "icb, ib->ic", inter.reshape(-1, p1_i.shape[-1], basis.shape[-1]), basis
         )  # icb := (n_pairs, n_channels, n_basis)
-        return inter  # (n_pairs, n_channels)
+        return inter[:, None, :]  # (n_pairs, 1, n_channels)
 
 
 class IPLayer(nn.Module):
@@ -114,30 +114,6 @@ class IPLayer(nn.Module):
         return torch.index_add(
             torch.zeros_like(p1, dtype=p1.dtype, device=p1.device), 0, pair_i, i1
         )
-
-
-class InvarLayer(nn.Module):
-
-    def __init__(
-        self,
-        pp_nodes: list[int],
-        pi_nodes: list[int],
-        ii_nodes: list[int],
-        activation: Callable = F.tanh,
-    ):
-        super().__init__()
-        self.pp_layer = FFLayer(*pp_nodes, activation=activation)
-        self.pi_layer = PILayer(*pi_nodes, activation=activation)
-        self.ii_layer = FFLayer(*ii_nodes, activation=activation)
-        self.ip_layer = IPLayer()
-
-    def forward(self, p1, pair_i, pair_j, basis):
-        i1 = self.pi_layer(p1, pair_i, pair_j, basis)
-        i1 = self.ii_layer(i1)
-        p1 = self.ip_layer(i1, pair_i, p1)
-        p1 = self.pp_layer(p1)
-
-        return p1, i1
 
 
 class PIXLayer(nn.Module):
@@ -167,21 +143,20 @@ class PIXLayer(nn.Module):
         activation: Callable | None = F.tanh,
     ):
         super().__init__()
-        self.wi = build_mlp(*n_nodes, activation=activation, last_bias=False)
-        self.wj = build_mlp(*n_nodes, activation=activation, last_bias=False)
+        self.w = build_mlp(*n_nodes, activation=activation, last_bias=False)
 
     def forward(self, prop, pair_i, pair_j):
 
         prop_i = prop[pair_i]
         prop_j = prop[pair_j]
 
-        return self.wi(prop_i) + self.wj(prop_j)
+        return self.w(prop_i + prop_j)
 
 
 class ScaleLayer(nn.Module):
 
     def forward(self, px, p1):
-        return px * p1  # 'pcf,p...f->pcf'
+        return px * p1  # 'pcf,pcf->pcf'
 
 
 class SelfDotLayer(nn.Module):
@@ -189,6 +164,29 @@ class SelfDotLayer(nn.Module):
     def forward(self, p):
         return torch.einsum("ixr, ixr->ir", p, p)[:, None, :]
 
+
+class InvarLayer(nn.Module):
+
+    def __init__(
+        self,
+        pp_nodes: list[int],
+        pi_nodes: list[int],
+        ii_nodes: list[int],
+        activation: Callable = F.tanh,
+    ):
+        super().__init__()
+        self.pp_layer = FFLayer(*pp_nodes, activation=activation)
+        self.pi_layer = PILayer(*pi_nodes, activation=activation)
+        self.ii_layer = FFLayer(*ii_nodes, activation=activation)
+        self.ip_layer = IPLayer()
+
+    def forward(self, p1, pair_i, pair_j, basis):
+        i1 = self.pi_layer(p1, pair_i, pair_j, basis)
+        i1 = self.ii_layer(i1)
+        p1 = self.ip_layer(i1, pair_i, p1)
+        p1 = self.pp_layer(p1)
+
+        return p1, i1
 
 class EqvarLayer(nn.Module):
 
@@ -204,12 +202,11 @@ class EqvarLayer(nn.Module):
     def forward(self, px, pair_i, pair_j, diff, i1):
 
         ix = self.pi_layer(px, pair_i, pair_j)
+        ix = ix + diff[:, :, None]
+        ix = self.ii_layer(ix)
         ix = self.scale_layer(ix, i1)
-        scaled_diff = self.scale_layer(diff[:, :, None], i1)
-        ix = ix + scaled_diff
         px = self.ip_layer(ix, pair_i, px)
         px = self.pp_layer(px)
-        ix = self.ii_layer(ix)
 
         return px, ix
 
@@ -225,10 +222,6 @@ class GCBlock1(nn.Module):
     ):
         super().__init__()
         self.p1_layer = InvarLayer(pp_nodes, pi_nodes, ii_nodes, activation)
-        # self.p3_layer = EqvarLayer([pp_nodes[0], pp_nodes[-1]])
-
-        # self.scale_layer = ScaleLayer()
-        # self.dot_layer = SelfDotLayer()
 
     def forward(self, p1, pair_i, pair_j, basis, *args) -> dict[str, torch.Tensor]:
         p1, i1 = self.p1_layer(p1, pair_i, pair_j, basis)
@@ -246,17 +239,22 @@ class GCBlock3(nn.Module):
         activation: Callable | None = F.tanh,
     ):
         super().__init__()
+        self.p1_layer = InvarLayer(pp_nodes, pi_nodes, ii_nodes, activation)
+        self.p3_layer = EqvarLayer([pp_nodes[0], pp_nodes[-1]])
+
+        self.scale_layer = ScaleLayer()
+        self.dot_layer = SelfDotLayer()
 
     def forward(self, p1, p3, pair_i, pair_j, basis, diff):
 
         p1, i1 = self.p1_layer(p1, pair_i, pair_j, basis)
         p3, i3 = self.p3_layer(p3, pair_i, pair_j, diff, i1)
 
-        px = torch.concat([p1, p3], dim=1)
-        p1t1, p3_scale = torch.split(px, 2, dim=1)
+        px = torch.concat([p1, self.dot_layer(p3)], dim=1)
+        p1t1, p3_scale = torch.split(px, [1, 1], dim=1)
         p3t1 = self.scale_layer(p3, p3_scale)
 
-        return p1t1, p3t1, i1, i3
+        return (p1t1, p3t1), (i1, i3)
 
 
 class ResUpdate(nn.Module):
@@ -272,11 +270,9 @@ class PiNet(nn.Module):
 
     in_keys = [
         alias.Z,
-        alias.atom_batch,
         alias.pair_diff,
         alias.pair_i,
         alias.pair_j,
-        alias.pair_batch,
     ]
     # out_keys = [("pinet", "p1"), ("pinet", "i1")]
 
@@ -342,21 +338,21 @@ class PiNet(nn.Module):
 
         self.res_update = ResUpdate()
 
-    def forward(self, Z, atom_batch, pair_diff, pair_i, pair_j, pair_mask) -> None:
+    def forward(self, Z, pair_diff, pair_i, pair_j) -> None:
         n_atoms = len(Z)
         pair_diff.requires_grad_()
         pair_dist = torch.linalg.norm(pair_diff, dim=-1)
         pair_i = pair_i.to(torch.int64)  # for scatter
         pair_j = pair_j.to(torch.int64)
-        # norm_pair_diff = pair_diff / pair_dist[..., None]
+        norm_pair_diff = pair_diff / pair_dist[..., None]
 
         basis = self.basis_fn(pair_dist)
         fc = self.cutoff_fn(pair_dist)
 
         basis = basis * fc[..., None]
-        p1 = self.embedding(Z)
+        p1 = self.embedding(Z)[:, None, :]
 
-        # (n_atoms, ) -> (n_atoms, n_basis)
+        # (n_atoms, 1, ...) -> (n_atoms, 1, n_basis)
         p1 = self.before_gc_block_layer(p1)
         props = [p1]
         if self.rank >= 3:
@@ -364,6 +360,6 @@ class PiNet(nn.Module):
             props.append(p3)
 
         for i in range(self.depth):
-            new_props, inters = self.gc_blocks[i](*props, pair_i, pair_j, basis)
-            props = self.res_update(*new_props, *props)
+            new_props, inters = self.gc_blocks[i](*props, pair_i, pair_j, basis, norm_pair_diff)
+            props = self.res_update(new_props, props)
         return (*props, *inters)

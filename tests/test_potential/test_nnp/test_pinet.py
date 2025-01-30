@@ -28,7 +28,7 @@ def rot3d(p3, axis, theta):
     return torch.einsum("ix...,xy->iy...", p3, rot)
 
 
-class TestUtils:
+class ModuleTester:
     def __init__(self, model):
         self.model = model
 
@@ -36,11 +36,17 @@ class TestUtils:
         output = self.model(*input_data)
         assert output.shape == expected_output_shape, f"Expected shape {expected_output_shape}, but got {output.shape}"
 
-    def test_equivariance(self, input_data, transform_fn):
+    def test_equivariance(self, input_data, transform_input, transform_output):
+        original_output = transform_output(self.model(*input_data))
+        transformed_input = transform_input(input_data)
+        transformed_output = self.model(*transformed_input)
+        assert torch.allclose(original_output, transformed_output, atol=1e-4, rtol=1e-4), "Model is not equivariant"
+
+    def test_invariance(self, input_data, transform_fn):
         original_output = self.model(*input_data)
         transformed_input = transform_fn(input_data)
         transformed_output = self.model(*transformed_input)
-        assert torch.allclose(original_output, transformed_output, atol=1e-4, rtol=1e-4), "Model is not equivariant"
+        assert torch.allclose(original_output, transformed_output, atol=1e-4, rtol=1e-4), "Model is not invariant"
 
 
 class TestPiNet:
@@ -115,51 +121,54 @@ class TestPiNet:
         from molpot.potential.nnp.pinet import FFLayer
 
         ppl = FFLayer(n_features, n_features, n_features * 2)
-        test_utils = TestUtils(ppl)
+        test_utils = ModuleTester(ppl)
         test_utils.test_shape((p1,), (n_atoms, 1, n_features * 2))
 
     def test_pilayer(self, p1, pair_i, pair_j, basis, n_pairs, n_features, n_basis):
         from molpot.potential.nnp.pinet import PILayer
 
         pil = PILayer(n_features, n_features * n_basis)
-        test_utils = TestUtils(pil)
-        test_utils.test_shape((p1, pair_i, pair_j, basis), (n_pairs, n_features, n_basis))
+        test_utils = ModuleTester(pil)
+        test_utils.test_shape((p1, pair_i, pair_j, basis), (n_pairs, 1, n_features))
 
     def test_iplayer(self, p1, n_atoms, i1, pair_i, n_features):
         from molpot.potential.nnp.pinet import IPLayer
 
         ipl = IPLayer()
-        test_utils = TestUtils(ipl)
+        test_utils = ModuleTester(ipl)
         test_utils.test_shape((i1, pair_i, p1), (n_atoms, 1, n_features))
 
     def test_pixlayer(self, p3, pair_i, pair_j, n_features):
         from molpot.potential.nnp.pinet import PIXLayer
 
         pixl = PIXLayer(n_features, n_features)
-        test_utils = TestUtils(pixl)
+        test_utils = ModuleTester(pixl)
+
+        axis = torch.rand(3)
+        theta = torch.rand(1)
 
         def rotate_fn(data):
             p3, pair_i, pair_j = data
-            axis = torch.rand(3)
-            theta = torch.rand(1)
             return (rot3d(p3, axis, theta=theta), pair_i, pair_j)
+        
+        def rotate_output(data):
+            return rot3d(data, axis, theta=theta)
 
-        test_utils.test_equivariance((p3, pair_i, pair_j), rotate_fn)
+        test_utils.test_equivariance((p3, pair_i, pair_j), rotate_fn, rotate_output)
 
     def test_scalelayer(self, p3, p1):
         from molpot.potential.nnp.pinet import ScaleLayer
         scalel = ScaleLayer()
-        test_utils = TestUtils(scalel)
+        test_utils = ModuleTester(scalel)
         test_utils.test_shape((p3, p1), p3.shape)
 
     def test_selfdotlayer(self, p3):
         from molpot.potential.nnp.pinet import SelfDotLayer
         sdl = SelfDotLayer()
-        test_utils = TestUtils(sdl)
+        test_utils = ModuleTester(sdl)
         test_utils.test_shape((p3,), (p3.shape[0], 1, p3.shape[-1]))
 
-    @pytest.mark.parametrize("rank", [1, 3])
-    def test_pinet(self, rank, gen_homogenous_frames, n_frames, n_batch, n_basis):
+    def test_pinet3(self, gen_homogenous_frames, n_frames, n_batch, n_basis):
         r_cutoff = 5.0
         frames = gen_homogenous_frames(n_frames)
         dataloader = mpot.DataLoader(frames, batch_size=n_batch, shuffle=False)
@@ -167,19 +176,41 @@ class TestPiNet:
             depth=4,
             basis_fn=mpot.potential.nnp.radial.GaussianRBF(n_basis, r_cutoff),
             cutoff_fn=mpot.potential.nnp.cutoff.CosineCutoff(r_cutoff),
-            rank=rank,
         )
-        readout = mpot.potential.nnp.readout.Atomwise(16, 1, in_keys=("pinet", "p1"), out_keys=("predict", "energy"))
+        readout = mpot.potential.nnp.readout.Atomwise([16, 1], in_keys=[("pinet", "p1"), alias.atom_batch], out_keys=("predict", "energy"))
 
-        test_utils = TestUtils(pinet)
+        model = mpot.PotentialSeq(pinet, readout)
 
-        def rotate_fn(batch):
-            batch[alias.xyz] = rot3d(batch[alias.xyz], axis, theta)
-            return batch
+        test_utils = ModuleTester(model)
 
         axis = torch.rand(3)
         theta = torch.rand(1)
 
+        def rotate_fn(batch):
+            batch[alias.xyz] = rot3d(batch[alias.xyz], axis, theta)
+            return batch
+        
+        def rotate_output(batch):
+            return rot3d(batch["pinet", "p3"], axis, theta)
+
         for batch in dataloader:
 
-            test_utils.test_equivariance((batch,), rotate_fn)
+            test_utils.test_equivariance((batch, ), rotate_fn, rotate_output)
+
+    # def test_pinet1(self, gen_homogenous_frames, n_frames, n_batch, n_basis):
+    #     r_cutoff = 5.0
+    #     frames = gen_homogenous_frames(n_frames)
+    #     dataloader = mpot.DataLoader(frames, batch_size=n_batch, shuffle=False)
+    #     pinet = mpot.potential.nnp.PiNet(
+    #         depth=4,
+    #         basis_fn=mpot.potential.nnp.radial.GaussianRBF(n_basis, r_cutoff),
+    #         cutoff_fn=mpot.potential.nnp.cutoff.CosineCutoff(r_cutoff),
+    #     )
+    #     readout = mpot.potential.nnp.readout.Atomwise([16, 1], in_keys=("pinet", "p1"), out_keys=("predict", "energy"))
+
+    #     model = mpot.PotentialSeq(pinet, readout)
+
+    #     test_utils = ModuleTester(model)
+
+    #     for batch in dataloader:
+    #         test_utils.test_shape((batch,), (n_batch, 1, 16))

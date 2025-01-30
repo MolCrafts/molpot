@@ -21,9 +21,9 @@ class Atomwise(nn.Module):
 
     def __init__(
         self,
+        n_neurons: list[int],
         in_keys: str,
         out_keys: str,
-        n_neurons: list[int],
         activation: Callable = F.silu,
         reduce: str = "sum",
         per_atom_output_key: str | None = None,
@@ -59,22 +59,25 @@ class Atomwise(nn.Module):
         self.reduce = reduce
 
     def forward(self, *inputs) -> tuple[dict, dict]:
-        atom_batch = inputs[0]
         # predict atomwise contributions
-        y = self.outnet(inputs[1])  # (n_atoms, n_out)
+        y = self.outnet(inputs[0])  # (n_atoms, n_out)
+        if len(inputs) > 1:
+            atom_batch = inputs[1]
+            result = self.reduce_op[self.reduce](
+                torch.zeros(
+                    (torch.max(atom_batch) + 1, y.shape[1]), device=y.device, dtype=y.dtype
+                ),
+                0,
+                atom_batch,
+                y,
+            )
+        else:
+            result = torch.sum(y, dim=0)
 
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:
             inputs[self.per_atom_output_key] = y
 
-        result = self.reduce_op[self.reduce](
-            torch.zeros(
-                (torch.max(atom_batch) + 1, y.shape[1]), device=y.device, dtype=y.dtype
-            ),
-            0,
-            atom_batch,
-            y,
-        )
         return result
 
 
