@@ -37,7 +37,7 @@ def gen_homogenous_frames():
                         "dist": torch.tensor(
                             [0.9573, 0.9573, 1.5139], dtype=Config.ftype
                         ),
-                        "diff": torch.tensor(
+                        "diff": torch.tensor(  # j - i
                             [
                                 [0.7570, 0.5859, 0.0000],
                                 [-0.7570, 0.5859, 0.0000],

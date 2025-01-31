@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from .block import build_mlp
 from typing import Callable, Literal
 from molpot import NameSpace, alias
+from molpot.potential.nnp.base import Dense
 
 
 class FFLayer(nn.Module):
@@ -143,14 +144,13 @@ class PIXLayer(nn.Module):
         activation: Callable | None = F.tanh,
     ):
         super().__init__()
-        self.w = build_mlp(*n_nodes, activation=activation, last_bias=False)
+        self.w = Dense(in_features=n_nodes[0], out_features=n_nodes[-1], activation=activation)
 
-    def forward(self, prop, pair_i, pair_j):
+    def forward(self, px, pair_i, pair_j):
 
-        prop_i = prop[pair_i]
-        prop_j = prop[pair_j]
-
-        return self.w(prop_i + prop_j)
+        px_i = px[pair_i]
+        px_j = px[pair_j]
+        return self.w(px_i + px_j)
 
 
 class ScaleLayer(nn.Module):
@@ -341,10 +341,10 @@ class PiNet(nn.Module):
     def forward(self, Z, pair_diff, pair_i, pair_j) -> None:
         n_atoms = len(Z)
         pair_diff.requires_grad_()
-        pair_dist = torch.linalg.norm(pair_diff, dim=-1)
+        pair_dist = torch.linalg.norm(pair_diff, dim=-1)  # (n_pairs, )
         pair_i = pair_i.to(torch.int64)  # for scatter
         pair_j = pair_j.to(torch.int64)
-        norm_pair_diff = pair_diff / pair_dist[..., None]
+        norm_pair_diff = pair_diff / pair_dist[:, None]
 
         basis = self.basis_fn(pair_dist)
         fc = self.cutoff_fn(pair_dist)
@@ -356,7 +356,7 @@ class PiNet(nn.Module):
         p1 = self.before_gc_block_layer(p1)
         props = [p1]
         if self.rank >= 3:
-            p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], device=p1.device)
+            p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
             props.append(p3)
 
         for i in range(self.depth):
