@@ -148,20 +148,6 @@ class MapStyleDataset(Dataset):
 
 class rMD17(MapStyleDataset):
 
-    atomrefs = {
-        "energy": torch.tensor([
-            0.0,
-            -313.5150902000774,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            -23622.587180094913,
-            -34219.46811826416,
-            -47069.30768969713,
-        ])
-    }
-
     datasets_dict = dict(
         aspirin="rmd17_aspirin.npz",
         azobenzene="rmd17_azobenzene.npz",
@@ -191,14 +177,12 @@ class rMD17(MapStyleDataset):
         ],
         save_dir: Path | None = None,
         device: str = "cpu",
-        # total: int | None = 1000,
-        # processes: list[Module] = [],
+        atomic_dress: bool = True
     ):
         super().__init__(
             name="rmd17",
             save_dir=save_dir,
             device=device,
-            # processes=processes,
         )
         self.labels.set(
             "energy", "total energy", float, "kcal/mol", (None, 1), "labels"
@@ -241,6 +225,9 @@ class rMD17(MapStyleDataset):
         else:
             data = self.download()
         raw_frames = self.parse_data(data, total=total)
+
+        atomic_dress = 
+
         _preprocess = Sequential(*preprocess)
         self._frames = [_preprocess(frame) for frame in raw_frames]
         return self._frames
@@ -293,7 +280,7 @@ class rMD17(MapStyleDataset):
             frame[alias.Z] = numbers
             frame[alias.R] = torch.tensor(positions, dtype=torch.float32)
             frame["labels", "energy"] = torch.tensor(
-                [[energies - self.atomrefs["energy"][numbers].sum()]],
+                [energies],
                 dtype=Config.ftype,
             )
             frame["labels", "forces"] = torch.tensor(forces, dtype=Config.ftype)

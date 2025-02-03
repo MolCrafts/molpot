@@ -77,14 +77,14 @@ class PotentialTrainer(MolpotEngine):
 
         self.metrics = defaultdict(dict)
         self.loggers = {}
-        if isinstance(loss_fn, Constraint):
-            for name, target, label, weight in loss_fn.constraints:
-                self.add_metric(
-                    name,
-                    MeanAbsoluteError(lambda outputs: (outputs['predicts'][target], outputs['labels'][label])),
-                    usage=EpochWise(),
-                    engine=None,
-                )
+        # if isinstance(loss_fn, Constraint):
+        #     for name, target, label, weight in loss_fn.constraints:
+        #         self.add_metric(
+        #             name,
+        #             MeanAbsoluteError(lambda outputs: (outputs['predicts'][target], outputs['labels'][label])),
+        #             usage=EpochWise(),
+        #             engine=None,
+        #         )
 
     def compile(self):
         self.model = self.model.to(self.device)
@@ -104,12 +104,12 @@ class PotentialTrainer(MolpotEngine):
         from ignite.handlers import LRScheduler
 
         scheduler_handler = LRScheduler(scheduler)
-        self.trainer.add_event_handler(Events.ITERATION_STARTED, scheduler_handler)
+        self.trainer.add_event_handler(Events.ITERATION_COMPLETED(every=10000), scheduler_handler)
 
     def add_checkpoint(
         self,
         save_dir,
-        n_every=None,
+        n_every=int(1e5),
         n_epoch=None,
         filename_prefix="",
         score_function=None,
@@ -228,6 +228,7 @@ class PotentialTrainer(MolpotEngine):
     ):
 
         tb_logger = TensorboardLogger(log_dir)
+        
         # add default training loss
         tb_logger.attach_output_handler(
             self.trainer,
