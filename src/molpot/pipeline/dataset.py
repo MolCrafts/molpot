@@ -15,7 +15,9 @@ import molpot as mpot
 from molpot import Config, NameSpace, alias
 
 from abc import abstractmethod
-from typing import Iterator
+
+from molpot.process import AtomicDress
+
 logger = logging.getLogger("molpot")
 
 
@@ -218,7 +220,7 @@ class rMD17(MapStyleDataset):
     def frames(self):
         return self._frames
 
-    def prepare(self, total: int = 1000, preprocess: list[Module] = []):
+    def prepare(self, total: int|None = 1000, preprocess: list[Module] = []):
 
         if self.save_dir is None:
             data = self._fetch_data()
@@ -226,10 +228,11 @@ class rMD17(MapStyleDataset):
             data = self.download()
         raw_frames = self.parse_data(data, total=total)
 
-        atomic_dress = 
+        atomic_dress = AtomicDress()
 
         _preprocess = Sequential(*preprocess)
         self._frames = [_preprocess(frame) for frame in raw_frames]
+        self._frames = atomic_dress(self._frames)
         return self._frames
 
     def _fetch_data(self) -> Sequence[mpot.Frame]:
@@ -273,6 +276,8 @@ class rMD17(MapStyleDataset):
     def parse_data(self, data, total: int) -> Sequence[mpot.Frame]:
         numbers = torch.tensor(data["nuclear_charges"], dtype=Config.itype)
         frames = []
+        if total is None:
+            total = torch.inf
         for positions, energies, forces in zip(
             data["coords"], data["energies"], data["forces"]
         ):

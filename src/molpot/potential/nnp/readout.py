@@ -88,7 +88,7 @@ class PairForce(nn.Module):
         in_keys: str,
         dx_key: str = alias.pair_diff,
         out_keys: str = alias.pair_force,
-        create_graph=False,
+        create_graph=True,
         retain_graph=True,
     ):
         """
