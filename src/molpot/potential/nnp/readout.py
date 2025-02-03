@@ -59,7 +59,6 @@ class Atomwise(nn.Module):
         self.reduce = reduce
 
     def forward(self, *inputs) -> tuple[dict, dict]:
-        
         # predict atomwise contributions
         y = self.outnet(inputs[1])  # (n_atoms, n_out)
         if len(inputs) > 1:
