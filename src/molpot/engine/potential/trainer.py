@@ -77,14 +77,14 @@ class PotentialTrainer(MolpotEngine):
 
         self.metrics = defaultdict(dict)
         self.loggers = {}
-        if isinstance(loss_fn, Constraint):
-            for name, target, label, weight in loss_fn.constraints:
-                self.add_metric(
-                    name,
-                    MeanAbsoluteError(lambda outputs: (outputs['predicts'][target], outputs['labels'][label])),
-                    usage=EpochWise(),
-                    engine=None,
-                )
+        # if isinstance(loss_fn, Constraint):
+        #     for name, target, label, weight in loss_fn.constraints:
+        #         self.add_metric(
+        #             name,
+        #             MeanAbsoluteError(lambda outputs: (outputs['predicts'][target], outputs['labels'][label])),
+        #             usage=EpochWise(),
+        #             engine=None,
+        #         )
 
     def compile(self):
         self.model = self.model.to(self.device)
@@ -225,16 +225,7 @@ class PotentialTrainer(MolpotEngine):
             "trainer": Events.ITERATION_COMPLETED(every=100),
             "evaluator": Events.EPOCH_COMPLETED,
         },
-<<<<<<< HEAD
-        force_clean = False
     ):
-        log_dir = Path(log_dir)
-        if log_dir.exists():
-            for log in log_dir.iterdir():
-                log.unlink()
-=======
-    ):
->>>>>>> e6213582fd49e6687e50d53641557d98c00fbf0f
 
         tb_logger = TensorboardLogger(log_dir)
         

@@ -79,7 +79,7 @@ class Atomwise(nn.Module):
         if self.per_atom_output_key is not None:
             inputs[self.per_atom_output_key] = y
 
-        return result
+        return result.squeeze()
 
 
 class PairForce(nn.Module):
