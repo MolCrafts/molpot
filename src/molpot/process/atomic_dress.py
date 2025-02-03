@@ -41,14 +41,11 @@ class AtomicDress(nn.Module):
         x = torch.stack(x)
         y = torch.stack(y)
         beta = torch.linalg.pinv(x.T @ x) @ x.T @ y
-        print(beta.shape)
         # Build a dictionary mapping each element to its fitted coefficient.
         self.atomic_dress = {elem+1: e.item() for elem, e in enumerate(beta)}
-        print(self.atomic_dress)
         
         # Compute the residual error (difference between the prediction and true values).
         error = torch.matmul(x, beta) - y
-        print(error.shape)
 
         # substract the fitted energy from the true energy
         for frame in frames:

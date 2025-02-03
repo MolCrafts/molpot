@@ -148,9 +148,9 @@ class PIXLayer(nn.Module):
 
     def forward(self, px, pair_i, pair_j):
 
-        px_i = px[pair_i]
+        # px_i = px[pair_i]
         px_j = px[pair_j]
-        return self.w(px_i + px_j)
+        return px_j
 
 
 class ScaleLayer(nn.Module):
@@ -192,7 +192,7 @@ class EqvarLayer(nn.Module):
 
     def __init__(self, n_nodes: list[int]):
         super().__init__()
-        self.pp_layer = FFLayer(*n_nodes, activation=None)
+        self.pp_layer = nn.Linear(*n_nodes, bias=False)
         self.pi_layer = PIXLayer(*n_nodes, activation=None)
         self.ii_layer = FFLayer(*n_nodes, activation=None)
         self.ip_layer = IPLayer()
@@ -200,9 +200,9 @@ class EqvarLayer(nn.Module):
         self.scale_layer = ScaleLayer()
 
     def forward(self, px, pair_i, pair_j, diff, i1):
-
+   
         ix = self.pi_layer(px, pair_i, pair_j)
-        ix = ix + diff[:, :, None]
+        ix = ix * diff[:, :, None]
         ix = self.ii_layer(ix)
         ix = self.scale_layer(ix, i1)
         px = self.ip_layer(ix, pair_i, px)
@@ -241,16 +241,16 @@ class GCBlock3(nn.Module):
         super().__init__()
         self.p1_layer = InvarLayer(pp_nodes, pi_nodes, ii_nodes, activation)
         self.p3_layer = EqvarLayer([pp_nodes[0], pp_nodes[-1]])
-
+        self.pp_layer = nn.Linear(pp_nodes[0], pp_nodes[1])
         self.scale_layer = ScaleLayer()
-        self.dot_layer = SelfDotLayer()
+        self.norm_layer = SelfDotLayer()
 
     def forward(self, p1, p3, pair_i, pair_j, basis, diff):
 
         p1, i1 = self.p1_layer(p1, pair_i, pair_j, basis)
         p3, i3 = self.p3_layer(p3, pair_i, pair_j, diff, i1)
 
-        px = torch.concat([p1, self.dot_layer(p3)], dim=1)
+        px = self.pp_layer(torch.concat([p1, self.norm_layer(p3)], dim=1))
         p1t1, p3_scale = torch.split(px, [1, 1], dim=1)
         p3t1 = self.scale_layer(p3, p3_scale)
 
@@ -356,7 +356,8 @@ class PiNet(nn.Module):
         p1 = self.before_gc_block_layer(p1)
         props = [p1]
         if self.rank >= 3:
-            p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
+            # p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
+            p3 = p1.repeat(1, 3, 1)
             props.append(p3)
 
         for i in range(self.depth):

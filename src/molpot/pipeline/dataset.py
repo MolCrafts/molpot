@@ -150,6 +150,20 @@ class MapStyleDataset(Dataset):
 
 class rMD17(MapStyleDataset):
 
+    atomrefs = {
+        "energy": torch.tensor([
+            0.0,
+            -313.5150902000774,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -23622.587180094913,
+            -34219.46811826416,
+            -47069.30768969713,
+        ])
+        }
+
     datasets_dict = dict(
         aspirin="rmd17_aspirin.npz",
         azobenzene="rmd17_azobenzene.npz",
@@ -285,7 +299,7 @@ class rMD17(MapStyleDataset):
             frame[alias.Z] = numbers
             frame[alias.R] = torch.tensor(positions, dtype=torch.float32)
             frame["labels", "energy"] = torch.tensor(
-                [energies],
+                [energies],  # - torch.sum(self.atomrefs["energy"][numbers])
                 dtype=Config.ftype,
             )
             frame["labels", "forces"] = torch.tensor(forces, dtype=Config.ftype)
