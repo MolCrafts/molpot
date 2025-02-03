@@ -59,10 +59,11 @@ class Atomwise(nn.Module):
         self.reduce = reduce
 
     def forward(self, *inputs) -> tuple[dict, dict]:
+        
         # predict atomwise contributions
-        y = self.outnet(inputs[0])  # (n_atoms, n_out)
+        y = self.outnet(inputs[1])  # (n_atoms, n_out)
         if len(inputs) > 1:
-            atom_batch = inputs[1]
+            atom_batch = inputs[0]
             result = self.reduce_op[self.reduce](
                 torch.zeros(
                     (torch.max(atom_batch) + 1, *y.shape[1:]), device=y.device, dtype=y.dtype

@@ -8,7 +8,7 @@ from ignite.handlers import (
     TensorboardLogger,
     global_step_from_engine,
 )
-from ignite.metrics import EpochWise, Metric, MetricUsage
+from ignite.metrics import EpochWise, Metric, MetricUsage, MeanAbsoluteError
 
 from ..base import MolpotEngine
 from .utils import (
@@ -16,6 +16,7 @@ from .utils import (
     create_supervised_evaluator,
 )
 from collections import defaultdict
+from ..loss import Constraint
 
 
 class PotentialTrainer(MolpotEngine):
@@ -73,9 +74,18 @@ class PotentialTrainer(MolpotEngine):
                 no_grad=no_grad_eval,
             ),
         )
-        
+
         self.metrics = defaultdict(dict)
         self.loggers = {}
+        if isinstance(loss_fn, Constraint):
+            for name, target, label, weight in loss_fn.constraints:
+                self.add_metric(
+                    name,
+                    MeanAbsoluteError(lambda outputs: (outputs['predicts'][target], outputs['labels'][label])),
+                    usage=EpochWise(),
+                    engine=None,
+                )
+
     def compile(self):
         self.model = self.model.to(self.device)
         self.loss_fn = self.loss_fn.to(self.device)
@@ -92,6 +102,7 @@ class PotentialTrainer(MolpotEngine):
 
     def add_lr_scheduler(self, scheduler):
         from ignite.handlers import LRScheduler
+
         scheduler_handler = LRScheduler(scheduler)
         self.trainer.add_event_handler(Events.ITERATION_STARTED, scheduler_handler)
 
@@ -194,7 +205,7 @@ class PotentialTrainer(MolpotEngine):
         name: str,
         metric: Metric,
         usage: str | MetricUsage = EpochWise(),
-        engine: str| None = None,
+        engine: str | None = None,
     ) -> None:
         if engine:
             metric.attach(self._engines[engine], name, usage)
@@ -210,12 +221,12 @@ class PotentialTrainer(MolpotEngine):
     def attach_tensorboard(
         self,
         log_dir: str,
-        tag_event_map = {
+        tag_event_map={
             "trainer": Events.ITERATION_COMPLETED(every=100),
             "evaluator": Events.EPOCH_COMPLETED,
-        }
+        },
     ):
-        
+
         tb_logger = TensorboardLogger(log_dir)
         # add default training loss
         tb_logger.attach_output_handler(
@@ -226,7 +237,7 @@ class PotentialTrainer(MolpotEngine):
             global_step_transform=global_step_from_engine(self.trainer),
         )
         for engine_name, metric_info in self.metrics.items():
-                tb_logger.attach_output_handler(
+            tb_logger.attach_output_handler(
                 self._engines[engine_name],
                 event_name=tag_event_map[engine_name],
                 tag=engine_name,
