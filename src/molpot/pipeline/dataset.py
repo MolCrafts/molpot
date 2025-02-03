@@ -15,7 +15,7 @@ import molpot as mpot
 from molpot import Config, NameSpace, alias
 
 from abc import abstractmethod
-
+from typing import Iterator
 logger = logging.getLogger("molpot")
 
 
@@ -42,6 +42,17 @@ class Dataset(torch.utils.data.Dataset):
     def prepare(self): ...
 
     def download(self): ...
+
+class IterStyleDataset(Dataset):
+
+    def __init__(self, frames: Sequence[mpot.Frame]):
+        self.frames = frames
+
+    def __len__(self):
+        return len(self.frames)
+
+    def __getitem__(self, i: int) -> Any:
+        return self.frames[i]
 
 
 class MapStyleDataset(Dataset):
@@ -138,7 +149,7 @@ class MapStyleDataset(Dataset):
 class rMD17(MapStyleDataset):
 
     atomrefs = {
-        "energy": [
+        "energy": torch.tensor([
             0.0,
             -313.5150902000774,
             0.0,
@@ -148,7 +159,7 @@ class rMD17(MapStyleDataset):
             -23622.587180094913,
             -34219.46811826416,
             -47069.30768969713,
-        ]
+        ])
     }
 
     datasets_dict = dict(
@@ -282,7 +293,7 @@ class rMD17(MapStyleDataset):
             frame[alias.Z] = numbers
             frame[alias.R] = torch.tensor(positions, dtype=torch.float32)
             frame["labels", "energy"] = torch.tensor(
-                [energies - np.array(self.atomrefs["energy"])[numbers].sum()],
+                [[energies - self.atomrefs["energy"][numbers].sum()]],
                 dtype=Config.ftype,
             )
             frame["labels", "forces"] = torch.tensor(forces, dtype=Config.ftype)

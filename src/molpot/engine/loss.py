@@ -1,14 +1,20 @@
 import torch
+import torch.nn as nn
 
-class MultiTargetLoss(torch.nn.Module):
 
-    def __init__(self, loss_kernel: torch.nn.Module, keys):
+class Constraint(nn.Module):
+
+    def __init__(self, loss_kernel: nn.Module):
         super().__init__()
         self.loss_kernel = loss_kernel
-        self.keys = keys
+        self.constraints = []
+
+    def add_error(self, name: str, target, label, weight=1.0, ):
+        self.constraints.append((name, target, label, weight))
 
     def forward(self, pred, label):
-        loss = 0
-        for key, target, weight in self.keys:
-            loss += weight * self.loss_kernel(pred[key], label[target])
-        return loss
+        losses = [
+            weight * self.loss_kernel(pred[target_key], label[label_key])
+            for _, target_key, label_key, weight in self.constraints
+        ]
+        return torch.sum(torch.stack(losses))

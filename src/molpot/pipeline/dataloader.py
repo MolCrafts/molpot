@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Sequence, Iterator
 from torch.utils.data import Dataset
 import torch
 import torchdata.nodes as tn
@@ -106,7 +106,7 @@ class DataLoader(tn.Loader):
 
     def __init__(
         self,
-        dataset: Dataset,
+        dataset: Dataset | Iterator[Frame],
         batch_size: int = 1,
         shuffle: bool = True,
         num_workers: int = 0,
@@ -114,8 +114,7 @@ class DataLoader(tn.Loader):
         drop_last: bool = False,
         collate_fn=_compact_collate,
     ):
-        # Assume we're working with a map-style dataset
-        assert hasattr(dataset, "__getitem__") and hasattr(dataset, "__len__")
+
         # Start with a sampler, since caller did not provide one
         sampler = RandomSampler(dataset) if shuffle else SequentialSampler(dataset)
         # Sampler wrapper converts a Sampler to a BaseNode
@@ -140,16 +139,15 @@ class DataLoader(tn.Loader):
                 method="process",  # Set this to "thread" for multi-threading
                 in_order=True,
             )
-            prefetch_factor=num_workers * 2
+            prefetch_factor = num_workers * 2
         else:
             node = tn.Mapper(node, map_fn=map_and_collate)
-            prefetch_factor=1
+            prefetch_factor = 1
 
         # Optionally apply pin-memory, and we usually do some pre-fetching
         if pin_memory:
             node = tn.PinMemory(node)
         node = tn.Prefetcher(node, prefetch_factor=prefetch_factor)
-        
 
         # Note that node is an iterator, and once it's exhausted, you'll need to call .reset()
         # on it to start a new Epoch.

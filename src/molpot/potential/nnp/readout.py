@@ -21,9 +21,9 @@ class Atomwise(nn.Module):
 
     def __init__(
         self,
+        n_neurons: list[int],
         in_keys: str,
         out_keys: str,
-        n_neurons: list[int],
         activation: Callable = F.silu,
         reduce: str = "sum",
         per_atom_output_key: str | None = None,
@@ -59,20 +59,26 @@ class Atomwise(nn.Module):
         self.reduce = reduce
 
     def forward(self, *inputs) -> tuple[dict, dict]:
-        atom_batch = inputs[1]
+        
         # predict atomwise contributions
-        y = self.outnet(inputs[0])  # (n_atoms, n_out)
+        y = self.outnet(inputs[1])  # (n_atoms, n_out)
+        if len(inputs) > 1:
+            atom_batch = inputs[0]
+            result = self.reduce_op[self.reduce](
+                torch.zeros(
+                    (torch.max(atom_batch) + 1, *y.shape[1:]), device=y.device, dtype=y.dtype
+                ),
+                0,
+                atom_batch,
+                y,
+            )
+        else:
+            result = torch.sum(y, dim=0)
 
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:
             inputs[self.per_atom_output_key] = y
 
-        result = self.reduce_op[self.reduce](
-            torch.zeros((torch.max(atom_batch) + 1, y.shape[0]), device=y, dtype=y),
-            0,
-            atom_batch,
-            y,
-        )
         return result
 
 
@@ -80,8 +86,8 @@ class PairForce(nn.Module):
 
     def __init__(
         self,
-        fx_key: str,
-        dx_key: str = alias.pair_dist,
+        in_keys: str,
+        dx_key: str = alias.pair_diff,
         out_keys: str = alias.pair_force,
         create_graph=False,
         retain_graph=True,
@@ -97,39 +103,27 @@ class PairForce(nn.Module):
             retain_graph (bool, optional): _description_. Defaults to True.
         """
         super().__init__()
-        self.fx_key = fx_key
-        self.dx_key = dx_key
+        self.in_keys = [in_keys, dx_key, alias.pair_i, alias.pair_j]
         self.out_keys = out_keys
         self.create_graph = create_graph
         self.retain_graph = retain_graph
 
-    def forward(self, inputs):
-        fx = inputs[self.fx_key]
-        dx = inputs[self.dx_key]
+    def forward(self, *inputs):
+        fx, dx, pair_i, pair_j = inputs
         (dfdx,) = torch.autograd.grad(
-            fx, dx, create_graph=self.create_graph, retain_graph=True
+            torch.sum(fx), dx, create_graph=self.create_graph, retain_graph=True
         )
-
-        pair_force = torch.zeros_like(inputs[alias.pair_i])
-        pair_force = torch.index_add(
-            pair_force,
+        atom_force = torch.zeros(
+            max(pair_i.max(), pair_j.max()) + 1,
+            3,
+            dtype=dfdx.dtype,
+            device=dfdx.device,
+        )
+        atom_force = torch.index_add(
+            atom_force,
             0,
-            inputs[alias.pair_i],
+            pair_i,
             dfdx,
         )
-        pair_force = torch.index_add(
-            pair_force,
-            0,
-            inputs[alias.pair_j],
-            -dfdx,
-        )
-
-        atom_force = torch.index_add(
-            torch.zeros(
-                (torch.max(inputs[alias.atom_batch]) + 1, 3), device=pair_force.device
-            ),
-            0,
-            inputs[alias.pair_i],
-            pair_force,
-        )
+        atom_force = torch.index_add(atom_force, 0, pair_j, dfdx, alpha=-1)
         return atom_force
