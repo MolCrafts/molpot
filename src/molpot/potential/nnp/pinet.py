@@ -90,8 +90,8 @@ class EqvarLayer(nn.Module):
     def __init__(self, n_nodes: list[int]):
         super().__init__()
         self.pp_layer = nn.Linear(*n_nodes, bias=False)
-        self.pi_layer = PIXLayer(*n_nodes, activation=None)
-        self.ii_layer = FeedForward(*n_nodes, activation=None, bias=False)
+        self.pi_layer = PIXLayer(*n_nodes)
+        self.ii_layer = FeedForward(*n_nodes, bias=False)
         self.ip_layer = IPLayer()
 
         self.scale_layer = ScaleLayer()

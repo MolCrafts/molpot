@@ -6,6 +6,7 @@ import tensordict as td
 
 torch.use_deterministic_algorithms(True)
 
+
 def rot3d(p3, axis, theta):
     r"""Rotate 3D coordinates by theta around axis by applying Rodrigues' rotation formula.
     Args:
@@ -65,9 +66,14 @@ class ModuleTester:
         max_abs_diff = torch.max(abs_diff)
         rel_diff = abs_diff / (torch.abs(original_output) + 1e-10)
         max_rel_diff = torch.max(rel_diff)
-        assert original_output.shape == result.shape, f"Shape mismatch: {original_output.shape} vs {result.shape}"
+        assert (
+            original_output.shape == result.shape
+        ), f"Shape mismatch: {original_output.shape} vs {result.shape}"
         assert torch.allclose(
-            original_output/torch.linalg.norm(original_output, axis=1, keepdim=True), result/torch.linalg.norm(result, axis=1, keepdim=True), atol=1e-2, rtol=1e-2
+            original_output / torch.linalg.norm(original_output, axis=1, keepdim=True),
+            result / torch.linalg.norm(result, axis=1, keepdim=True),
+            atol=1e-2,
+            rtol=1e-2,
         ), f"Model is not equivariant. Max absolute difference: {max_abs_diff:.2e}, Max relative difference: {max_rel_diff:.2e}"
 
     def test_invariance(self, transform_input, input_data, output_key=None):
@@ -149,14 +155,9 @@ class TestPiNet:
     def i1(self, p1, pair_i):
         return p1[pair_i]
 
-    @pytest.fixture
-    def rotate(self, p1):
-        pass
-
     def test_fflayer(self, n_atoms, n_features, p1):
-        from molpot.potential.nnp.pinet import FFLayer
-
-        ppl = FFLayer(n_features, n_features, n_features * 2)
+        from molpot.potential.nnp.pinet import FeedForward
+        ppl = FeedForward(n_features, n_features, n_features * 2)
         test_utils = ModuleTester(ppl)
         test_utils.test_shape((p1,), (n_atoms, 1, n_features * 2))
 
@@ -209,6 +210,7 @@ class TestPiNet:
     def test_eqvarlayer(self, gen_homogenous_frames, n_frames, n_batch, n_features):
         from molpot.potential.nnp.pinet import EqvarLayer
         from molpot.pipeline.dataloader import _compact_collate
+
         frames = _compact_collate(gen_homogenous_frames(n_frames))
         n_atoms = frames[alias.xyz].size(0)
         pair_i = frames[alias.pair_i]
@@ -220,17 +222,20 @@ class TestPiNet:
         eqvarl = EqvarLayer([n_features, n_features])
         output = eqvarl(p3, pair_i, pair_j, diff, i1)
 
-        assert (output[0].shape == (n_atoms, 3, n_features))
-        assert (output[1].shape == (n_pairs, 3, n_features))
+        assert output[0].shape == (n_atoms, 3, n_features)
+        assert output[1].shape == (n_pairs, 3, n_features)
 
         axis = torch.rand(3)
         theta = torch.rand(1)
 
         transformed_output = eqvarl(p3, pair_i, pair_j, rot3d(diff, axis, theta), i1)
-        assert torch.allclose(rot3d(output[0], axis, theta), transformed_output[0], atol=1e-2, rtol=1e-2)
+        assert torch.allclose(
+            rot3d(output[0], axis, theta), transformed_output[0], atol=1e-2, rtol=1e-2
+        )
 
-
-    def test_pinet3(self, gen_homogenous_frames, n_frames, n_batch, n_basis, n_features):
+    def test_pinet3(
+        self, gen_homogenous_frames, n_frames, n_batch, n_basis, n_features
+    ):
         r_cutoff = 5.0
         frames = gen_homogenous_frames(n_frames)
         dataloader = mpot.DataLoader(frames, batch_size=n_batch, shuffle=False)
@@ -244,7 +249,7 @@ class TestPiNet:
         )
         readout = mpot.potential.nnp.readout.Atomwise(
             [n_features, 1],
-            in_keys=[ alias.atom_batch, ("pinet", "p1")],
+            in_keys=[alias.atom_batch, ("pinet", "p1")],
             out_keys=("predict", "energy"),
         )
 
@@ -257,21 +262,28 @@ class TestPiNet:
         def rotate_input(batch):
             batch[alias.xyz] = rot3d(batch[alias.xyz], axis, theta)
             # recalculate pair_diff
-            batch[alias.pair_diff] = batch[alias.xyz][batch[alias.pair_j]] - batch[alias.xyz][batch[alias.pair_i]]
+            batch[alias.pair_diff] = (
+                batch[alias.xyz][batch[alias.pair_j]]
+                - batch[alias.xyz][batch[alias.pair_i]]
+            )
             return batch
 
         for batch in dataloader:
-            
-            batch['pairs', 'diff'].to(dtype=torch.float64)
+
+            batch["pairs", "diff"].to(dtype=torch.float64)
             original_output = model(batch)
-            original_p1 = original_output['pinet', 'p1']
-            original_p3 = original_output['pinet', 'p3']
+            original_p1 = original_output["pinet", "p1"]
+            original_p3 = original_output["pinet", "p3"]
             rotated_p3 = rot3d(original_p3, axis, theta)
             rotated_output = model(rotate_input(batch))
-            expect_p1 = rotated_output['pinet', 'p1']
-            expect_p3 = rotated_output['pinet', 'p3']
-            assert torch.allclose(original_p1, expect_p1, atol=1e-2, rtol=1e-2, equal_nan=True), "p1 is not invariant"
-            assert torch.allclose(rotated_p3, expect_p3, atol=1e-2, rtol=1e-2, equal_nan=True), "p3 is not invariant"
+            expect_p1 = rotated_output["pinet", "p1"]
+            expect_p3 = rotated_output["pinet", "p3"]
+            assert torch.allclose(
+                original_p1, expect_p1, atol=1e-2, rtol=1e-2, equal_nan=True
+            ), "p1 is not invariant"
+            assert torch.allclose(
+                rotated_p3, expect_p3, atol=1e-2, rtol=1e-2, equal_nan=True
+            ), "p3 is not invariant"
 
     def test_pinet1(self, gen_homogenous_frames, n_frames, n_batch, n_basis):
         r_cutoff = 5.0
@@ -299,4 +311,6 @@ class TestPiNet:
             return batch
 
         for batch in dataloader:
-            test_utils.test_invariance(permute_input, input_data=batch, output_key=("pinet", "p1"))
+            test_utils.test_invariance(
+                permute_input, input_data=batch, output_key=("pinet", "p1")
+            )

@@ -5,9 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from molpot import alias
-
-from .block import build_mlp
-
+from .base import FeedForward
 
 class Atomwise(nn.Module):
     """
@@ -52,7 +50,7 @@ class Atomwise(nn.Module):
         assert len(n_neurons) > 1, ValueError("Need at least one in and one out layer")
         self.n_out = n_neurons[-1]
 
-        self.outnet = build_mlp(
+        self.outnet = FeedForward(
             *n_neurons,
             activation=activation,
         )

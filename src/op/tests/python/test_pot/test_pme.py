@@ -1,12 +1,12 @@
 import torch
 import pytest
 import numpy as np
-from molpot_op.pot import PME
+from molpot_op.pot import PMEkernel
 
 class PmeModule(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.pme = PME(14, 15, 16, 5, 4.985823141035867, 138.935, torch.zeros(9, 0, dtype=torch.int32))
+        self.pme = PMEkernel(14, 15, 16, 5, 4.985823141035867, 138.935, torch.zeros(9, 0, dtype=torch.int32))
 
     def forward(self, positions, charges, box_vectors):
         edir = self.pme.compute_direct(positions, charges, 0.5, box_vectors)
@@ -15,10 +15,10 @@ class PmeModule(torch.nn.Module):
 
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 def test_rectangular(device):
-    """Test PME on a rectangular box."""
+    """Test PMEkernel on a rectangular box."""
     if not torch.cuda.is_available() and device == 'cuda':
         pytest.skip('No GPU')
-    pme = PME(14, 15, 16, 5, 4.985823141035867, 138.935, torch.zeros(9, 0, dtype=torch.int32))
+    pme = PMEkernel(14, 15, 16, 5, 4.985823141035867, 138.935, torch.zeros(9, 0, dtype=torch.int32))
     pos = [[0.7713206433, 0.02075194936, 0.6336482349],
            [0.7488038825, 0.4985070123, 0.2247966455],
            [0.1980628648, 0.7605307122, 0.1691108366],
@@ -64,10 +64,10 @@ def test_rectangular(device):
 
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 def test_triclinic(device):
-    """Test PME on a triclinic box."""
+    """Test PMEkernel on a triclinic box."""
     if not torch.cuda.is_available() and device == 'cuda':
         pytest.skip('No GPU')
-    pme = PME(14, 16, 15, 5, 5.0, 138.935, torch.zeros(9, 0, dtype=torch.int32))
+    pme = PMEkernel(14, 16, 15, 5, 5.0, 138.935, torch.zeros(9, 0, dtype=torch.int32))
     pos = [[1.31396193, -0.9377441519, 0.9009447048],
            [1.246411648, 0.4955210369, -0.3256100634],
            [-0.4058114057, 1.281592137, -0.4926674903],
@@ -113,7 +113,7 @@ def test_triclinic(device):
 
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 def test_exclusions(device):
-    """Test PME with exclusions."""
+    """Test PMEkernel with exclusions."""
     if not torch.cuda.is_available() and device == 'cuda':
         pytest.skip('No GPU')
     pos = [[1.31396193, -0.9377441519, 0.9009447048],
@@ -138,7 +138,7 @@ def test_exclusions(device):
     exclusions = torch.tensor(excl, dtype=torch.int32, device=device)
     charges = torch.tensor([(i-4)*0.1 for i in range(9)], dtype=torch.float32, device=device)
     box_vectors = torch.tensor([[1, 0, 0], [-0.1, 1.2, 0], [0.2, -0.15, 1.1]], dtype=torch.float32, device=device)
-    pme = PME(14, 16, 15, 5, 5.0, 138.935, exclusions)
+    pme = PMEkernel(14, 16, 15, 5, 5.0, 138.935, exclusions)
 
     # Compare forces and energies to values computed with OpenMM.
 
@@ -197,7 +197,7 @@ def test_charge_deriv(device):
     exclusions = torch.tensor(excl, dtype=torch.int32, device=device)
     charges = torch.tensor([(i-4)*0.1 for i in range(9)], dtype=torch.float32, requires_grad=True, device=device)
     box_vectors = torch.tensor([[1, 0, 0], [0,1.1, 0], [0, 0, 1.2]], dtype=torch.float32, device=device)
-    pme = PME(14, 15, 16, 5, 4.985823141035867, 138.935, exclusions)
+    pme = PMEkernel(14, 15, 16, 5, 4.985823141035867, 138.935, exclusions)
 
     # Compute derivatives of the energies with respect to charges.
 
@@ -258,7 +258,7 @@ def test_jit(device):
     assert np.allclose(d1, d2)
 
 def test_cuda_graph():
-    """Test that PME works with CUDA graphs."""
+    """Test that PMEkernel works with CUDA graphs."""
     if not torch.cuda.is_available():
         pytest.skip('No GPU')
     device = 'cuda'
@@ -303,7 +303,7 @@ def test_double_derivative(device):
     charges = torch.tensor([(i-4)*0.1 for i in range(9)], dtype=torch.float32, device=device)
     charges.requires_grad_()
     box_vectors = torch.tensor([[1, 0, 0], [0,1.1, 0], [0, 0, 1.2]], dtype=torch.float32, device=device)
-    pme = PME(14, 16, 15, 5, 5.0, 138.935, torch.zeros(9, 0, dtype=torch.int32))
+    pme = PMEkernel(14, 16, 15, 5, 5.0, 138.935, torch.zeros(9, 0, dtype=torch.int32))
     edir = pme.compute_direct(positions, charges, 0.5, box_vectors)
     erecip = pme.compute_reciprocal(positions, charges, box_vectors)
     ddir = torch.autograd.grad(edir, positions, retain_graph=True)

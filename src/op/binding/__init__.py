@@ -8,4 +8,4 @@ torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libmolpot_opLib.
 
 from .locality.neighbors import get_neighbor_pairs
 from .scatter import scatter_add, scatter_sum
-from .pot import PME
+from .pot import PME, PMEkernel

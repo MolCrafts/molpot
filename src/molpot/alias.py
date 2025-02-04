@@ -14,8 +14,8 @@ class Alias:
         dtype: type,
         unit: str | None = None,
         shape: tuple = (),
-        namespace: str = "",
         category: str = "",
+        namespace: str = "",
     ) -> None:
         self.name = name
         self.unit = unit
@@ -47,7 +47,7 @@ class Alias:
         return hash(self.key)
 
     def __eq__(self, other: Union["Alias", tuple]) -> bool:
-        if isinstance(other, tuple):
+        if isinstance(other, (tuple, str)):
             return self.key == other
         return self.key == other.key
 
@@ -74,6 +74,11 @@ class NameSpace(dict):
         alias.namespace = self.name
         self[alias.name] = alias
         return alias.key
+    
+    def __getitem__(self, key):
+        if isinstance(key, Alias):
+            return self[key.name]
+        return super().__getitem__(key)
 
     def __getattribute__(self, name: str) -> str:
         if name in NameSpace.namespaces:

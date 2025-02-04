@@ -50,22 +50,31 @@ class Dense(nn.Linear):
         y = F.linear(input, self.weight, self.bias)
         y = self.activation(y)
         return y
-    
+
+
 class FeedForward(nn.Module):
-    def __init__(self, 
-        *n_nodes: int, 
+    def __init__(
+        self,
+        *n_nodes: int,
         bias: bool = True,
         activation: Callable | nn.Module | None = None,
         weight_init: Callable = xavier_uniform_,
         bias_init: Callable = zeros_,
         last_bias: bool = True,
         last_zero_init: bool = False,
-        ):
+    ):
         super().__init__()
 
         layers = [
-            Dense(n_nodes[i], n_nodes[i + 1], bias=bias, activation=activation, weight_init=weight_init, bias_init=bias_init)
-            for i in range(len(n_nodes) - 1)
+            Dense(
+                n_nodes[i],
+                n_nodes[i + 1],
+                bias=bias,
+                activation=activation,
+                weight_init=weight_init,
+                bias_init=bias_init,
+            )
+            for i in range(len(n_nodes) - 2)
         ]
         if last_zero_init:
             layers.append(
@@ -82,3 +91,7 @@ class FeedForward(nn.Module):
                 Dense(n_nodes[-2], n_nodes[-1], activation=None, bias=last_bias)
             )
         self.layers = nn.Sequential(*layers)
+
+
+    def forward(self, x):
+        return self.layers(x)
