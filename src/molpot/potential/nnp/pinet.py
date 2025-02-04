@@ -154,6 +154,25 @@ class GCBlock3(nn.Module):
         return (p1t1, p3t1), (i1, i3)
 
 
+class OutLayer(nn.Module):
+
+    def __init__(self, out_nodes: list[int]):
+        super().__init__()
+        if len(out_nodes) < 2:
+            raise ValueError("out_nodes must have at least 2 elements")
+        elif len(out_nodes) == 2:
+            out_nodes.append(out_nodes[-1])
+        self.ff_layer = FeedForward(*out_nodes[:-1])
+        self.out_units = nn.Linear(out_nodes[-2], out_nodes[-1])
+
+    def forward(self, ps, prev_ps):
+        p1 = ps[0]
+        prev_p1 = prev_ps[0]
+        p1 = self.ff_layer(p1)
+        p1 = self.out_units(p1)
+        return (p1 + prev_p1, *ps[1:])
+
+
 class ResUpdate(nn.Module):
 
     def __init__(self):
@@ -181,6 +200,7 @@ class PiNet(nn.Module):
         pp_nodes: list[int] = [16, 16],
         pi_nodes: list[int] = [16, 16],
         ii_nodes: list[int] = [16, 16],
+        out_nodes: list[int] = [16, 16],
         activation: Callable | None = F.tanh,
         max_atomtypes: int = 100,
         rank: Literal[1, 3] = 3,
@@ -232,6 +252,7 @@ class PiNet(nn.Module):
                 for _ in range(depth)
             ]
         )
+        self.out_layers = nn.ModuleList([OutLayer(out_nodes) for _ in range(depth)])
 
         self.res_update = ResUpdate()
 
@@ -260,5 +281,6 @@ class PiNet(nn.Module):
             new_props, inters = self.gc_blocks[i](
                 *props, pair_i, pair_j, basis, norm_pair_diff
             )
+            new_props = self.out_layers[i](new_props, props)
             props = self.res_update(new_props, props)
         return (*props, *inters)

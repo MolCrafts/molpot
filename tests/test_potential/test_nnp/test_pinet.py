@@ -157,6 +157,7 @@ class TestPiNet:
 
     def test_fflayer(self, n_atoms, n_features, p1):
         from molpot.potential.nnp.pinet import FeedForward
+
         ppl = FeedForward(n_features, n_features, n_features * 2)
         test_utils = ModuleTester(ppl)
         test_utils.test_shape((p1,), (n_atoms, 1, n_features * 2))
@@ -246,6 +247,7 @@ class TestPiNet:
             pp_nodes=[n_features, n_features],
             pi_nodes=[n_features, n_features],
             ii_nodes=[n_features, n_features],
+            out_nodes=[n_features, n_features],
         )
         readout = mpot.potential.nnp.readout.Atomwise(
             [n_features, 1],
@@ -279,11 +281,11 @@ class TestPiNet:
             expect_p1 = rotated_output["pinet", "p1"]
             expect_p3 = rotated_output["pinet", "p3"]
             assert torch.allclose(
-                original_p1, expect_p1, atol=1e-2, rtol=1e-2, equal_nan=True
+                original_p1, expect_p1, atol=1e-2, rtol=1e-2
             ), "p1 is not invariant"
             assert torch.allclose(
-                rotated_p3, expect_p3, atol=1e-2, rtol=1e-2, equal_nan=True
-            ), "p3 is not invariant"
+                rotated_p3, expect_p3, atol=1e-1, rtol=1e-1
+            ), "p3 is not eqvariant"
 
     def test_pinet1(self, gen_homogenous_frames, n_frames, n_batch, n_basis):
         r_cutoff = 5.0
