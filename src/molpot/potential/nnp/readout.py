@@ -65,7 +65,9 @@ class Atomwise(nn.Module):
             atom_batch = inputs[0]
             result = self.reduce_op[self.reduce](
                 torch.zeros(
-                    (torch.max(atom_batch) + 1, *y.shape[1:]), device=y.device, dtype=y.dtype
+                    (torch.max(atom_batch) + 1, *y.shape[1:]),
+                    device=y.device,
+                    dtype=y.dtype,
                 ),
                 0,
                 atom_batch,
@@ -92,7 +94,7 @@ class PairForce(nn.Module):
         retain_graph=True,
     ):
         """
-        Derivate `fx_key` w.r.t. `dx_key` and store the result in `out_keys`. `retrain_graph` is set to True if need to compute higher order derivatives or derivate multiple times.
+        Derivate `fx_key` w.r.t. `dx_key` and store the result in `out_keys`. `retrain_graph` is set to True if need to compute higher order derivatives or derivate multiple times. `create_graph` is set to True if force is included in loss.
 
         Args:
             fx_key (str): _description_
@@ -110,7 +112,10 @@ class PairForce(nn.Module):
     def forward(self, *inputs):
         fx, dx, pair_i, pair_j = inputs
         (dfdx,) = torch.autograd.grad(
-            torch.sum(fx), dx, create_graph=self.create_graph, retain_graph=True
+            torch.sum(fx),
+            dx,
+            create_graph=self.create_graph,
+            retain_graph=self.retain_graph,
         )
         atom_force = torch.zeros(
             max(pair_i.max(), pair_j.max()) + 1,

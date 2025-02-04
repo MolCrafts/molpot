@@ -244,7 +244,7 @@ class TestPiNet:
         )
         readout = mpot.potential.nnp.readout.Atomwise(
             [n_features, 1],
-            in_keys=[("pinet", "p1"), alias.atom_batch],
+            in_keys=[ alias.atom_batch, ("pinet", "p1")],
             out_keys=("predict", "energy"),
         )
 
@@ -284,7 +284,7 @@ class TestPiNet:
         )
         readout = mpot.potential.nnp.readout.Atomwise(
             [16, 1],
-            in_keys=[("pinet", "p1"), alias.atom_batch],
+            in_keys=[alias.atom_batch, ("pinet", "p1")],
             out_keys=("predict", "energy"),
         )
 
