@@ -31,17 +31,35 @@ def rot3d(p3, axis, theta):
     return torch.einsum("ix...,xy->iy...", p3, rot)
 
 
+def assert_close(desired, expected, atol, rtol, msg):
+    assert (
+        desired.shape == expected.shape
+    ), f"Expected shape {expected.shape}, but got {desired.shape}"
+    abs_diff = torch.abs(expected - desired)
+    max_abs_diff = torch.max(abs_diff)
+    rel_diff = abs_diff / (torch.abs(desired) + 1e-10)
+    max_rel_diff = torch.max(rel_diff)
+    assert torch.allclose(
+        desired, expected, atol=atol, rtol=rtol
+    ), f"{msg}. Max absolute difference: {max_abs_diff:.2e}, Max relative difference: {max_rel_diff:.2e}"
+
+
+axis = torch.rand(3)
+theta = torch.rand(1)
+
+
 class ModuleTester:
     def __init__(self, model):
         self.model = model
 
-    def test_shape(self, input_data, expected_output_shape):
+    def test_shape(self, input_data, expected_output_shape, compare_fn=lambda x: x):
         output = self.model(*input_data)
+        output = compare_fn(output)
         assert (
             output.shape == expected_output_shape
         ), f"Expected shape {expected_output_shape}, but got {output.shape}"
 
-    def __call_model(self, model, inputs):
+    def _call_model(self, model, inputs):
         if isinstance(inputs, td.TensorDict):
             return model(inputs)
         elif isinstance(inputs, (list, tuple)):
@@ -50,45 +68,31 @@ class ModuleTester:
             return model(inputs)
 
     def test_equivariance(
-        self, transform_input, transform_output, input_data, output_key=None
+        self,
+        transform_input,
+        transform_output,
+        input_data,
+        compare_fn=lambda x: x,
+        atol=1e-6,
+        rtol=1e-6,
     ):
-        original_output = transform_output(self.__call_model(self.model, input_data))
+        original_output = self._call_model(self.model, transform_input(*input_data))
 
-        transformed_input = transform_input(input_data)
-        transformed_output = self.__call_model(self.model, transformed_input)
+        transformed_output = transform_output(self._call_model(self.model, input_data))
 
-        if output_key is not None:
-            result = transformed_output[output_key]
-        else:
-            result = transformed_output
+        desired = compare_fn(original_output)
+        expected = compare_fn(transformed_output)
 
-        abs_diff = torch.abs(original_output - result)
-        max_abs_diff = torch.max(abs_diff)
-        rel_diff = abs_diff / (torch.abs(original_output) + 1e-10)
-        max_rel_diff = torch.max(rel_diff)
-        assert (
-            original_output.shape == result.shape
-        ), f"Shape mismatch: {original_output.shape} vs {result.shape}"
-        assert torch.allclose(
-            original_output / torch.linalg.norm(original_output, axis=1, keepdim=True),
-            result / torch.linalg.norm(result, axis=1, keepdim=True),
-            atol=1e-2,
-            rtol=1e-2,
-        ), f"Model is not equivariant. Max absolute difference: {max_abs_diff:.2e}, Max relative difference: {max_rel_diff:.2e}"
+        assert_close(desired, expected, atol, rtol, "Model is not equivariant")
 
-    def test_invariance(self, transform_input, input_data, output_key=None):
-        original_output = self.model(input_data)
-        transformed_input = transform_input(input_data)
-        transformed_output = self.model(transformed_input)
-        if output_key is not None:
-            desire = transformed_output[output_key]
-            expect = original_output[output_key]
-        else:
-            desire = transformed_output
-            expect = original_output
-        assert torch.allclose(
-            expect, desire, atol=1e-2, rtol=1e-2
-        ), "Model is not invariant"
+    def test_invariance(
+        self, transform_input, input_data, compare_fn=lambda x: x, atol=1e-6, rtol=1e-6
+    ):
+        output = self._call_model(self.model, input_data)
+        original_output = self._call_model(self.model, transform_input(*input_data))
+        desired = compare_fn(original_output)
+        expected = compare_fn(output)
+        assert_close(desired, expected, atol, rtol, "Model is not invariant")
 
 
 class TestPiNet:
@@ -99,9 +103,13 @@ class TestPiNet:
             "n_atoms": 5,
             "n_features": 4,
             "n_basis": 10,
-            "n_frames": 9,
-            "n_batch": 3,
+            "n_frames": 9,  # total frames generated
+            "n_batches": 3,  # number of batches
         }
+
+    @pytest.fixture
+    def n_batches(self, config):
+        return config["n_batches"]
 
     @pytest.fixture
     def n_atoms(self, config):
@@ -118,10 +126,6 @@ class TestPiNet:
     @pytest.fixture
     def n_frames(self, config):
         return config["n_frames"]
-
-    @pytest.fixture
-    def n_batch(self, config):
-        return config["n_batch"]
 
     @pytest.fixture
     def n_pairs(self, n_atoms):
@@ -182,15 +186,11 @@ class TestPiNet:
         pixl = PIXLayer(n_features, n_features)
         test_utils = ModuleTester(pixl)
 
-        axis = torch.rand(3)
-        theta = torch.rand(1)
+        def rotate_input(p3, pair_i, pair_j):
+            return rot3d(p3, axis=axis, theta=theta), pair_i, pair_j
 
-        def rotate_input(data):
-            (p3, pair_i, pair_j) = data
-            return (rot3d(p3, axis, theta=theta), pair_i, pair_j)
-
-        def rotate_output(data):
-            return rot3d(data, axis, theta=theta)
+        def rotate_output(output):
+            return rot3d(output, axis=axis, theta=theta)
 
         test_utils.test_equivariance(rotate_input, rotate_output, (p3, pair_i, pair_j))
 
@@ -208,7 +208,7 @@ class TestPiNet:
         test_utils = ModuleTester(sdl)
         test_utils.test_shape((p3,), (p3.shape[0], 1, p3.shape[-1]))
 
-    def test_eqvarlayer(self, gen_homogenous_frames, n_frames, n_batch, n_features):
+    def test_eqvarlayer(self, gen_homogenous_frames, n_frames, n_features):
         from molpot.potential.nnp.pinet import EqvarLayer
         from molpot.pipeline.dataloader import _compact_collate
 
@@ -220,99 +220,137 @@ class TestPiNet:
         n_pairs = pair_i.size(0)
         i1 = torch.rand((n_pairs, 1, n_features))
         p3 = torch.zeros(n_atoms, 3, n_features)
-        eqvarl = EqvarLayer([n_features, n_features])
-        output = eqvarl(p3, pair_i, pair_j, diff, i1)
+        eqvarl = ModuleTester(EqvarLayer([n_features, n_features]))
+        eqvarl.test_shape(
+            (p3, pair_i, pair_j, diff, i1), (n_pairs, 3, n_features), lambda x: x[0]
+        )
 
-        assert output[0].shape == (n_atoms, 3, n_features)
-        assert output[1].shape == (n_pairs, 3, n_features)
+        def rotate_input(p3, pair_i, pair_j, diff, i1):
+            frames[alias.xyz] = rot3d(frames[alias.xyz], axis, theta)
+            diff = (
+                frames[alias.xyz][frames[alias.pair_j]]
+                - frames[alias.xyz][frames[alias.pair_i]]
+            )
+            return p3, pair_i, pair_j, diff, i1
 
-        axis = torch.rand(3)
-        theta = torch.rand(1)
+        def rotate_output(output):
+            return rot3d(output[0], axis, theta), *output[1:]
 
-        transformed_output = eqvarl(p3, pair_i, pair_j, rot3d(diff, axis, theta), i1)
-        assert torch.allclose(
-            rot3d(output[0], axis, theta), transformed_output[0], atol=1e-2, rtol=1e-2
+        eqvarl.test_equivariance(
+            rotate_input, rotate_output, (p3, pair_i, pair_j, diff, i1), lambda x: x[0]
+        )
+
+    def test_gcblock3(self, gen_homogenous_frames, n_frames, n_features):
+
+        from molpot.potential.nnp.pinet import GCBlock3
+        from molpot.pipeline.dataloader import _compact_collate
+
+        frames = _compact_collate(gen_homogenous_frames(n_frames))
+        n_atoms = frames[alias.xyz].size(0)
+
+        p1 = torch.rand(n_atoms, 1, n_features)
+        p3 = torch.zeros(n_atoms, 3, n_features)
+        pair_i = frames[alias.pair_i]
+        pair_j = frames[alias.pair_j]
+        diff = frames[alias.pair_diff]
+        basis_fn = mpot.potential.nnp.radial.GaussianRBF(10, 5.0)
+        cutoff_fn = mpot.potential.nnp.cutoff.CosineCutoff(5.0)
+        basis = basis_fn(torch.linalg.norm(diff, dim=-1))
+        fc = cutoff_fn(torch.linalg.norm(diff, dim=-1))
+        basis = basis * fc[..., None]
+
+        gcblock = ModuleTester(
+            GCBlock3(
+                [n_features, n_features],
+                [n_features, n_features * 10],
+                [n_features, n_features],
+            )
+        )
+
+        def rotate_input(p1, p3, pair_i, pair_j, basis, diff):
+            xyz = rot3d(frames[alias.xyz], axis, theta)
+            diff = xyz[frames[alias.pair_j]] - xyz[frames[alias.pair_i]]
+            basis = basis_fn(torch.linalg.norm(diff, dim=-1))
+            fc = cutoff_fn(torch.linalg.norm(diff, dim=-1))
+            basis = basis * fc[..., None]
+            return (p1, p3, pair_i, pair_j, basis, diff)
+
+        def rotate_output(output):
+            return (output[0][0], rot3d(output[0][1], axis, theta)), output[1]
+
+        gcblock.test_equivariance(
+            rotate_input,
+            rotate_output,
+            (p1, p3, pair_i, pair_j, basis, diff),
+            lambda x: x[0][1],
         )
 
     def test_pinet3(
-        self, gen_homogenous_frames, n_frames, n_batch, n_basis, n_features
+        self, gen_homogenous_frames, n_frames, n_batches, n_basis, n_features
     ):
         r_cutoff = 5.0
         frames = gen_homogenous_frames(n_frames)
-        dataloader = mpot.DataLoader(frames, batch_size=n_batch, shuffle=False)
-        pinet = mpot.potential.nnp.PiNet(
-            depth=5,
-            basis_fn=mpot.potential.nnp.radial.GaussianRBF(n_basis, r_cutoff),
-            cutoff_fn=mpot.potential.nnp.cutoff.CosineCutoff(r_cutoff),
-            pp_nodes=[n_features, n_features],
-            pi_nodes=[n_features, n_features],
-            ii_nodes=[n_features, n_features],
-            out_nodes=[n_features, n_features],
-        )
-        readout = mpot.potential.nnp.readout.Atomwise(
-            [n_features, 1],
-            in_keys=[alias.atom_batch, ("pinet", "p1")],
-            out_keys=("predict", "energy"),
-        )
-
-        model = mpot.PotentialSeq(pinet, readout)
-        model.to(dtype=torch.float64)
-
-        axis = torch.rand(3)
-        theta = torch.rand(1)
-
-        def rotate_input(batch):
-            batch[alias.xyz] = rot3d(batch[alias.xyz], axis, theta)
-            # recalculate pair_diff
-            batch[alias.pair_diff] = (
-                batch[alias.xyz][batch[alias.pair_j]]
-                - batch[alias.xyz][batch[alias.pair_i]]
+        dataloader = mpot.DataLoader(frames, batch_size=n_batches, shuffle=False)
+        model = ModuleTester(
+            mpot.potential.nnp.PiNet(
+                depth=5,
+                basis_fn=mpot.potential.nnp.radial.GaussianRBF(n_basis, r_cutoff),
+                cutoff_fn=mpot.potential.nnp.cutoff.CosineCutoff(r_cutoff),
+                pp_nodes=[n_features, n_features],
+                pi_nodes=[n_features, n_features],
+                ii_nodes=[n_features, n_features],
+                out_nodes=[n_features, n_features],
+                rank=3,
             )
-            return batch
+        )
 
         for batch in dataloader:
+            Z = batch[alias.Z]
+            xyz = batch[alias.xyz]
+            pair_i = batch[alias.pair_i]
+            pair_j = batch[alias.pair_j]
+            diff = xyz[pair_j] - xyz[pair_i]
 
-            batch["pairs", "diff"].to(dtype=torch.float64)
-            original_output = model(batch)
-            original_p1 = original_output["pinet", "p1"]
-            original_p3 = original_output["pinet", "p3"]
-            rotated_p3 = rot3d(original_p3, axis, theta)
-            rotated_output = model(rotate_input(batch))
-            expect_p1 = rotated_output["pinet", "p1"]
-            expect_p3 = rotated_output["pinet", "p3"]
-            assert torch.allclose(
-                original_p1, expect_p1, atol=1e-2, rtol=1e-2
-            ), "p1 is not invariant"
-            assert torch.allclose(
-                rotated_p3, expect_p3, atol=1e-1, rtol=1e-1
-            ), "p3 is not eqvariant"
+            def rotate_input(Z, diff, pair_i, pair_j):
+                _xyz = rot3d(xyz, axis, theta)
+                diff = _xyz[pair_j] - _xyz[pair_i]
+                return (Z, diff, pair_i, pair_j)
 
-    def test_pinet1(self, gen_homogenous_frames, n_frames, n_batch, n_basis):
+            def rotate_output(output):
+                return (output[0], rot3d(output[1], axis, theta), *output[2:])
+
+            model.test_equivariance(
+                rotate_input,
+                rotate_output,
+                input_data=(Z, diff, pair_i, pair_j),
+                compare_fn=lambda x: x[1],
+            )
+
+    def test_pinet1(self, gen_homogenous_frames, n_frames, n_batches, n_basis):
         r_cutoff = 5.0
         frames = gen_homogenous_frames(n_frames)
-        dataloader = mpot.DataLoader(frames, batch_size=n_batch, shuffle=False)
-        pinet = mpot.potential.nnp.PiNet(
+        dataloader = mpot.DataLoader(frames, batch_size=n_batches, shuffle=False)
+        model = mpot.potential.nnp.PiNet(
             depth=4,
             basis_fn=mpot.potential.nnp.radial.GaussianRBF(n_basis, r_cutoff),
             cutoff_fn=mpot.potential.nnp.cutoff.CosineCutoff(r_cutoff),
+            rank=1,
         )
-        readout = mpot.potential.nnp.readout.Atomwise(
-            [16, 1],
-            in_keys=[alias.atom_batch, ("pinet", "p1")],
-            out_keys=("predict", "energy"),
-        )
-
-        model = mpot.PotentialSeq(pinet, readout)
 
         test_utils = ModuleTester(model)
 
-        def permute_input(batch):
-            perm = torch.randperm(batch[alias.xyz].size(0))
-            batch[alias.xyz] = batch[alias.xyz][perm]
-            batch[alias.atom_batch] = batch[alias.atom_batch][perm]
-            return batch
-
         for batch in dataloader:
+            Z = batch[alias.Z]
+            xyz = batch[alias.xyz]
+            diff = batch[alias.pair_diff]
+            pair_i = batch[alias.pair_i]
+            pair_j = batch[alias.pair_j]
+
+            def rotate_input(Z, diff, pair_i, pair_j):
+                _xyz = rot3d(xyz, axis, theta)
+                pair_diff = _xyz[pair_j] - _xyz[pair_i]
+                return Z, pair_diff, pair_i, pair_j
+            
             test_utils.test_invariance(
-                permute_input, input_data=batch, output_key=("pinet", "p1")
+                rotate_input, (Z, diff, pair_i, pair_j), compare_fn=lambda x: x[0]
             )

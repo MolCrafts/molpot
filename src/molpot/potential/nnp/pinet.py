@@ -71,7 +71,7 @@ class InvarLayer(nn.Module):
         activation: Callable = F.tanh,
     ):
         super().__init__()
-        self.pp_layer = FeedForward(*pp_nodes, activation=activation, bias=False)
+        self.pp_layer = FeedForward(*pp_nodes, activation=activation, bias=True)
         self.pi_layer = PILayer(*pi_nodes, activation=activation)
         self.ii_layer = FeedForward(*ii_nodes, activation=activation, bias=False)
         self.ip_layer = IPLayer()
@@ -91,7 +91,7 @@ class EqvarLayer(nn.Module):
         super().__init__()
         self.pp_layer = nn.Linear(*n_nodes, bias=False)
         self.pi_layer = PIXLayer(*n_nodes)
-        self.ii_layer = FeedForward(*n_nodes, bias=False)
+        self.ii_layer = FeedForward(*n_nodes, activation=None, bias=False)
         self.ip_layer = IPLayer()
 
         self.scale_layer = ScaleLayer()
@@ -99,9 +99,9 @@ class EqvarLayer(nn.Module):
     def forward(self, px, pair_i, pair_j, diff, i1):
 
         ix = self.pi_layer(px, pair_i, pair_j)
-        ix = ix * diff[:, :, None]
-        ix = self.ii_layer(ix)
         ix = self.scale_layer(ix, i1)
+        scaled_diff = self.scale_layer(diff[..., None], i1)
+        ix = ix + scaled_diff
         px = self.ip_layer(ix, pair_i, px)
         px = self.pp_layer(px)
 
@@ -123,7 +123,7 @@ class GCBlock1(nn.Module):
     def forward(self, p1, pair_i, pair_j, basis, *args) -> dict[str, torch.Tensor]:
         p1, i1 = self.p1_layer(p1, pair_i, pair_j, basis)
 
-        return p1, i1
+        return (p1,), (i1,)
 
 
 class GCBlock3(nn.Module):
@@ -137,17 +137,19 @@ class GCBlock3(nn.Module):
     ):
         super().__init__()
         self.p1_layer = InvarLayer(pp_nodes, pi_nodes, ii_nodes, activation)
-        self.p3_layer = EqvarLayer([pp_nodes[0], pp_nodes[-1]])
-        self.pp_layer = nn.Linear(pp_nodes[0], pp_nodes[1])
+        self.p3_layer = EqvarLayer(pp_nodes)
+        self.n_features = pp_nodes[-1]
+        # n_props = 2
+        self.pp_layer = nn.Linear(self.n_features, self.n_features)
         self.scale_layer = ScaleLayer()
-        self.norm_layer = SelfDotLayer()
+        self.dot_layer = SelfDotLayer()
 
     def forward(self, p1, p3, pair_i, pair_j, basis, diff):
 
         p1, i1 = self.p1_layer(p1, pair_i, pair_j, basis)
         p3, i3 = self.p3_layer(p3, pair_i, pair_j, diff, i1)
 
-        px = self.pp_layer(torch.concat([p1, self.norm_layer(p3)], dim=1))
+        px = self.pp_layer(torch.concat([p1, self.dot_layer(p3)], dim=1))
         p1t1, p3_scale = torch.split(px, [1, 1], dim=1)
         p3t1 = self.scale_layer(p3, p3_scale)
 
@@ -162,7 +164,7 @@ class OutLayer(nn.Module):
             raise ValueError("out_nodes must have at least 2 elements")
         elif len(out_nodes) == 2:
             out_nodes.append(out_nodes[-1])
-        self.ff_layer = FeedForward(*out_nodes[:-1])
+        self.ff_layer = FeedForward(*out_nodes[:-1], activation=None, bias=False)
         self.out_units = nn.Linear(out_nodes[-2], out_nodes[-1])
 
     def forward(self, ps, prev_ps):
@@ -252,11 +254,12 @@ class PiNet(nn.Module):
                 for _ in range(depth)
             ]
         )
-        self.out_layers = nn.ModuleList([OutLayer(out_nodes) for _ in range(depth)])
+        # self.out_layers = nn.ModuleList([OutLayer(out_nodes) for _ in range(depth)])
 
         self.res_update = ResUpdate()
 
     def forward(self, Z, pair_diff, pair_i, pair_j) -> None:
+        n_atoms = Z.shape[0]
         pair_diff.requires_grad_()
         pair_dist = torch.linalg.norm(pair_diff, dim=-1)  # (n_pairs, )
         pair_i = pair_i.to(torch.int64)  # for scatter
@@ -273,14 +276,16 @@ class PiNet(nn.Module):
         p1 = self.before_gc_block_layer(p1)
         props = [p1]
         if self.rank >= 3:
-            # p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
-            p3 = p1.repeat(1, 3, 1)
+            p3 = torch.zeros(
+                [n_atoms, 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device
+            )
+            # p3 = p1.repeat(1, 3, 1)
             props.append(p3)
 
         for i in range(self.depth):
             new_props, inters = self.gc_blocks[i](
                 *props, pair_i, pair_j, basis, norm_pair_diff
             )
-            new_props = self.out_layers[i](new_props, props)
+            # new_props = self.out_layers[i](new_props, props)
             props = self.res_update(new_props, props)
         return (*props, *inters)
