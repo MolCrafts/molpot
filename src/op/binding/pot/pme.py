@@ -50,17 +50,7 @@ class PMEkernel:
     eV, A: 14.3996454
     hartree, bohr: 1.0
     """
-
-    def __init__(
-        self,
-        gridx: int,
-        gridy: int,
-        gridz: int,
-        order: int,
-        alpha: float,
-        coulomb: float,
-        exclusions: torch.Tensor,
-    ):
+    def __init__(self, gridx: int, gridy: int, gridz: int, order: int, alpha: float, coulomb: float, exclusions: torch.Tensor):
         """Create an object for computing energies with PME.
 
         Parameters
@@ -85,15 +75,15 @@ class PMEkernel:
             row `j`.  If you pass a tensor that does not satisfy that requirement, the results are undefined.
         """
         if gridx < 1 or gridy < 1 or gridz < 1:
-            raise ValueError("The grid dimensions must be positive")
+            raise ValueError('The grid dimensions must be positive')
         if order < 1:
-            raise ValueError("order must be positive")
+            raise ValueError('order must be positive')
         if alpha <= 0:
-            raise ValueError("alpha must be positive")
+            raise ValueError('alpha must be positive')
         if coulomb <= 0:
-            raise ValueError("coulomb must be positive")
+            raise ValueError('coulomb must be positive')
         if exclusions.dim() != 2:
-            raise ValueError("exclusions must be 2D")
+            raise ValueError('exclusions must be 2D')
         self.gridx = gridx
         self.gridy = gridy
         self.gridz = gridz
@@ -110,23 +100,19 @@ class PMEkernel:
         bsplines_data = torch.zeros(max_size, dtype=torch.float32)
         data[0] = 1
         for i in range(3, order):
-            data[i - 1] = 0
-            for j in range(1, i - 1):
-                data[i - j - 1] = (j * data[i - j - 2] + (i - j) * data[i - j - 1]) / (
-                    i - 1
-                )
-            data[0] /= i - 1
+            data[i-1] = 0
+            for j in range(1, i-1):
+                data[i-j-1] = (j*data[i-j-2]+(i-j)*data[i-j-1])/(i-1)
+            data[0] /= i-1
 
         # Differentiate.
 
         ddata[0] = -data[0]
-        ddata[1:order] = data[0 : order - 1] - data[1:order]
-        for i in range(1, order - 1):
-            data[order - i - 1] = (
-                i * data[order - i - 2] + (order - i) * data[order - i - 1]
-            ) / (order - 1)
-        data[0] /= order - 1
-        bsplines_data[1 : order + 1] = data
+        ddata[1:order] = data[0:order-1]-data[1:order]
+        for i in range(1, order-1):
+            data[order-i-1] = (i*data[order-i-2]+(order-i)*data[order-i-1])/(order-1)
+        data[0] /= order-1
+        bsplines_data[1:order+1] = data
 
         # Evaluate the actual bspline moduli for X/Y/Z.
 
@@ -134,24 +120,16 @@ class PMEkernel:
         for ndata in (gridx, gridy, gridz):
             m = torch.zeros(ndata, dtype=torch.float32)
             for i in range(ndata):
-                arg = (2 * torch.pi * i / ndata) * torch.arange(ndata)
-                sc = torch.sum(bsplines_data[:ndata] * torch.cos(arg))
-                ss = torch.sum(bsplines_data[:ndata] * torch.sin(arg))
-                m[i] = sc * sc + ss * ss
+                arg = (2*torch.pi*i/ndata)*torch.arange(ndata)
+                sc = torch.sum(bsplines_data[:ndata]*torch.cos(arg))
+                ss = torch.sum(bsplines_data[:ndata]*torch.sin(arg))
+                m[i] = sc*sc + ss*ss
             for i in range(ndata):
                 if m[i] < 1e-7:
-                    m[i] = (m[(i - 1 + ndata) % ndata] + m[(i + 1) % ndata]) * 0.5
+                    m[i] = (m[(i-1+ndata)%ndata]+m[(i+1)%ndata])*0.5
             self.moduli.append(m)
 
-    def compute_direct(
-        self,
-        positions: torch.Tensor,
-        charges: torch.Tensor,
-        cutoff: float,
-        box_vectors: torch.Tensor,
-        pairs: torch.Tensor|None=None,
-        max_num_pairs: int = -1,
-    ):
+    def compute_direct(self, positions: torch.Tensor, charges: torch.Tensor, cutoff: float, box_vectors: torch.Tensor, max_num_pairs: int = -1):
         """Compute the direct space energy.
 
         Parameters
@@ -173,45 +151,21 @@ class PMEkernel:
         -------
         the energy of the direct space term
         """
-        # if positions.dim() != 2 or positions.shape[1] != 3:
-        #     raise ValueError("positions must have shape (atoms, 3)")
-        # if charges.dim() != 1:
-        #     raise ValueError("charges must be 1D")
-        # if (
-        #     positions.shape[0] != self.exclusions.shape[0]
-        #     or charges.shape[0] != self.exclusions.shape[0]
-        # ):
-        #     raise ValueError(
-        #         "positions, charges, and exclusions must all have the same length"
-        #     )
-        # if (
-        #     box_vectors.dim() != 2
-        #     or box_vectors.shape[0] != 3
-        #     or box_vectors.shape[1] != 3
-        # ):
-        #     raise ValueError("box_vectors must have shape (3, 3)")
-        if pairs is not None:
-            if cutoff <= 0:
-                raise ValueError("cutoff must be positive")
-            pairs, deltas, distances, number_found_pairs = get_neighbor_pairs(
-                positions, cutoff, max_num_pairs, box_vectors
-            )
-        
+        if positions.dim() != 2 or positions.shape[1] != 3:
+            raise ValueError('positions must have shape (atoms, 3)')
+        if charges.dim() != 1:
+            raise ValueError('charges must be 1D')
+        if positions.shape[0] != self.exclusions.shape[0] or charges.shape[0] != self.exclusions.shape[0]:
+            raise ValueError('positions, charges, and exclusions must all have the same length')
+        if box_vectors.dim() != 2 or box_vectors.shape[0] != 3 or box_vectors.shape[1] != 3:
+            raise ValueError('box_vectors must have shape (3, 3)')
+        if (cutoff <= 0):
+            raise ValueError('cutoff must be positive')
+        neighbors, deltas, distances, number_found_pairs = get_neighbor_pairs(positions, cutoff, max_num_pairs, box_vectors)
         self.exclusions = self.exclusions.to(positions.device)
-        return torch.ops.pme.pme_direct(
-            positions,
-            charges,
-            pairs,
-            deltas,
-            distances,
-            self.exclusions,
-            self.alpha,
-            self.coulomb,
-        )
+        return torch.ops.pme.pme_direct(positions, charges, neighbors, deltas, distances, self.exclusions, self.alpha, self.coulomb)
 
-    def compute_reciprocal(
-        self, positions: torch.Tensor, charges: torch.Tensor, box_vectors: torch.Tensor
-    ):
+    def compute_reciprocal(self, positions: torch.Tensor, charges: torch.Tensor, box_vectors: torch.Tensor):
         """Compute the reciprocal space energy.
 
         Parameters
@@ -228,43 +182,19 @@ class PMEkernel:
         -------
         the energy of the reciprocal space term
         """
-        # if positions.dim() != 2 or positions.shape[1] != 3:
-        #     raise ValueError("positions must have shape (atoms, 3)")
-        # if charges.dim() != 1:
-        #     raise ValueError("charges must be 1D")
-        # if (
-        #     positions.shape[0] != self.exclusions.shape[0]
-        #     or charges.shape[0] != self.exclusions.shape[0]
-        # ):
-        #     raise ValueError(
-        #         "positions, charges, and exclusions must all have the same length"
-        #     )
-        # if (
-        #     box_vectors.dim() != 2
-        #     or box_vectors.shape[0] != 3
-        #     or box_vectors.shape[1] != 3
-        # ):
-        #     raise ValueError("box_vectors must have shape (3, 3)")
+        if positions.dim() != 2 or positions.shape[1] != 3:
+            raise ValueError('positions must have shape (atoms, 3)')
+        if charges.dim() != 1:
+            raise ValueError('charges must be 1D')
+        if positions.shape[0] != self.exclusions.shape[0] or charges.shape[0] != self.exclusions.shape[0]:
+            raise ValueError('positions, charges, and exclusions must all have the same length')
+        if box_vectors.dim() != 2 or box_vectors.shape[0] != 3 or box_vectors.shape[1] != 3:
+            raise ValueError('box_vectors must have shape (3, 3)')
         for i in range(3):
             self.moduli[i] = self.moduli[i].to(positions.device)
-        self_energy = (
-            -torch.sum(charges**2) * self.coulomb * self.alpha / math.sqrt(torch.pi)
-        )
-        return self_energy + torch.ops.pme.pme_reciprocal(
-            positions,
-            charges,
-            box_vectors,
-            self.gridx,
-            self.gridy,
-            self.gridz,
-            self.order,
-            self.alpha,
-            self.coulomb,
-            self.moduli[0],
-            self.moduli[1],
-            self.moduli[2],
-        )
-
+        self_energy = -torch.sum(charges**2)*self.coulomb*self.alpha/math.sqrt(torch.pi)
+        return self_energy + torch.ops.pme.pme_reciprocal(positions, charges, box_vectors, self.gridx, self.gridy, self.gridz,
+                                            self.order, self.alpha, self.coulomb, self.moduli[0], self.moduli[1], self.moduli[2])
 
 class PME(torch.nn.Module):
     def __init__(

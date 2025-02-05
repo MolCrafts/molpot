@@ -378,7 +378,7 @@ Tensor pme_reciprocal_cpu(const Tensor& positions,
     return PmeReciprocalFunctionCpu::apply(positions, charges, box_vectors, gridx, gridy, gridz, order, alpha, coulomb, xmoduli, ymoduli, zmoduli);
 }
 
-TORCH_LIBRARY_IMPL(pme, CPU, m) {
+TORCH_LIBRARY_IMPL(pme, AutogradCPU, m) {
     m.impl("pme_direct", pme_direct_cpu);
     m.impl("pme_reciprocal", pme_reciprocal_cpu);
 }
