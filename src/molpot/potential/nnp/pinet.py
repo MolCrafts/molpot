@@ -87,11 +87,11 @@ class InvarLayer(nn.Module):
 
 class EqvarLayer(nn.Module):
 
-    def __init__(self, n_nodes: list[int]):
+    def __init__(self, in_features, out_features):
         super().__init__()
-        self.pp_layer = nn.Linear(*n_nodes, bias=False)
-        self.pi_layer = PIXLayer(*n_nodes)
-        self.ii_layer = FeedForward(*n_nodes, activation=None, bias=False)
+        self.pp_layer = nn.Linear(in_features, out_features, bias=False)
+        self.pi_layer = PIXLayer(in_features, out_features)
+        self.ii_layer = FeedForward(in_features, out_features, activation=None, bias=False)
         self.ip_layer = IPLayer()
 
         self.scale_layer = ScaleLayer()
@@ -137,7 +137,7 @@ class GCBlock3(nn.Module):
     ):
         super().__init__()
         self.p1_layer = InvarLayer(pp_nodes, pi_nodes, ii_nodes, activation)
-        self.p3_layer = EqvarLayer(pp_nodes)
+        self.p3_layer = EqvarLayer(pp_nodes[0], pp_nodes[-1])
         self.n_features = pp_nodes[-1]
         # n_props = 2
         self.pp_layer = nn.Linear(self.n_features, self.n_features)
@@ -181,10 +181,10 @@ class ResUpdate(nn.Module):
         super().__init__()
 
     def forward(self, old, new):
-        return tuple(new + old for new, old in zip(new, old))
+        return old + new
 
 
-class PiNet(nn.Module):
+class PiNet2(nn.Module):
 
     in_keys = [
         alias.Z,
@@ -192,7 +192,7 @@ class PiNet(nn.Module):
         alias.pair_i,
         alias.pair_j,
     ]
-    # out_keys = [("pinet", "p1"), ("pinet", "i1")]
+    out_keys = [("pinet2", "p1"), ("pinet2", "i1"), ("pinet2", "p3"), ("pinet2", "i3")]
 
     def __init__(
         self,
@@ -202,22 +202,11 @@ class PiNet(nn.Module):
         pp_nodes: list[int] = [16, 16],
         pi_nodes: list[int] = [16, 16],
         ii_nodes: list[int] = [16, 16],
-        out_nodes: list[int] = [16, 16],
+        out_nodes: list[int] = [16, 16, 1],
         activation: Callable | None = F.tanh,
         max_atomtypes: int = 100,
-        rank: Literal[1, 3] = 3,
     ):
         super().__init__()
-        self.rank = rank
-        pp_nodes = pp_nodes.copy()
-        pi_nodes = pi_nodes.copy()
-        ii_nodes = ii_nodes.copy()
-        prop_keys = [("pinet", "p1")]
-        inter_keys = [("pinet", "i1")]
-        if self.rank >= 3:
-            prop_keys.append(("pinet", "p3"))
-            inter_keys.append(("pinet", "i3"))
-        self.out_keys = prop_keys + inter_keys
         self.labels = NameSpace("pinet")
         self.labels.set(
             "p1",
@@ -225,13 +214,12 @@ class PiNet(nn.Module):
             float,
             shape=(None, 1, ii_nodes[-1]),
         )
-        if self.rank >= 3:
-            self.labels.set(
-                "p3",
-                "vectorial property",
-                float,
-                shape=(None, 3, ii_nodes[-1]),
-            )
+        self.labels.set(
+            "p3",
+            "vectorial property",
+            float,
+            shape=(None, 3, ii_nodes[-1]),
+        )
 
         self.depth = depth
         self.basis_fn = basis_fn
@@ -243,16 +231,8 @@ class PiNet(nn.Module):
         pi_nodes[-1] *= self.n_basis
         self.before_gc_block_layer = nn.Linear(self.n_basis, pp_nodes[0])
 
-        blocks = {
-            1: GCBlock1,
-            3: GCBlock3,
-        }
-
         self.gc_blocks = nn.ModuleList(
-            [
-                blocks[self.rank](pp_nodes, pi_nodes, ii_nodes, activation)
-                for _ in range(depth)
-            ]
+            [GCBlock3(pp_nodes, pi_nodes, ii_nodes, activation) for _ in range(depth)]
         )
         # self.out_layers = nn.ModuleList([OutLayer(out_nodes) for _ in range(depth)])
 
@@ -274,18 +254,18 @@ class PiNet(nn.Module):
 
         # (n_atoms, 1, ...) -> (n_atoms, 1, n_basis)
         p1 = self.before_gc_block_layer(p1)
-        props = [p1]
-        if self.rank >= 3:
-            p3 = torch.zeros(
-                [n_atoms, 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device
-            )
-            # p3 = p1.repeat(1, 3, 1)
-            props.append(p3)
-
+        p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
+        # p3 = p1.repeat(1, 3, 1)
+        i1 = torch.zeros([pair_i.shape[0], 1, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
+        i3 = torch.zeros([pair_i.shape[0], 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
         for i in range(self.depth):
-            new_props, inters = self.gc_blocks[i](
-                *props, pair_i, pair_j, basis, norm_pair_diff
+            (p1t1, p3t1), (i1, i3) = self.gc_blocks[i](
+                p1, p3, pair_i, pair_j, basis, norm_pair_diff
             )
             # new_props = self.out_layers[i](new_props, props)
-            props = self.res_update(new_props, props)
-        return (*props, *inters)
+            p1 = self.res_update(p1, p1t1)
+            p3 = self.res_update(p3, p3t1)
+        return (p1t1, p3t1, i1, i3)
+
+
+class PiNet1(nn.Module): ...

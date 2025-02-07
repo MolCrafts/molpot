@@ -292,15 +292,14 @@ class TestPiNet:
         frames = gen_homogenous_frames(n_frames)
         dataloader = mpot.DataLoader(frames, batch_size=n_batches, shuffle=False)
         model = ModuleTester(
-            mpot.potential.nnp.PiNet(
+            mpot.potential.nnp.PiNet2(
                 depth=5,
                 basis_fn=mpot.potential.nnp.radial.GaussianRBF(n_basis, r_cutoff),
                 cutoff_fn=mpot.potential.nnp.cutoff.CosineCutoff(r_cutoff),
                 pp_nodes=[n_features, n_features],
                 pi_nodes=[n_features, n_features],
                 ii_nodes=[n_features, n_features],
-                out_nodes=[n_features, n_features],
-                rank=3,
+                out_nodes=[n_features, n_features]
             )
         )
 
@@ -326,31 +325,31 @@ class TestPiNet:
                 compare_fn=lambda x: x[1],
             )
 
-    def test_pinet1(self, gen_homogenous_frames, n_frames, n_batches, n_basis):
-        r_cutoff = 5.0
-        frames = gen_homogenous_frames(n_frames)
-        dataloader = mpot.DataLoader(frames, batch_size=n_batches, shuffle=False)
-        model = mpot.potential.nnp.PiNet(
-            depth=4,
-            basis_fn=mpot.potential.nnp.radial.GaussianRBF(n_basis, r_cutoff),
-            cutoff_fn=mpot.potential.nnp.cutoff.CosineCutoff(r_cutoff),
-            rank=1,
-        )
+    # def test_pinet1(self, gen_homogenous_frames, n_frames, n_batches, n_basis):
+    #     r_cutoff = 5.0
+    #     frames = gen_homogenous_frames(n_frames)
+    #     dataloader = mpot.DataLoader(frames, batch_size=n_batches, shuffle=False)
+    #     model = mpot.potential.nnp.PiNet1(
+    #         depth=4,
+    #         basis_fn=mpot.potential.nnp.radial.GaussianRBF(n_basis, r_cutoff),
+    #         cutoff_fn=mpot.potential.nnp.cutoff.CosineCutoff(r_cutoff),
+    #         rank=1,
+    #     )
 
-        test_utils = ModuleTester(model)
+    #     test_utils = ModuleTester(model)
 
-        for batch in dataloader:
-            Z = batch[alias.Z]
-            xyz = batch[alias.xyz]
-            diff = batch[alias.pair_diff]
-            pair_i = batch[alias.pair_i]
-            pair_j = batch[alias.pair_j]
+    #     for batch in dataloader:
+    #         Z = batch[alias.Z]
+    #         xyz = batch[alias.xyz]
+    #         diff = batch[alias.pair_diff]
+    #         pair_i = batch[alias.pair_i]
+    #         pair_j = batch[alias.pair_j]
 
-            def rotate_input(Z, diff, pair_i, pair_j):
-                _xyz = rot3d(xyz, axis, theta)
-                pair_diff = _xyz[pair_j] - _xyz[pair_i]
-                return Z, pair_diff, pair_i, pair_j
+    #         def rotate_input(Z, diff, pair_i, pair_j):
+    #             _xyz = rot3d(xyz, axis, theta)
+    #             pair_diff = _xyz[pair_j] - _xyz[pair_i]
+    #             return Z, pair_diff, pair_i, pair_j
             
-            test_utils.test_invariance(
-                rotate_input, (Z, diff, pair_i, pair_j), compare_fn=lambda x: x[0]
-            )
+    #         test_utils.test_invariance(
+    #             rotate_input, (Z, diff, pair_i, pair_j), compare_fn=lambda x: x[0]
+    #         )

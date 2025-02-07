@@ -99,7 +99,7 @@ static tuple<Tensor, Tensor, Tensor, Tensor> forward(const Tensor& positions,
     return {neighbors, deltas, distances, num_pairs_found};
 }
 
-TORCH_LIBRARY_IMPL(neighbors, AutogradCPU, m) {
+TORCH_LIBRARY_IMPL(neighbors, CPU, m) {
   m.impl("getNeighborPairs",
 	   [](const Tensor& positions, const Scalar& cutoff, const Scalar& max_num_pairs,
 	      const Tensor& box_vectors, const bool &checkErrors){

@@ -76,6 +76,7 @@ class FeedForward(nn.Module):
             )
             for i in range(len(n_nodes) - 2)
         ]
+
         if last_zero_init:
             layers.append(
                 Dense(
