@@ -164,15 +164,13 @@ class OutLayer(nn.Module):
             raise ValueError("out_nodes must have at least 2 elements")
         elif len(out_nodes) == 2:
             out_nodes.append(out_nodes[-1])
-        self.ff_layer = FeedForward(*out_nodes[:-1], activation=None, bias=False)
+        self.ff_layer = FeedForward(*out_nodes[:-1])
         self.out_units = nn.Linear(out_nodes[-2], out_nodes[-1])
 
-    def forward(self, ps, prev_ps):
-        p1 = ps[0]
-        prev_p1 = prev_ps[0]
-        p1 = self.ff_layer(p1)
-        p1 = self.out_units(p1)
-        return (p1 + prev_p1, *ps[1:])
+    def forward(self, px, prev_px):
+        px = self.ff_layer(px)
+        px = self.out_units(px)
+        return px + prev_px
 
 
 class ResUpdate(nn.Module):
@@ -202,7 +200,7 @@ class PiNet2(nn.Module):
         pp_nodes: list[int] = [16, 16],
         pi_nodes: list[int] = [16, 16],
         ii_nodes: list[int] = [16, 16],
-        out_nodes: list[int] = [16, 16, 1],
+        out_nodes: list[int] = [16, 16],
         activation: Callable | None = F.tanh,
         max_atomtypes: int = 100,
     ):
@@ -234,7 +232,7 @@ class PiNet2(nn.Module):
         self.gc_blocks = nn.ModuleList(
             [GCBlock3(pp_nodes, pi_nodes, ii_nodes, activation) for _ in range(depth)]
         )
-        # self.out_layers = nn.ModuleList([OutLayer(out_nodes) for _ in range(depth)])
+        self.out_layers = nn.ModuleList([OutLayer(out_nodes) for _ in range(depth)])
 
         self.res_update = ResUpdate()
 
@@ -258,11 +256,13 @@ class PiNet2(nn.Module):
         # p3 = p1.repeat(1, 3, 1)
         i1 = torch.zeros([pair_i.shape[0], 1, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
         i3 = torch.zeros([pair_i.shape[0], 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
+
+        output = 0.0
         for i in range(self.depth):
             (p1t1, p3t1), (i1, i3) = self.gc_blocks[i](
                 p1, p3, pair_i, pair_j, basis, norm_pair_diff
             )
-            # new_props = self.out_layers[i](new_props, props)
+            output = self.out_layers[i](p1t1, output)
             p1 = self.res_update(p1, p1t1)
             p3 = self.res_update(p3, p3t1)
         return (p1t1, p3t1, i1, i3)

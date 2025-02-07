@@ -101,8 +101,8 @@ def supervised_training_step(
             optimizer.zero_grad()
         model.train()
         inputs = prepare_batch(batch, device=device, non_blocking=non_blocking)
-        outputs = model_fn(model, inputs)
-        outputs = model_transform(outputs)  # (predicts, labels)
+        model_fn(model, inputs)  # https://pytorch.org/tensordict/stable/tutorials/tensordict_module.html#do-s-and-don-t-with-tensordictmodule
+        outputs = model_transform(inputs)  # (predicts, labels)
         loss = loss_fn(*outputs)
         if gradient_accumulation_steps > 1:
             loss = loss / gradient_accumulation_steps
@@ -372,8 +372,8 @@ def supervised_evaluation_step(
         model.eval()
         with grad_context():
             inputs = prepare_batch(batch, device=device, non_blocking=non_blocking)
-            output = model_fn(model, inputs)
-            y_pred = model_transform(output)
+            model_fn(model, inputs)
+            y_pred = model_transform(inputs)
             return output_transform(*y_pred)
 
     return evaluate_step

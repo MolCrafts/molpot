@@ -6,8 +6,10 @@ from torch import nn
 
 from molpot import alias
 
+from tensordict.nn import TensorDictModule
 
-class NeighborList(nn.Module):
+
+class NeighborList(TensorDictModule):
 
     def __init__(
         self,
@@ -17,7 +19,7 @@ class NeighborList(nn.Module):
         index_dtype: torch.dtype = torch.int32,
         exclude_ii: bool = True,
     ):
-        super().__init__()
+        super().__init__(self, [])
         self.cutoff = cutoff
         self.kernel = partial(
             get_neighbor_pairs, max_num_pairs=max_num_pairs, check_errors=check_errors
@@ -26,7 +28,14 @@ class NeighborList(nn.Module):
         self.exclude_ii = exclude_ii
 
     def forward(self, inputs):
+        """ calculate neighbor list. The pair distance is calculated by xyz[pair_j] - xyz[pair_i]
 
+        Args:
+            inputs (tensordict): required keys: alias.xyz, alias.cell
+
+        Returns:
+            tensordict: alias.pair_i, alias.pair_j, alias.pair_diff, alias.pair_dist, alias.n_pairs
+        """
         xyz = inputs[alias.xyz]
         if alias.cell not in inputs:
             box = None
@@ -44,8 +53,8 @@ class NeighborList(nn.Module):
             distances = distances[mask]
             n_pairs = mask.sum(dim=0)
 
-        inputs[alias.pair_i] = pairs[0]
-        inputs[alias.pair_j] = pairs[1]
+        inputs[alias.pair_i] = pairs[1]
+        inputs[alias.pair_j] = pairs[0]
         inputs[alias.pair_diff] = deltas.requires_grad_(True)
         inputs[alias.pair_dist] = distances.requires_grad_(True)
 
