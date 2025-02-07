@@ -124,8 +124,8 @@ class PairForce(nn.Module):
         atom_force = torch.index_add(
             atom_force,
             0,
-            pair_i,
+            pair_j,
             dfdx,
         )
-        atom_force = torch.index_add(atom_force, 0, pair_j, dfdx, alpha=-1)
+        atom_force = torch.index_add(atom_force, 0, pair_i, dfdx, alpha=-1)
         return atom_force
