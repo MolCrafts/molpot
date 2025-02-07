@@ -6,10 +6,8 @@ from torch import nn
 
 from molpot import alias
 
-from tensordict.nn import TensorDictModule
 
-
-class NeighborList(TensorDictModule):
+class NeighborList(nn.Module):
 
     def __init__(
         self,
