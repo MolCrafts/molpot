@@ -41,7 +41,6 @@ class NeighborList(TensorDictModule):
             box = None
         else:
             box = inputs[alias.cell]
-
         pairs, deltas, distances, n_pairs = self.kernel(
             positions=xyz, box_vectors=box, cutoff=self.cutoff
         )

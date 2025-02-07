@@ -91,7 +91,9 @@ class EqvarLayer(nn.Module):
         super().__init__()
         self.pp_layer = nn.Linear(in_features, out_features, bias=False)
         self.pi_layer = PIXLayer(in_features, out_features)
-        self.ii_layer = FeedForward(in_features, out_features, activation=None, bias=False)
+        self.ii_layer = FeedForward(
+            in_features, out_features, activation=None, bias=False
+        )
         self.ip_layer = IPLayer()
 
         self.scale_layer = ScaleLayer()
@@ -165,11 +167,11 @@ class OutLayer(nn.Module):
         elif len(out_nodes) == 2:
             out_nodes.append(out_nodes[-1])
         self.ff_layer = FeedForward(*out_nodes[:-1])
-        self.out_units = nn.Linear(out_nodes[-2], out_nodes[-1])
+        # self.out_units = nn.Linear(out_nodes[-2], out_nodes[-1])
 
     def forward(self, px, prev_px):
         px = self.ff_layer(px)
-        px = self.out_units(px)
+        # px = self.out_units(px)
         return px + prev_px
 
 
@@ -253,9 +255,12 @@ class PiNet2(nn.Module):
         # (n_atoms, 1, ...) -> (n_atoms, 1, n_basis)
         p1 = self.before_gc_block_layer(p1)
         p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
-        # p3 = p1.repeat(1, 3, 1)
-        i1 = torch.zeros([pair_i.shape[0], 1, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
-        i3 = torch.zeros([pair_i.shape[0], 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
+        i1 = torch.zeros(
+            [pair_i.shape[0], 1, p1.shape[-1]], dtype=p1.dtype, device=p1.device
+        )
+        i3 = torch.zeros(
+            [pair_i.shape[0], 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device
+        )
 
         output = 0.0
         for i in range(self.depth):
@@ -265,7 +270,7 @@ class PiNet2(nn.Module):
             output = self.out_layers[i](p1t1, output)
             p1 = self.res_update(p1, p1t1)
             p3 = self.res_update(p3, p3t1)
-        return (p1t1, p3t1, i1, i3)
+        return (output, p3t1, i1, i3)
 
 
 class PiNet1(nn.Module): ...
