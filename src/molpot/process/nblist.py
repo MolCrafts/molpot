@@ -6,8 +6,10 @@ from torch import nn
 
 from molpot import alias
 
+from tensordict.nn import TensorDictModule
 
-class NeighborList(nn.Module):
+
+class NeighborList(TensorDictModule):
 
     def __init__(
         self,
@@ -41,6 +43,12 @@ class NeighborList(nn.Module):
             positions=xyz, box_vectors=box, cutoff=self.cutoff
         )
         pairs = pairs.to(dtype=self.index_dtype)
+
+        mask = ~torch.isnan(distances)
+        pairs = pairs[:, mask]
+        deltas = deltas[mask]
+        distances = distances[mask]
+        n_pairs = mask.sum(dim=0)
 
         inputs[alias.pair_i] = pairs[1]
         inputs[alias.pair_j] = pairs[0]
