@@ -221,7 +221,7 @@ class PiNet2(nn.Module):
             shape=(None, 3, ii_nodes[-1]),
         )
 
-        self.depth = depth
+        self.register_buffer("depth", torch.tensor(depth))
         self.basis_fn = basis_fn
         self.cutoff_fn = cutoff_fn
         self.n_basis = self.basis_fn.n_rbf
@@ -263,7 +263,7 @@ class PiNet2(nn.Module):
         )
 
         output = 0.0
-        for i in range(self.depth):
+        for i in range(self.depth.item()):
             (p1t1, p3t1), (i1, i3) = self.gc_blocks[i](
                 p1, p3, pair_i, pair_j, basis, norm_pair_diff
             )

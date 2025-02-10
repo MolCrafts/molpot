@@ -43,7 +43,10 @@ class GaussianRBF(nn.Module):
             self.register_buffer("offsets", offset)
 
     def forward(self, inputs: torch.Tensor):
-        return gaussian_rbf(inputs, self.offsets, self.widths)
+        coeff = -0.5 / torch.pow(self.widths, 2)
+        diff = inputs[..., None] - self.offsets
+        y = torch.exp(coeff * torch.pow(diff, 2))
+        return y
 
 
 class GaussianRBFCentered(nn.Module):

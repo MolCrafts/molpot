@@ -53,7 +53,7 @@ class CosineCutoff(nn.Module):
         self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
 
     def forward(self, input: torch.Tensor):
-        return cosine_cutoff(input, self.cutoff)
+        return 0.5 * (torch.cos(input * torch.pi / self.cutoff) + 1.0)
 
 
 def mollifier_cutoff(input: torch.Tensor, cutoff: torch.Tensor, eps: torch.Tensor):
