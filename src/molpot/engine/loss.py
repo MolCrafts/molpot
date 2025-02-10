@@ -13,7 +13,7 @@ class Constraint(nn.Module):
         self.constraints.append((name, target, label, weight))
 
     def forward(self, pred, label):
-        return torch.mean([
+        return torch.mean(torch.tensor([
             weight * self.loss_kernel(pred[target_key], label[label_key])
             for _, target_key, label_key, weight in self.constraints
-        ])
+        ]))
