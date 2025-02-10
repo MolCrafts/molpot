@@ -141,7 +141,7 @@ class GCBlock3(nn.Module):
         self.p3_layer = EqvarLayer(pp_nodes[0], pp_nodes[-1])
         self.n_features = pp_nodes[-1]
         # n_props = 2
-        self.pp_layer = nn.Linear(self.n_features, self.n_features)
+        self.pp_layer = nn.Linear(self.n_features*2, self.n_features*2)
         self.scale_layer = ScaleLayer()
         self.dot_layer = SelfDotLayer()
 
