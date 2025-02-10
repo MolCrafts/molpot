@@ -310,3 +310,14 @@ class rMD17(MapStyleDataset):
             if len(frames) >= total:
                 break
         return frames
+
+    def save(self, *args, **kwargs):
+        frames = mpot.Frame.from_frames(self._frames)
+        frames.save(self.save_dir / f"{self.molecule}.pt", *args, **kwargs)
+        return frames
+    
+    def load(self, *args, **kwargs):
+        frames = mpot.Frame.load(self.save_dir / f"{self.molecule}.pt", *args, **kwargs)
+        self._frames = [mpot.Frame(frame) for frame in frames]
+        return self._frames
+        

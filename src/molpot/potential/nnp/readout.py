@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from molpot import alias
 from .base import FeedForward
 
+
 class Atomwise(nn.Module):
     """
     Predicts atom-wise contributions and accumulates global prediction, e.g. for the energy.
@@ -107,8 +108,7 @@ class PairForce(nn.Module):
         self.create_graph = create_graph
         self.retain_graph = retain_graph
 
-    def forward(self, *inputs):
-        fx, dx, pair_i, pair_j = inputs
+    def forward(self, fx, dx, pair_i, pair_j):
         (dfdx,) = torch.autograd.grad(
             torch.sum(fx),
             dx,
