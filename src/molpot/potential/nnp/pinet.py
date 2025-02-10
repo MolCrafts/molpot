@@ -44,10 +44,9 @@ class PIXLayer(nn.Module):
 
     def forward(self, px, pair_i, pair_j):
 
-        # px_i = px[pair_i]
-        # px_j = px[pair_j]
-        # return self.w(px_i + px_j)
-        return px[pair_j]
+        px_i = px[pair_i]
+        px_j = px[pair_j]
+        return self.w(px_i + px_j)
 
 class ScaleLayer(nn.Module):
 
@@ -151,8 +150,8 @@ class GCBlock3(nn.Module):
         p1, i1 = self.p1_layer(p1, pair_i, pair_j, basis)
         p3, i3 = self.p3_layer(p3, pair_i, pair_j, diff, i1)
 
-        px = self.pp_layer(torch.concat([p1, self.dot_layer(p3)], dim=1))
-        p1t1, p3_scale = torch.split(px, [1, 1], dim=1)
+        px = self.pp_layer(torch.concat([p1, self.dot_layer(p3)], dim=-1))
+        p1t1, p3_scale = torch.split(px, [1, 1], dim=-1)
         p3t1 = self.scale_layer(p3, p3_scale)
 
         return (p1t1, p3t1), (i1, i3)
