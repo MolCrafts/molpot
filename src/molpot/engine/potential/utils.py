@@ -40,7 +40,7 @@ def supervised_training_step(
     ] = _train_output_transform,
     gradient_accumulation_steps: int = 1,
     model_fn: Callable[[torch.nn.Module, Any], Any] = lambda model, x: model(x),
-    clip_grad: Optional[float] = None,
+    clip_grad_norm: Optional[float] = None,
 ) -> Callable:
     """Factory function for supervised training.
 
@@ -107,8 +107,8 @@ def supervised_training_step(
         loss = loss_fn(*outputs)
         if gradient_accumulation_steps > 1:
             loss = loss / gradient_accumulation_steps
-        if clip_grad is not None:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
+        if clip_grad_norm is not None:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
         loss.backward()
         if engine.state.iteration % gradient_accumulation_steps == 0:
             optimizer.step()
@@ -133,7 +133,7 @@ def create_supervised_trainer(
     scaler: Union[bool, "torch.cuda.amp.GradScaler"] = False,
     gradient_accumulation_steps: int = 1,
     model_fn: Callable[[torch.nn.Module, Any], Any] = lambda model, x: model(x),
-    clip_grad: Optional[float] = None,
+    clip_grad_norm: Optional[float] = None,
 ) -> Engine:
     """Factory function for creating a trainer for supervised models.
 
@@ -313,7 +313,7 @@ def create_supervised_trainer(
             output_transform,
             gradient_accumulation_steps,
             model_fn,
-            clip_grad
+            clip_grad_norm
         )
 
     trainer = Engine(_update) if not deterministic else DeterministicEngine(_update)
