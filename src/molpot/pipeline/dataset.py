@@ -45,6 +45,7 @@ class Dataset(torch.utils.data.Dataset):
 
     def download(self): ...
 
+
 class IterStyleDataset(Dataset):
 
     def __init__(self, frames: Sequence[mpot.Frame]):
@@ -151,18 +152,20 @@ class MapStyleDataset(Dataset):
 class rMD17(MapStyleDataset):
 
     atomrefs = {
-        "energy": torch.tensor([
-            0.0,
-            -313.5150902000774,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            -23622.587180094913,
-            -34219.46811826416,
-            -47069.30768969713,
-        ])
-        }
+        "energy": torch.tensor(
+            [
+                0.0,
+                -313.5150902000774,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                -23622.587180094913,
+                -34219.46811826416,
+                -47069.30768969713,
+            ]
+        )
+    }
 
     datasets_dict = dict(
         aspirin="rmd17_aspirin.npz",
@@ -193,7 +196,7 @@ class rMD17(MapStyleDataset):
         ],
         save_dir: Path | None = None,
         device: str = "cpu",
-        atomic_dress: bool = True
+        atomic_dress: bool = True,
     ):
         super().__init__(
             name="rmd17",
@@ -234,7 +237,7 @@ class rMD17(MapStyleDataset):
     def frames(self):
         return self._frames
 
-    def prepare(self, total: int|None = 1000, preprocess: list[Module] = []):
+    def prepare(self, total: int | None = 1000, preprocess: list[Module] = []):
 
         if self.save_dir is None:
             data = self._fetch_data()
@@ -290,11 +293,11 @@ class rMD17(MapStyleDataset):
     def parse_data(self, data, total: int) -> Sequence[mpot.Frame]:
         numbers = torch.tensor(data["nuclear_charges"], dtype=Config.itype)
         frames = []
-        if total is None:
-            total = torch.inf
-        for positions, energies, forces in zip(
-            data["coords"], data["energies"], data["forces"]
-        ):
+        indices = torch.randperm(len(numbers)[:total])
+        for idx in indices:
+            positions = data["coords"][idx]
+            energies = data["energies"][idx]
+            forces = data["forces"][idx]
             frame = mpot.Frame()
             frame[alias.Z] = numbers
             frame[alias.R] = torch.tensor(positions, dtype=torch.float32)
@@ -304,20 +307,15 @@ class rMD17(MapStyleDataset):
             )
             frame["labels", "forces"] = torch.tensor(forces, dtype=Config.ftype)
             frame[alias.n_atoms] = torch.tensor([len(numbers)], dtype=Config.itype)
-            # frame[alias.cell] = None  # no cell
-            # frame[alias.pbc] = torch.zeros(3, dtype=torch.bool)
             frames.append(frame)
-            if len(frames) >= total:
-                break
         return frames
 
     def save(self, *args, **kwargs):
         frames = mpot.Frame.from_frames(self._frames)
         frames.save(self.save_dir / f"{self.molecule}.pt", *args, **kwargs)
         return frames
-    
+
     def load(self, *args, **kwargs):
         frames = mpot.Frame.load(self.save_dir / f"{self.molecule}.pt", *args, **kwargs)
         self._frames = [mpot.Frame(frame) for frame in frames]
         return self._frames
-        
