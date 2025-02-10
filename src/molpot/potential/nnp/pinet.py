@@ -44,10 +44,10 @@ class PIXLayer(nn.Module):
 
     def forward(self, px, pair_i, pair_j):
 
-        px_i = px[pair_i]
-        px_j = px[pair_j]
-        return self.w(px_i + px_j)
-
+        # px_i = px[pair_i]
+        # px_j = px[pair_j]
+        # return self.w(px_i + px_j)
+        return px[pair_j]
 
 class ScaleLayer(nn.Module):
 
