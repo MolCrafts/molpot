@@ -178,7 +178,7 @@ class PotentialTrainer(MolpotEngine):
 
         if eval_data is not None:
             self.trainer.add_event_handler(
-                Events.EPOCH_COMPLETED(every=1),
+                Events.EPOCH_COMPLETED,
                 lambda: self.evaluator.run(
                     eval_data, epoch_length=epoch_length, max_epochs=1
                 ),
