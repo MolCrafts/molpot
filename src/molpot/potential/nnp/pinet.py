@@ -10,6 +10,7 @@ class PILayer(nn.Module):
 
     def __init__(self, *n_nodes: int, activation: Callable | None = F.tanh):
         super().__init__()
+        n_nodes = [n_nodes[0] * 2] + list(n_nodes[1:])
         self.mlp = FeedForward(*n_nodes, activation=activation, bias=False)
 
     def forward(self, p1, pair_i, pair_j, basis):
@@ -17,7 +18,8 @@ class PILayer(nn.Module):
         p1_i = p1[pair_i]
         p1_j = p1[pair_j]
 
-        inter = p1_i + p1_j
+        # inter = p1_i + p1_j
+        inter = torch.concat([p1_i, p1_j], dim=-1)
         inter = self.mlp(inter)
         inter = torch.einsum(
             "icb, ib->ic", inter.reshape(-1, p1_i.shape[-1], basis.shape[-1]), basis
