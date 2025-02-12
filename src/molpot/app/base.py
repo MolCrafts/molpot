@@ -1,6 +1,7 @@
 from typing import Any
 import inspect
 from typer import Typer
+import click
 
 class ConfigParser:
 
@@ -38,25 +39,22 @@ class ConfigParser:
     def load_config(self, path: str, format: str = 'yaml') -> None:
         ...
 
-
-class App:
+class MolpotApp:
 
     name: str = 'MolPotApp'
     version: str = '0.1.0'
-    cli = Typer()
 
     def __init__(self, *args: Any, **configs: Any) -> None:
         self.config = ConfigParser()
         self.config.capture_config(*args, **configs)
 
-class TrainPotentialApp(App):
+class TrainPotentialApp(MolpotApp):
 
     def __init__(self, *args: tuple, **configs: dict) -> None:
         super().__init__(*args, **configs)
         self._model = None
         self.cli.command()(self)
         self.cli.command()(self.train)
-
 
     def train(self):
         ...
