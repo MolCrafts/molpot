@@ -6,7 +6,7 @@ number = TypeVar('number', int, float)
 
 class Tracker:
     """
-    https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
+    https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online
     """
     def __init__(self):
         self.reset()

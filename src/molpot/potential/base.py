@@ -18,3 +18,4 @@ class PotentialSeq(nn.Module):
 
     def forward(self, inputs):
         return self.kernel(inputs)
+    
