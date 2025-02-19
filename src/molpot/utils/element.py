@@ -41,7 +41,7 @@ class Element:
                     ),
                     None,
                 )
-        if result is None:
+        else:
             raise KeyError(f"Element not found: {name_or_symbol_or_number}")
 
         return result

@@ -270,7 +270,7 @@ class PiNet1(nn.Module):
         alias.pair_i,
         alias.pair_j,
     ]
-    out_keys = [("pinet2", "p1"), ("pinet2", "i1")]
+    out_keys = [("pinet1", "p1"), ("pinet1", "i1")]
 
     def __init__(
         self,
@@ -304,7 +304,7 @@ class PiNet1(nn.Module):
         self.res_update = ResUpdate()
 
     def forward(self, Z, pair_diff, pair_i, pair_j) -> None:
-        n_atoms = Z.shape[0]
+        # n_atoms = Z.shape[0]
         pair_diff.requires_grad_()
         pair_dist = torch.linalg.norm(pair_diff, dim=-1)  # (n_pairs, )
         pair_i = pair_i.to(torch.int64)  # for scatter

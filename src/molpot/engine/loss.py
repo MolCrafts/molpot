@@ -5,6 +5,7 @@ import torch.nn as nn
 class Constraint(nn.Module):
 
     def __init__(self, loss_kernel: nn.Module):
+        # TODO: auto register to logger
         super().__init__()
         self.loss_kernel = loss_kernel
         self.constraints = []
@@ -16,4 +17,4 @@ class Constraint(nn.Module):
         return torch.sum(torch.stack([
             weight * self.loss_kernel(pred[target_key], label[label_key])
             for _, target_key, label_key, weight in self.constraints
-        ]))
+        ])) 
