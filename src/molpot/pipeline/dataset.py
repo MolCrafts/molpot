@@ -1,8 +1,6 @@
 import io
 import logging
-import random
 import tarfile
-import time
 from pathlib import Path
 from typing import Literal, Sequence, Any
 
@@ -292,9 +290,13 @@ class rMD17(MapStyleDataset):
         frames = []
         if total is None:
             total = torch.inf
-        for positions, energies, forces in zip(
-            data["coords"], data["energies"], data["forces"]
-        ):
+
+        rng = np.random.default_rng(mpot.Config.seed)
+        indices = rng.integers(0, len(data["coords"]), total)
+        for idx in indices:
+            positions = data["coords"][idx]
+            energies = data["energies"][idx]
+            forces = data["forces"][idx]
             frame = mpot.Frame()
             frame[alias.Z] = numbers
             frame[alias.R] = torch.tensor(positions, dtype=torch.float32)
@@ -307,6 +309,14 @@ class rMD17(MapStyleDataset):
             # frame[alias.cell] = None  # no cell
             # frame[alias.pbc] = torch.zeros(3, dtype=torch.bool)
             frames.append(frame)
-            if len(frames) >= total:
-                break
         return frames
+
+    def load(self, path: Path):
+        frames = mpot.Frame.load(path)
+        self._frames = list(frames)
+        return self
+
+    def save(self, path: Path):
+        frames = mpot.Frame.from_frames(self._frames).density()
+        frames.save()
+        return self
