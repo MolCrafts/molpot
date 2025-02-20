@@ -5,15 +5,16 @@ set(NAME molpot_op)
 project(${NAME} LANGUAGES CXX)
 option(ENABLE_CUDA "Enable biuilding CUDA components" ON)
 
-find_package(CUDA QUIET)
+# Automatically detect CUDA (only proceed if found)
+find_package(CUDAToolkit QUIET)
 
-if(ENABLE_CUDA AND CUDA_FOUND)
-    enable_language(CUDA)
-elseif(ENABLE_CUDA AND NOT CUDA_FOUND)
-    message(STATUS "CUDA not found, but ENABLE_CUDA is set to ON")
-    message(STATUS "Disabling CUDA")
+if(CMAKE_CUDA_COMPILER)
+    message(STATUS "CUDA detected: ${CMAKE_CUDA_COMPILER}, version: ${CUDAToolkit_VERSION}")
+    set(ENABLE_CUDA ON)
+else()
+    message(STATUS "CUDA not found, disabling CUDA support.")
     set(ENABLE_CUDA OFF)
-endif(ENABLE_CUDA)
+endif()
 
 set(CMAKE_CUDA_COMPILER "/usr/local/cuda/bin/nvcc")
 # Find dependencies

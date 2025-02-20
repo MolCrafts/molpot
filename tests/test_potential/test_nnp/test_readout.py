@@ -1,5 +1,6 @@
 import molpot as mpot
 import torch
+from molpot import alias
 
 
 class TestDerivative:
@@ -51,47 +52,39 @@ class TestDerivative:
     #     )
 
     def test_pair_force(self, gen_homogenous_frames):
-        # Create a simple pair energy function that depends on distance
+
         frame = gen_homogenous_frames(1)[0]
-        
-        # Create some test pair energies (could be from a neural network)
-        pair_diff = frame["pairs", "diff"].requires_grad_(True)
-        pair_energies = 0.5 * torch.linalg.norm(frame["pairs", "diff"], dim=1) ** 2
-        pair_force = -frame["pairs", "diff"]
-        
-        # Create the PairForce module
+        frame = mpot.process.nblist.NeighborList(2.0)(frame)
+
+
+        # calculate expected energy and forces with coordinates
+        R = frame["atoms", "R"].requires_grad_(True)
+        pair_energy = (
+            0.5
+            * torch.linalg.norm(R[frame[alias.pair_j]] - R[frame[alias.pair_i]], dim=1)
+            ** 2
+        )
+        (pair_force,) = torch.autograd.grad(
+            pair_energy.sum(), R, create_graph=True, retain_graph=True
+        )
+
+
+        # molpot uses pair vector as input of all potentials
+        frame["predicts", "pair_energy"] = torch.sum(
+            0.5 * torch.linalg.norm(frame["pairs", "diff"], dim=1) ** 2
+        )
         force_readout = mpot.potential.nnp.readout.PairForce(
             in_keys=("predicts", "pair_energy"),
             dx_key=("pairs", "diff"),
-            out_keys=("predicts", "forces")
+            out_keys=("predicts", "forces"),
         )
-        
-        # Calculate forces
         forces = force_readout(
-            torch.sum(pair_energies),
-            pair_diff,
+            torch.sum(frame["predicts", "pair_energy"]),
+            frame["pairs", "diff"],
             frame["pairs", "i"],
-            frame["pairs", "j"]
-        )
-        
-        # For unit energies, forces should point along the pair vectors
-        # and have magnitude 1 for each pair
-        expected_forces = torch.zeros_like(frame["atoms", "R"])
-        # Accumulate forces on atoms i (negative direction)
-        expected_forces.index_add_(
-            0, 
-            frame["pairs", "i"], 
-            -pair_force
-        )
-        
-        # Accumulate forces on atoms j (positive direction)
-        expected_forces.index_add_(
-            0,
             frame["pairs", "j"],
-            pair_force
         )
-        print(forces)
-        print(expected_forces)
-        assert torch.allclose(forces, expected_forces, atol=1e-6)
 
-        
+        # compare the results,
+        # mainly test if the direction of forces is correct
+        assert torch.allclose(forces, pair_force)

@@ -220,7 +220,7 @@ class TestPiNet:
         n_pairs = pair_i.size(0)
         i1 = torch.rand((n_pairs, 1, n_features))
         p3 = torch.zeros(n_atoms, 3, n_features)
-        eqvarl = ModuleTester(EqvarLayer([n_features, n_features]))
+        eqvarl = ModuleTester(EqvarLayer(n_features, n_features))
         eqvarl.test_shape(
             (p3, pair_i, pair_j, diff, i1), (n_pairs, 3, n_features), lambda x: x[0]
         )

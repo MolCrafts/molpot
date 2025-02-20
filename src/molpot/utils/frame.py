@@ -1,12 +1,17 @@
 import torch
-from tensordict.tensordict import TensorDict, LazyStackedTensorDict
+from tensordict import TensorDict
+from tensordict.base import _register_tensor_class
+
 
 class Frame(TensorDict):
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
     @classmethod
-    def from_frames(cls, frames, layout=torch.jagged):
-        td = cls.maybe_dense_stack(frames).densify(layout=layout)
+    def from_frames(cls, frames):
+        td = cls.maybe_dense_stack(frames)
         return td
+    
+    def get_frame_list(self):
+        return [Frame(frame) for frame in self]
+    
+_register_tensor_class(Frame)
+

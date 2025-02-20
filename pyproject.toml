@@ -28,7 +28,7 @@ dev = [
 ]
 
 [project.scripts]
-molpot = "molpot.cli.main:app"
+molpot = "molpot.cli.main:main_cli"
 
 
 [project.urls]

@@ -34,6 +34,7 @@ class PotentialTrainer(MolpotEngine):
         gradient_accumulation_steps: int = 1,
         model_fn: Callable[[torch.nn.Module, Any], Any] = lambda model, x: model(x),
         no_grad_eval: bool = False,
+        clip_grad_norm: float | None = None,
     ):
         super().__init__()
 
@@ -61,6 +62,7 @@ class PotentialTrainer(MolpotEngine):
                 scaler=scaler,
                 gradient_accumulation_steps=gradient_accumulation_steps,
                 model_fn=model_fn,
+                clip_grad_norm=clip_grad_norm,
             ),
         )
         self.add_engine(
@@ -178,7 +180,7 @@ class PotentialTrainer(MolpotEngine):
 
         if eval_data is not None:
             self.trainer.add_event_handler(
-                Events.EPOCH_COMPLETED(every=1),
+                Events.EPOCH_COMPLETED,
                 lambda: self.evaluator.run(
                     eval_data, epoch_length=epoch_length, max_epochs=1
                 ),

@@ -1,1 +1,1 @@
-from .base import MolPotApp, ConfigProcessor
+from .base import MolpotApp

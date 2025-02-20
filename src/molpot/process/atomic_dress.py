@@ -3,12 +3,13 @@ import torch.nn as nn
 from molpot import alias
 
 import torch
-from torch.utils.data import DataLoader
+from .utils import Tracker
+from collections import defaultdict
 
 
 class AtomicDress(nn.Module):
 
-    def __init__(self):
+    def __init__(self, dress_key: str):
         """
         Fit the atomic energy with an element–dependent atomic dress.
         
@@ -25,6 +26,7 @@ class AtomicDress(nn.Module):
             error: A torch tensor with the residual error (difference between model prediction and true values).
         """
         super().__init__()
+        self.key = dress_key
 
     def forward(self, frames):
 
@@ -34,9 +36,9 @@ class AtomicDress(nn.Module):
         x = []
         y = []
         for frame in frames:
-            count = torch.bincount(frame["atoms", "Z"]-1, minlength=len(elems))
+            count = torch.bincount(frame["atoms", "Z"]-1, minlength=max(elems))
             x.append(count.float())
-            y.append(frame[("labels", "energy")])
+            y.append(frame[self.key])
         
         x = torch.stack(x)
         y = torch.stack(y)
@@ -49,6 +51,6 @@ class AtomicDress(nn.Module):
 
         # substract the fitted energy from the true energy
         for frame in frames:
-            frame[("labels", "energy")] -= torch.sum(beta[frame["atoms", "Z"]-1])
+            frame[self.key] -= torch.sum(beta[frame["atoms", "Z"]-1])
         print(torch.sqrt(torch.mean(error**2)))
         return frames
