@@ -109,12 +109,12 @@ class PairForce(nn.Module):
         self.retain_graph = retain_graph
 
     def forward(self, fx, dx, pair_i, pair_j):
-        (dfdx,) = torch.autograd.grad(
+        dfdx = -1 * torch.autograd.grad(
             torch.sum(fx),
             dx,
             create_graph=self.create_graph,
             retain_graph=self.retain_graph,
-        )
+        )[0]
         atom_force = torch.zeros(
             max(pair_i.max(), pair_j.max()) + 1,
             3,

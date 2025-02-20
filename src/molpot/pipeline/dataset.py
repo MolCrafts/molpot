@@ -1,12 +1,8 @@
 import io
 import logging
-<<<<<<< HEAD
-import tarfile
-=======
 import random
-import tarfile, bz2
+import tarfile
 import time
->>>>>>> 53d0547c206ebb78c6e91f68d3fb9fa13bc2cf79
 from pathlib import Path
 from typing import Literal, Sequence, Any
 
