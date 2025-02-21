@@ -354,7 +354,7 @@ class rMD17(MapStyleDataset):
     def parse_data(self, data, total: int) -> Sequence[mpot.Frame]:
         numbers = torch.tensor(data["nuclear_charges"], dtype=Config.itype)
         frames = []
-        indices = torch.randperm(len(data["coords"]))[:total]
+        indices = torch.randint(0, len(data["coords"]), size=(total,))
         for idx in indices:
             frame = mpot.Frame()
             frame[alias.Z] = numbers

@@ -64,10 +64,9 @@ class TestDerivative:
             * torch.linalg.norm(R[frame[alias.pair_j]] - R[frame[alias.pair_i]], dim=1)
             ** 2
         )
-        (pair_force,) = torch.autograd.grad(
+        pair_force = -1 * torch.autograd.grad(
             pair_energy.sum(), R, create_graph=True, retain_graph=True
-        )
-
+        )[0]
 
         # molpot uses pair vector as input of all potentials
         frame["predicts", "pair_energy"] = torch.sum(

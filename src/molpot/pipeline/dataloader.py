@@ -5,7 +5,7 @@ import torchdata.nodes as tn
 from torch.utils.data import RandomSampler, SequentialSampler, default_collate, Dataset
 from molpot import Config, Frame, alias
 from functools import reduce
-
+import molpot as mpot
 
 def compose(*funcs):
     """Compose a list of functions into a single function."""
@@ -116,7 +116,7 @@ class DataLoader(tn.Loader):
     ):
 
         # Start with a sampler, since caller did not provide one
-        sampler = RandomSampler(dataset) if shuffle else SequentialSampler(dataset)
+        sampler = RandomSampler(dataset, generator=mpot.Config.get_generator()) if shuffle else SequentialSampler(dataset)
         # Sampler wrapper converts a Sampler to a BaseNode
         node = tn.SamplerWrapper(sampler)
 
