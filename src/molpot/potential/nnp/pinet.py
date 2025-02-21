@@ -2,16 +2,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Callable
-from molpot import NameSpace, alias
-from .base import FeedForward
+from molpot import alias
+from .base import Dense, FeedForward
 
 
 class PILayer(nn.Module):
 
-    def __init__(self, *n_nodes: int, activation: Callable | None = F.tanh):
+    def __init__(self, *n_nodes: int, bias=True, activation: Callable | None = F.tanh):
         super().__init__()
         n_nodes = [n_nodes[0] * 2] + list(n_nodes[1:])
-        self.mlp = FeedForward(*n_nodes, activation=activation, bias=False)
+        self.mlp = FeedForward(*n_nodes, activation=activation, bias=bias)
 
     def forward(self, p1, pair_i, pair_j, basis):
 
@@ -29,9 +29,13 @@ class PILayer(nn.Module):
 
 class IPLayer(nn.Module):
 
-    def forward(self, i1, pair_i, p1):
+    def forward(self, ix, pair_i, px):
+        n_atoms = px.shape[0]
         return torch.index_add(
-            torch.zeros_like(p1, dtype=p1.dtype, device=p1.device), 0, pair_i, i1
+            torch.zeros((n_atoms, *ix.shape[1:]), dtype=px.dtype, device=px.device),
+            0,
+            pair_i,
+            ix,
         )
 
 
@@ -56,7 +60,7 @@ class ScaleLayer(nn.Module):
         return px * p1  # 'pcf,pcf->pcf'
 
 
-class SelfDotLayer(nn.Module):
+class DotLayer(nn.Module):
 
     def forward(self, p):
         return torch.einsum("ixr, ixr->ir", p, p)[:, None, :]
@@ -72,10 +76,10 @@ class InvarLayer(nn.Module):
         activation: Callable = F.tanh,
     ):
         super().__init__()
-        self.pp_layer = FeedForward(*pp_nodes, activation=activation, bias=True)
-        self.pi_layer = PILayer(*pi_nodes, activation=activation)
+        self.pi_layer = PILayer(*pi_nodes, bias=True, activation=activation)
         self.ii_layer = FeedForward(*ii_nodes, activation=activation, bias=False)
         self.ip_layer = IPLayer()
+        self.pp_layer = FeedForward(*pp_nodes, bias=True, activation=activation)
 
     def forward(self, p1, pair_i, pair_j, basis):
         i1 = self.pi_layer(p1, pair_i, pair_j, basis)
@@ -139,48 +143,53 @@ class GCBlock3(nn.Module):
         activation: Callable | None = F.tanh,
     ):
         super().__init__()
+
+        ii_nodes[-1] *= 2
+
         self.p1_layer = InvarLayer(pp_nodes, pi_nodes, ii_nodes, activation)
         self.p3_layer = EqvarLayer(pp_nodes[0], pp_nodes[-1])
         self.n_features = pp_nodes[-1]
         # n_props = 2
         self.pp_layer = nn.Linear(self.n_features * 2, self.n_features * 2)
         self.scale_layer = ScaleLayer()
-        self.dot_layer = SelfDotLayer()
+        self.dot_layer = DotLayer()
 
     def forward(self, p1, p3, pair_i, pair_j, basis, diff):
 
         p1, i1 = self.p1_layer(p1, pair_i, pair_j, basis)
-        p3, i3 = self.p3_layer(p3, pair_i, pair_j, diff, i1)
+        i1s = torch.split(i1, int(i1.shape[-1] / 2), dim=-1)
+        p3, i3 = self.p3_layer(p3, pair_i, pair_j, diff, i1[1])
 
         px = self.pp_layer(torch.concat([p1, self.dot_layer(p3)], dim=-1))
         p1t1, p3_scale = torch.split(
             px,
-            [
-                self.n_features,
-            ]
-            * 2,
+            self.n_features,
             dim=-1,
         )
         p3t1 = self.scale_layer(p3, p3_scale)
 
-        return (p1t1, p3t1), (i1, i3)
+        return (p1t1, p3t1), (i1s[0], i3)
 
 
 class OutLayer(nn.Module):
 
-    def __init__(self, out_nodes: list[int]):
+    def __init__(self, out_nodes: list[int], out_units: int):
         super().__init__()
         if len(out_nodes) < 2:
             raise ValueError("out_nodes must have at least 2 elements")
         elif len(out_nodes) == 2:
             out_nodes.append(out_nodes[-1])
-        self.ff_layer = FeedForward(*out_nodes[:-1])
-        # self.out_units = nn.Linear(out_nodes[-2], out_nodes[-1])
+        # self.ff_layer = FeedForward(
+        #     *out_nodes[:-1], activation=None, bias=True, last_bias=False
+        # )
+        self.ff_layer = FeedForward(
+            *out_nodes[:-1], activation=None, bias=True, last_bias=True
+        )
+        self.out_units = Dense(out_nodes[-1], out_units, activation=None, bias=False)
 
     def forward(self, px, prev_px):
         px = self.ff_layer(px)
-        # px = self.out_units(px)
-        return px + prev_px
+        return self.out_units(px) + prev_px
 
 
 class ResUpdate(nn.Module):
@@ -200,7 +209,7 @@ class PiNet2(nn.Module):
         alias.pair_i,
         alias.pair_j,
     ]
-    out_keys = [("pinet2", "p1"), ("pinet2", "i1"), ("pinet2", "p3"), ("pinet2", "i3")]
+    out_keys = [("pinet", "p1"), ("pinet", "i1"), ("pinet", "p3"), ("pinet", "i3")]
 
     def __init__(
         self,
@@ -270,7 +279,7 @@ class PiNet1(nn.Module):
         alias.pair_i,
         alias.pair_j,
     ]
-    out_keys = [("pinet1", "p1"), ("pinet1", "i1")]
+    out_keys = [("pinet", "p1"), ("pinet", "i1")]
 
     def __init__(
         self,
@@ -294,10 +303,15 @@ class PiNet1(nn.Module):
         self.embedding = nn.Embedding(max_atomtypes, self.n_basis, padding_idx=0)
 
         pi_nodes[-1] *= self.n_basis
-        self.before_gc_block_layer = nn.Linear(self.n_basis, pp_nodes[0])
+        self.before_gc_block_layer = Dense(
+            self.n_basis, pp_nodes[0], activation=activation
+        )
 
         self.gc_blocks = nn.ModuleList(
-            [GCBlock1(pp_nodes, pi_nodes, ii_nodes, activation) for _ in range(depth)]
+            [
+                GCBlock1(pp_nodes, pi_nodes, ii_nodes, activation=activation)
+                for _ in range(depth)
+            ]
         )
         self.out_layers = nn.ModuleList([OutLayer(out_nodes) for _ in range(depth)])
 
@@ -316,13 +330,12 @@ class PiNet1(nn.Module):
 
         basis = basis * fc[..., None]
         p1 = self.embedding(Z)[:, None, :]
-
-        # (n_atoms, 1, ...) -> (n_atoms, 1, n_basis)
+        # (n_atoms, 1, n_basis) -> (n_atoms, 1, pp_nodes[0])
         p1 = self.before_gc_block_layer(p1)
-        
+
         output = 0.0
         for i in range(self.depth.item()):
-            (p1t1, ), (i1, ) = self.gc_blocks[i](
+            (p1t1,), (i1,) = self.gc_blocks[i](
                 p1, pair_i, pair_j, basis, norm_pair_diff
             )
             output = self.out_layers[i](p1t1, output)

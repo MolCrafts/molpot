@@ -82,3 +82,11 @@ class Config:
         if isinstance(level, str):
             level = _mapping.get(level, logging.INFO)
         cls.logger.setLevel(level)
+
+    @classmethod
+    def get_generator(cls):
+        gen = torch.Generator(device=cls.device)
+        if cls.seed is not None:
+            gen = gen.manual_seed(cls.seed)
+        return gen
+    

@@ -5,8 +5,6 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn.init import xavier_uniform_, zeros_
 
-__all__ = ["Dense"]
-
 
 class Dense(nn.Linear):
     r"""Fully connected linear layer with activation function.

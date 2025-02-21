@@ -1,24 +1,22 @@
+import bz2
 import io
 import logging
 import random
-import tarfile, bz2
+import tarfile
 import time
+from abc import abstractmethod
 from pathlib import Path
-from typing import Literal, Sequence, Any
+from typing import Any, Literal, Sequence
 
 import numpy as np
 import requests
 import torch
 from torch.nn import Module, Sequential
+from tqdm import tqdm
 
 import molpot as mpot
 from molpot import Config, NameSpace, alias
-
-from abc import abstractmethod
-
 from molpot.process import AtomicDress
-
-from tqdm import tqdm
 
 logger = logging.getLogger("molpot")
 
