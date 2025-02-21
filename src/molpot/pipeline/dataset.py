@@ -154,8 +154,9 @@ class QM9(Dataset):
             import tempfile
 
             tmp_dir = Path(tempfile.gettempdir()) / "qm9_extracted"
-            tmp_dir.mkdir(exist_ok=True)
-            tar_file.extractall(tmp_dir)
+            if not tmp_dir.exists():
+                tmp_dir.mkdir(parents=True)
+                tar_file.extractall(tmp_dir)
             for name in tqdm(random_seleted_names):
                 with open(tmp_dir / name, "r") as f:
                     lines = f.readlines()
@@ -305,7 +306,7 @@ class rMD17(MapStyleDataset):
             data = self.download()
         raw_frames = self.parse_data(data, total=total)
 
-        atomic_dress = AtomicDress()
+        atomic_dress = AtomicDress(dress_key=("labels", "energy"))
 
         _preprocess = Sequential(*preprocess)
         self._frames = [_preprocess(frame) for frame in raw_frames]

@@ -106,6 +106,7 @@ class EqvarLayer(nn.Module):
     def forward(self, px, pair_i, pair_j, diff, i1):
 
         ix = self.pi_layer(px, pair_i, pair_j)
+        # iilayer
         ix = self.scale_layer(ix, i1)
         scaled_diff = self.scale_layer(diff[..., None], i1)
         ix = ix + scaled_diff
@@ -144,9 +145,11 @@ class GCBlock3(nn.Module):
     ):
         super().__init__()
 
-        ii_nodes[-1] *= 2
-
-        self.p1_layer = InvarLayer(pp_nodes, pi_nodes, ii_nodes, activation)
+        ii1_nodes = ii_nodes.copy()
+        pp1_nodes = pp_nodes.copy()
+        ii1_nodes[-1] *= 2
+        pp1_nodes[0] *= 2
+        self.p1_layer = InvarLayer(pp1_nodes, pi_nodes, ii1_nodes, activation)
         self.p3_layer = EqvarLayer(pp_nodes[0], pp_nodes[-1])
         self.n_features = pp_nodes[-1]
         # n_props = 2
@@ -158,7 +161,7 @@ class GCBlock3(nn.Module):
 
         p1, i1 = self.p1_layer(p1, pair_i, pair_j, basis)
         i1s = torch.split(i1, int(i1.shape[-1] / 2), dim=-1)
-        p3, i3 = self.p3_layer(p3, pair_i, pair_j, diff, i1[1])
+        p3, i3 = self.p3_layer(p3, pair_i, pair_j, diff, i1s[1])
 
         px = self.pp_layer(torch.concat([p1, self.dot_layer(p3)], dim=-1))
         p1t1, p3_scale = torch.split(
@@ -220,6 +223,7 @@ class PiNet2(nn.Module):
         pi_nodes: list[int] = [16, 16],
         ii_nodes: list[int] = [16, 16],
         out_nodes: list[int] = [16, 16],
+        out_units: int = 1,
         activation: Callable | None = F.tanh,
         max_atomtypes: int = 100,
     ):
@@ -238,7 +242,7 @@ class PiNet2(nn.Module):
         self.gc_blocks = nn.ModuleList(
             [GCBlock3(pp_nodes, pi_nodes, ii_nodes, activation) for _ in range(depth)]
         )
-        self.out_layers = nn.ModuleList([OutLayer(out_nodes) for _ in range(depth)])
+        self.out_layers = nn.ModuleList([OutLayer(out_nodes, out_units) for _ in range(depth)])
 
         self.res_update = ResUpdate()
 
@@ -290,6 +294,7 @@ class PiNet1(nn.Module):
         pi_nodes: list[int] = [16, 16],
         ii_nodes: list[int] = [16, 16],
         out_nodes: list[int] = [16, 16],
+        out_units: int = 1,
         activation: Callable | None = F.tanh,
         max_atomtypes: int = 100,
     ):
@@ -313,7 +318,7 @@ class PiNet1(nn.Module):
                 for _ in range(depth)
             ]
         )
-        self.out_layers = nn.ModuleList([OutLayer(out_nodes) for _ in range(depth)])
+        self.out_layers = nn.ModuleList([OutLayer(out_nodes, out_units) for _ in range(depth)])
 
         self.res_update = ResUpdate()
 

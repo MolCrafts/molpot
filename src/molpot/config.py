@@ -6,11 +6,13 @@ import os, sys
 import torch
 from collections import defaultdict
 import numpy as np
+import threading
 
 class Config:
 
-    def __init__(self):
-        raise TypeError("Config class cannot be instantiated.")
+    _instance = None
+    _lock = threading.Lock()
+
 
     device: torch.device = torch.device("cpu")
     global_dtypes = {
@@ -21,6 +23,13 @@ class Config:
     itype = global_dtypes["int"]
 
     logger = logging.getLogger("molpot")
+
+    def __new__(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._instance._setup_logger()
+        return cls._instance
 
     @classmethod
     def get_dtype(cls, dtype_name):
@@ -89,4 +98,5 @@ class Config:
         if cls.seed is not None:
             gen = gen.manual_seed(cls.seed)
         return gen
+    
     
