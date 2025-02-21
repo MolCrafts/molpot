@@ -97,12 +97,6 @@ class Config:
         gen = torch.Generator(device=cls.device)
         if cls.seed is not None:
             gen = gen.manual_seed(cls.seed)
-<<<<<<< HEAD
         return gen
     
-=======
-        else:
-            gen = gen.initial_seed()
-        return gen
->>>>>>> 1a459cb95a268c08364f4583be67b16d4e17bb46
     
