@@ -212,7 +212,7 @@ class PiNet2(nn.Module):
         alias.pair_i,
         alias.pair_j,
     ]
-    out_keys = [("pinet", "p1"), ("pinet", "i1"), ("pinet", "p3"), ("pinet", "i3")]
+    out_keys = [("pinet", "p1"), ("pinet", "p3"), ("pinet", "i1"), ("pinet", "i3")]
 
     def __init__(
         self,

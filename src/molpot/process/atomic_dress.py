@@ -56,5 +56,5 @@ class AtomicDress(nn.Module):
 
         # substract the fitted energy from the true energy
         for frame in frames:
-            frame[self.key] -= torch.sum(beta[frame["atoms", "Z"]-1])
-        return self.atomic_dress, error
+            frame[self.key] -= torch.sum(torch.tensor([self.atomic_dress[z.item()] for z in frame["atoms", "Z"]]))
+        return frames

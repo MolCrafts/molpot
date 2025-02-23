@@ -8,6 +8,16 @@ from collections import defaultdict
 import numpy as np
 import threading
 
+
+def _setup_logger():
+    logger = logging.getLogger("molpot")
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    # logger.setLevel(logging.INFO)
+    return logger
+
 class Config:
 
     _instance = None
@@ -21,7 +31,7 @@ class Config:
     ftype = global_dtypes["float"]
     itype = global_dtypes["int"]
 
-    logger = logging.getLogger("molpot")
+    logger = _setup_logger()
 
     seed: int|None = None
 
@@ -29,15 +39,7 @@ class Config:
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
-                cls._instance._setup_logger()
         return cls._instance
-
-    def _setup_logger(self):
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
-        self.logger.setLevel(logging.INFO)
 
     @classmethod
     def get_dtype(cls, dtype_name):

@@ -202,11 +202,11 @@ class QM9(Dataset):
             #     frames.append(frame)
         logger.info(f"end parse, cost {time.perf_counter() - start_time:.2f}s")
 
-        # atomic_dress = AtomicDress(dress_key=("labels", "U0"))
+        atomic_dress = AtomicDress(dress_key=("labels", "U0"))
 
         _preprocess = Sequential(*preprocess)
         self._frames = [_preprocess(frame) for frame in frames]
-        # self._frames = atomic_dress(self._frames)
+        self._frames = atomic_dress(self._frames)
 
         self._frames = frames
         return frames
@@ -353,10 +353,12 @@ class rMD17(MapStyleDataset):
         data = np.load(self.npz_path)
         return data
 
-    def parse_data(self, data, total: int) -> Sequence[mpot.Frame]:
+    def parse_data(self, data, total: int|None) -> Sequence[mpot.Frame]:
         numbers = torch.tensor(data["nuclear_charges"], dtype=Config.itype)
         frames = []
-        indices = torch.randint(0, len(data["coords"]), size=(total,))
+        if total is None:
+            total = len(data["energies"])
+        indices = torch.randperm(total, )
         for idx in indices:
             frame = mpot.Frame()
             frame[alias.Z] = numbers
