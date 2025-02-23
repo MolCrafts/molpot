@@ -13,7 +13,6 @@ class Config:
     _instance = None
     _lock = threading.Lock()
 
-
     device: torch.device = torch.device("cpu")
     global_dtypes = {
         "float": torch.float32,
@@ -24,6 +23,8 @@ class Config:
 
     logger = logging.getLogger("molpot")
 
+    seed: int|None = None
+
     def __new__(cls):
         with cls._lock:
             if cls._instance is None:
@@ -31,25 +32,31 @@ class Config:
                 cls._instance._setup_logger()
         return cls._instance
 
+    def _setup_logger(self):
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.setLevel(logging.INFO)
+
     @classmethod
     def get_dtype(cls, dtype_name):
         return cls.global_dtypes.get(dtype_name, None)
 
     @classmethod
-    def set_device(cls, device_info:dict):
+    def set_device(cls, device_info: dict):
         device_type = device_info["type"]
         if device_type == "cpu":
             device = torch.device("cpu")
         elif device_type == "gpu" or device_type == "cuda":
             n_gpu = torch.cuda.device_count()
             if n_gpu == 0:
-                print("Warning: There\'s no GPU available on this machine,"
-                    "training will be performed on CPU.")
+                cls.logger.warning("There's no GPU available on this machine, training will be performed on CPU.")
                 device = torch.device("cpu")
             else:
                 device = torch.device("cuda:0")
         return device
-    
+
     @classmethod
     def set_environ(cls, **kwargs):
         for k, v in kwargs.items():
@@ -75,21 +82,27 @@ class Config:
         env_info["PyTorch"] = torch.__version__
 
         return env_info
-    
+
     @classmethod
-    def set_seed(cls, seed:int):
+    def set_seed(cls, seed: int):
         torch.manual_seed(seed)
         np.random.seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
 
     @classmethod
-    def set_log_level(cls, level:int):
+    def set_log_level(cls, level: int|str):
         _mapping = {
             "INFO": logging.INFO,
+            "DEBUG": logging.DEBUG,
+            "WARNING": logging.WARNING,
+            "ERROR": logging.ERROR,
+            "CRITICAL": logging.CRITICAL
         }
         if isinstance(level, str):
-            level = _mapping.get(level, logging.INFO)
+            level = _mapping.get(level.upper())
+            if level is None:
+                raise ValueError(f"Invalid log level: {level}")
         cls.logger.setLevel(level)
 
     @classmethod
@@ -98,5 +111,4 @@ class Config:
         if cls.seed is not None:
             gen = gen.manual_seed(cls.seed)
         return gen
-    
-    
+
