@@ -324,7 +324,7 @@ class PiNet1(nn.Module):
 
     def forward(self, Z, pair_diff, pair_i, pair_j) -> None:
         # n_atoms = Z.shape[0]
-        pair_diff.requires_grad_()
+        # pair_diff.requires_grad_()
         pair_dist = torch.linalg.norm(pair_diff, dim=-1)  # (n_pairs, )
         pair_i = pair_i.to(torch.int64)  # for scatter
         pair_j = pair_j.to(torch.int64)

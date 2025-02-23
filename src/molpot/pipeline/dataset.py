@@ -133,19 +133,21 @@ class QM9(Dataset):
         start_extract_time = time.perf_counter()
 
         with tarfile.open(fileobj=qm9_bytes, mode="r:bz2") as tar_file:
-            names = set(tar_file.getnames())
+            names = tar_file.getnames()
+            qm9_indices = set(int(name[-10:-4]) for name in names)
             exclude = set(exclude)
-            names = names - exclude
+            qm9_indices = list(qm9_indices - exclude)
             if total is None:
-                total = len(names)
-            random_seleted_names = random.sample(list(names), k=total)
+                total = len(qm9_indices)
+            random_indices = torch.randperm(total)
             end_extract_time = time.perf_counter()
             logger.info(
                 f"end extract, cost {end_extract_time - start_extract_time:.2f}s, average {(end_extract_time - start_extract_time)/total:.2f} s/file"
             )
 
             QM9 = self.labels
-            props = [QM9.zpve, QM9.U0, QM9.U, QM9.H, QM9.G, QM9.Cv]
+            props = [QM9.A, QM9.B, QM9.C, QM9.mu, QM9.alpha, QM9.homo, QM9.lumo, QM9.gap, QM9.r2, QM9.zpve, QM9.U0, QM9.U, QM9.H, QM9.G, QM9.Cv]
+            props_ind = {k: i for i, k in enumerate(props)}
             logger.info("parsing...")
             start_time = time.perf_counter()
             frames = []
@@ -157,8 +159,8 @@ class QM9(Dataset):
             if not tmp_dir.exists():
                 tmp_dir.mkdir(parents=True)
                 tar_file.extractall(tmp_dir)
-            for name in tqdm(random_seleted_names):
-                with open(tmp_dir / name, "r") as f:
+            for idx in tqdm(random_indices):
+                with open(tmp_dir / f"dsgdb9nsd_{qm9_indices[idx]:06}.xyz", "r") as f:
                     lines = f.readlines()
                     n_atoms = int(lines[0])
                     Z = [mpot.Element(l.split()[0]).number for l in lines[2:-3]]
@@ -170,10 +172,10 @@ class QM9(Dataset):
                     frame[alias.Z] = torch.tensor(Z)
                     frame[alias.R] = torch.tensor(R, dtype=Config.ftype)
                     frame[alias.n_atoms] = torch.tensor(n_atoms, dtype=Config.itype)
-                    prop_line = lines[1].split()
-                    for k, v in zip(props, prop_line[1:]):
-                        frame["labels", k[-1]] = torch.tensor(
-                            [float(v)], dtype=Config.ftype
+                    prop_line = lines[1].split()[2:]
+                    for p, i in props_ind.items():
+                        frame["labels", p[-1]] = torch.tensor(
+                            [float(prop_line[i])], dtype=Config.ftype
                         )
                     frames.append(frame)
             ## === on the fly parsing ===
@@ -200,11 +202,11 @@ class QM9(Dataset):
             #     frames.append(frame)
         logger.info(f"end parse, cost {time.perf_counter() - start_time:.2f}s")
 
-        atomic_dress = AtomicDress(dress_key=("labels", "U0"))
+        # atomic_dress = AtomicDress(dress_key=("labels", "U0"))
 
         _preprocess = Sequential(*preprocess)
         self._frames = [_preprocess(frame) for frame in frames]
-        self._frames = atomic_dress(self._frames)
+        # self._frames = atomic_dress(self._frames)
 
         self._frames = frames
         return frames

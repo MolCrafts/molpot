@@ -2,10 +2,12 @@ import torch
 import torch.nn as nn
 from molpot import alias
 
-import torch
 from .utils import Tracker
 from collections import defaultdict
 
+
+import torch
+import torch.nn as nn
 
 class AtomicDress(nn.Module):
 
@@ -35,16 +37,19 @@ class AtomicDress(nn.Module):
        
         x = []
         y = []
+        z = []
         for frame in frames:
-            count = torch.bincount(frame["atoms", "Z"]-1, minlength=max(elems))
-            x.append(count.float())
+            # count = torch.bincount(frame["atoms", "Z"]-1, minlength=max(elems))
+            count = frame["atoms", "Z"][:, None] == elems[None, ...]
+            x.append(count.sum(dim=0).float())
             y.append(frame[self.key])
-        
+            z.append(frame["atoms", "Z"])
+
         x = torch.stack(x)
+        x = torch.concat([x, torch.zeros((x.shape[0], 1))], dim=1)
         y = torch.stack(y)
         beta = torch.linalg.pinv(x.T @ x) @ x.T @ y
-        # Build a dictionary mapping each element to its fitted coefficient.
-        self.atomic_dress = {elem+1: e.item() for elem, e in enumerate(beta)}
+        self.atomic_dress = {e.item(): beta[i].item() for i, e in enumerate(elems)}
         
         # Compute the residual error (difference between the prediction and true values).
         error = torch.matmul(x, beta) - y
@@ -52,5 +57,4 @@ class AtomicDress(nn.Module):
         # substract the fitted energy from the true energy
         for frame in frames:
             frame[self.key] -= torch.sum(beta[frame["atoms", "Z"]-1])
-        print(torch.sqrt(torch.mean(error**2)))
-        return frames
+        return self.atomic_dress, error
