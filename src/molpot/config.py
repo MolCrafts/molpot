@@ -7,16 +7,8 @@ import torch
 from collections import defaultdict
 import numpy as np
 import threading
+from .logger import setup_logger
 
-
-def _setup_logger():
-    logger = logging.getLogger("molpot")
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    # logger.setLevel(logging.INFO)
-    return logger
 
 class Config:
 
@@ -31,7 +23,7 @@ class Config:
     ftype = global_dtypes["float"]
     itype = global_dtypes["int"]
 
-    logger = _setup_logger()
+    logger = setup_logger()
 
     seed: int|None = None
 

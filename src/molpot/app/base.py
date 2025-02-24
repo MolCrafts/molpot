@@ -43,18 +43,18 @@ class MolpotApp:
 
     name: str = 'MolPotApp'
     version: str = '0.1.0'
-    cli: Typer = Typer(chain=True)
 
     def __init__(self, *args: Any, **configs: Any) -> None:
+        self.cli = Typer(chain=True)
         self._collect_commands()
-        self.config = ConfigParser()
-        self.config.capture_config(*args, **configs)
+    #     self.config = ConfigParser()
+    #     self.config.capture_config(*args, **configs)
 
-    @classmethod
-    def load_config(cls, path: str, format: str = 'yaml') -> None:
-        configs = ConfigParser()
-        configs.load_config(path, format)
-        return cls(**configs)
+    # @classmethod
+    # def load_config(cls, path: str, format: str = 'yaml') -> None:
+    #     configs = ConfigParser()
+    #     configs.load_config(path, format)
+    #     return cls(**configs)
 
     def _collect_commands(self):
         methods = inspect.getmembers(self, inspect.ismethod)
