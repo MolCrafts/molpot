@@ -1,21 +1,17 @@
 import logging
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
 import os, sys
 import torch
 from collections import defaultdict
 import numpy as np
 import threading
-from .logger import setup_logger
-
+from .logger import molpot_logger as logger
 
 class Config:
 
-    _instance = None
+    _instance = {}
     _lock = threading.Lock()
 
-    device: torch.device = torch.device("cpu")
+    _device: torch.device = torch.device("cpu")
     global_dtypes = {
         "float": torch.float32,
         "int": torch.int32,
@@ -23,41 +19,46 @@ class Config:
     ftype = global_dtypes["float"]
     itype = global_dtypes["int"]
 
-    logger = setup_logger()
-
     seed: int|None = None
 
-    def __new__(cls):
+    def __new__(cls, name: str = "global"):
         with cls._lock:
-            if cls._instance is None:
-                cls._instance = super().__new__(cls)
-        return cls._instance
+            if name not in cls._instance:
+                cls._instance[name] = super().__new__(cls)
+        return cls._instance[name]
+    
+    def get_dtype(self, dtype_name):
+        return self.global_dtypes.get(dtype_name, None)
 
-    @classmethod
-    def get_dtype(cls, dtype_name):
-        return cls.global_dtypes.get(dtype_name, None)
-
-    @classmethod
-    def set_device(cls, device_info: dict):
-        device_type = device_info["type"]
-        if device_type == "cpu":
-            device = torch.device("cpu")
-        elif device_type == "gpu" or device_type == "cuda":
-            n_gpu = torch.cuda.device_count()
-            if n_gpu == 0:
-                cls.logger.warning("There's no GPU available on this machine, training will be performed on CPU.")
+    def set_device(self, device: str|torch.device):
+        if isinstance(device, torch.device):
+            self._device = device
+        elif isinstance(device, str):
+            if device == "cpu":
                 device = torch.device("cpu")
-            else:
-                device = torch.device("cuda:0")
+            elif device == "gpu" or device == "cuda":
+                n_gpu = torch.cuda.device_count()
+                if n_gpu == 0:
+                    logger.warning("There's no GPU available on this machine, training will be performed on CPU.")
+                    device = torch.device("cpu")
+                else:
+                    device = torch.device("cuda:0")
+        self._device = device
         return device
+    
+    @property
+    def device(self):
+        return self._device
+    
+    @device.setter
+    def device(self, device):
+        self.set_device(device)
 
-    @classmethod
-    def set_environ(cls, **kwargs):
+    def set_environ(self, **kwargs):
         for k, v in kwargs.items():
             os.environ[k] = v
 
-    @classmethod
-    def get_environ(cls):
+    def get_environ(self):
         env_info = {}
         env_info["sys.platform"] = sys.platform
         env_info["Python"] = sys.version.replace("\n", "")
@@ -77,15 +78,13 @@ class Config:
 
         return env_info
 
-    @classmethod
-    def set_seed(cls, seed: int):
+    def set_seed(self, seed: int):
         torch.manual_seed(seed)
         np.random.seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
 
-    @classmethod
-    def set_log_level(cls, level: int|str):
+    def set_log_level(self, level: int|str):
         _mapping = {
             "INFO": logging.INFO,
             "DEBUG": logging.DEBUG,
@@ -97,12 +96,13 @@ class Config:
             level = _mapping.get(level.upper())
             if level is None:
                 raise ValueError(f"Invalid log level: {level}")
-        cls.logger.setLevel(level)
+        logger.setLevel(level)
 
-    @classmethod
-    def get_generator(cls):
-        gen = torch.Generator(device=cls.device)
-        if cls.seed is not None:
-            gen = gen.manual_seed(cls.seed)
+    def get_generator(self):
+        gen = torch.Generator(device=self.device)
+        if self.seed is not None:
+            gen = gen.manual_seed(self.seed)
         return gen
 
+def get_config(name: str = "global") -> Config:
+    return Config(name)

@@ -1,22 +1,17 @@
-from functools import partial
+from collections import defaultdict
 from typing import Any, Callable, Iterable, Union
 
 import torch
-from ignite.engine.events import EventEnum, Events, State
-from ignite.handlers import (
-    ProgressBar,
-    TensorboardLogger,
-    global_step_from_engine,
-)
-from ignite.metrics import EpochWise, Metric, MetricUsage, MeanAbsoluteError
+from ignite.engine.events import Events, State
+from ignite.handlers import ProgressBar, TensorboardLogger, global_step_from_engine
+from ignite.metrics import EpochWise, Metric, MetricUsage
 
 from ..base import MolpotEngine
-from .utils import (
-    create_supervised_trainer,
-    create_supervised_evaluator,
-)
-from collections import defaultdict
-from ..loss import Constraint
+from .utils import create_supervised_evaluator, create_supervised_trainer
+
+import molpot as mpot
+
+logger = mpot.get_logger("molpot.engine")
 
 
 class PotentialTrainer(MolpotEngine):
@@ -79,18 +74,11 @@ class PotentialTrainer(MolpotEngine):
 
         self.metrics = defaultdict(dict)
         self.loggers = {}
-        # if isinstance(loss_fn, Constraint):
-        #     for name, target, label, weight in loss_fn.constraints:
-        #         self.add_metric(
-        #             name,
-        #             MeanAbsoluteError(lambda outputs: (outputs['predicts'][target], outputs['labels'][label])),
-        #             usage=EpochWise(),
-        #             engine=None,
-        #         )
 
     def compile(self):
         self.model = self.model.to(self.device)
         self.loss_fn = self.loss_fn.to(self.device)
+        torch.compile(self.model, dynamic=True, fullgraph=True, mode="reduce-overhead")
 
     @property
     def trainer(self):
@@ -106,7 +94,9 @@ class PotentialTrainer(MolpotEngine):
         from ignite.handlers import LRScheduler
 
         scheduler_handler = LRScheduler(scheduler)
-        self.trainer.add_event_handler(Events.ITERATION_COMPLETED(every=10000), scheduler_handler)
+        self.trainer.add_event_handler(
+            Events.ITERATION_COMPLETED(every=10000), scheduler_handler
+        )
 
     def add_checkpoint(
         self,
@@ -230,7 +220,7 @@ class PotentialTrainer(MolpotEngine):
     ):
 
         tb_logger = TensorboardLogger(log_dir)
-        
+
         # add default training loss
         tb_logger.attach_output_handler(
             self.trainer,
@@ -267,39 +257,38 @@ class PotentialTrainer(MolpotEngine):
     #         case "tensorboard":
     #             self.run_tensorboard_profiler()
 
-    # def run_tensorboard_profiler(
-    #     self, loader, wait=1, warmup=1, active=3, repeat=1, log_dir="."
-    # ):
+    def run_tensorboard_profiler(
+        self, loader, wait=1, warmup=1, active=3, repeat=1, log_dir="."
+    ):
+        logger.info("Running Tensorboard Profiler")
+        with torch.profiler.profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CUDA,
+                torch.profiler.ProfilerActivity.CPU,
+            ],
+            schedule=torch.profiler.schedule(
+                wait=wait, warmup=warmup, active=active, repeat=repeat
+            ),
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True,
+        ) as prof:
+            self.trainer.add_event_handler(
+                Events.ITERATION_STARTED,
+                lambda engine: (
+                    engine.terminate()
+                    if engine.state.iteration >= wait + warmup + active
+                    else None
+                ),
+            )
+            self.trainer.add_event_handler(
+                Events.ITERATION_COMPLETED, lambda engine: prof.step()
+            )
 
-    #     process_fn = self.trainer._process_function
+            self.trainer.run(loader, max_epochs=torch.inf)
 
-    #     with torch.profiler.profile(
-    #         activities=[
-    #             torch.profiler.ProfilerActivity.CUDA,
-    #             torch.profiler.ProfilerActivity.CPU,
-    #         ],
-    #         schedule=torch.profiler.schedule(
-    #             wait=wait, warmup=warmup, active=active, repeat=repeat
-    #         ),
-    #         on_trace_ready=torch.profiler.tensorboard_trace_handler(log_dir),
-    #         record_shapes=True,
-    #         profile_memory=True,
-    #         with_stack=True,
-    #     ) as prof:
-    #         for step, batch in enumerate(loader):
-    #             if step >= wait + warmup + active:
-    #                 break
-    #             self.optimizer.zero_grad()
-    #             self.model.train()
-    #             x, y = self.prepare_batch(
-    #                 batch, device=self.device, non_blocking=self.non_blocking
-    #             )
-    #             output = self.model_fn(self.model, x)
-    #             y_pred = model_transform(output)
-    #             loss = self.loss_fn(y_pred, y)
-    #             loss.backward()
-    #             self.optimizer.step()
-    #             prof.step()
+        prof.export_chrome_trace(log_dir + "/profiler_trace.json")
+        logger.info("Profiler run completed")
 
     def reset(self):
         for engine in self._engines.values():

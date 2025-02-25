@@ -7,6 +7,8 @@ from molpot import Config, Frame, alias
 from functools import reduce
 import molpot as mpot
 
+config = Config()
+
 def compose(*funcs):
     """Compose a list of functions into a single function."""
     return lambda x: reduce(lambda v, f: f(v), funcs, x)
@@ -39,18 +41,18 @@ def _compact_collate(batch: Sequence[Frame]):
 
     if alias.n_atoms not in coll_batch:
         n_atoms = torch.tensor(
-            [len(frame[alias.R]) for frame in batch], dtype=Config.itype
+            [len(frame[alias.R]) for frame in batch], dtype=config.itype
         )
     else:
         n_atoms = coll_batch[alias.n_atoms]
 
     atom_batch = torch.cat(
         [torch.full((t,), fill_value=i) for i, t in enumerate(n_atoms)]
-    ).to(Config.itype)
+    ).to(config.itype)
 
-    atom_offset = torch.zeros(len(n_atoms), dtype=Config.itype)
+    atom_offset = torch.zeros(len(n_atoms), dtype=config.itype)
     torch.cumsum(torch.flatten(n_atoms)[:-1], dim=0, out=atom_offset[1:]).to(
-        Config.itype
+        config.itype
     )
 
     coll_frame = coll_batch.apply(cancel_batch, batch_size=[])
@@ -59,7 +61,7 @@ def _compact_collate(batch: Sequence[Frame]):
 
     if alias.pairs in coll_batch:
         n_pairs = torch.tensor(
-            [len(frame[alias.pair_i]) for frame in batch], dtype=Config.itype
+            [len(frame[alias.pair_i]) for frame in batch], dtype=config.itype
         )
         pair_batch = torch.cat(
             [
@@ -67,9 +69,9 @@ def _compact_collate(batch: Sequence[Frame]):
                 for i, t in enumerate([len(frame[alias.pair_i]) for frame in batch])
             ]
         )
-        pair_offset = torch.zeros(len(n_pairs), dtype=Config.itype)
+        pair_offset = torch.zeros(len(n_pairs), dtype=config.itype)
         torch.cumsum(torch.flatten(n_pairs)[:-1], dim=0, out=pair_offset[1:]).to(
-            Config.itype
+            config.itype
         )
         coll_frame[alias.pair_i] = (
             torch.concat(coll_batch[alias.pair_i].unbind()) + atom_offset[pair_batch]
@@ -116,7 +118,7 @@ class DataLoader(tn.Loader):
     ):
 
         # Start with a sampler, since caller did not provide one
-        sampler = RandomSampler(dataset, generator=mpot.Config.get_generator()) if shuffle else SequentialSampler(dataset)
+        sampler = RandomSampler(dataset, generator=config.get_generator()) if shuffle else SequentialSampler(dataset)
         # Sampler wrapper converts a Sampler to a BaseNode
         node = tn.SamplerWrapper(sampler)
 

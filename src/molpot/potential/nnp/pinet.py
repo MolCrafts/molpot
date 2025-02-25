@@ -222,8 +222,8 @@ class PiNet2(nn.Module):
         pp_nodes: list[int] = [16, 16],
         pi_nodes: list[int] = [16, 16],
         ii_nodes: list[int] = [16, 16],
-        out_nodes: list[int] = [16, 16],
-        out_units: int = 1,
+        # out_nodes: list[int] = [16, 16],
+        # out_units: int = 1,
         activation: Callable | None = F.tanh,
         max_atomtypes: int = 100,
     ):
@@ -242,7 +242,7 @@ class PiNet2(nn.Module):
         self.gc_blocks = nn.ModuleList(
             [GCBlock3(pp_nodes, pi_nodes, ii_nodes, activation) for _ in range(depth)]
         )
-        self.out_layers = nn.ModuleList([OutLayer(out_nodes, out_units) for _ in range(depth)])
+        # self.out_layers = nn.ModuleList([OutLayer(out_nodes, out_units) for _ in range(depth)])
 
         self.res_update = ResUpdate()
 
@@ -264,15 +264,15 @@ class PiNet2(nn.Module):
         p1 = self.before_gc_block_layer(p1)
         p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
 
-        output = 0.0
+        # output = 0.0
         for i in range(self.depth.item()):
             (p1t1, p3t1), (i1, i3) = self.gc_blocks[i](
                 p1, p3, pair_i, pair_j, basis, norm_pair_diff
             )
-            output = self.out_layers[i](p1t1, output)
+            # output = self.out_layers[i](p1t1, output)
             p1 = self.res_update(p1, p1t1)
             p3 = self.res_update(p3, p3t1)
-        return (output, p3t1, i1, i3)
+        return (p1, p3t1, i1, i3)
 
 
 class PiNet1(nn.Module):
@@ -338,11 +338,11 @@ class PiNet1(nn.Module):
         # (n_atoms, 1, n_basis) -> (n_atoms, 1, pp_nodes[0])
         p1 = self.before_gc_block_layer(p1)
 
-        output = 0.0
+        # output = 0.0
         for i in range(self.depth.item()):
             (p1t1,), (i1,) = self.gc_blocks[i](
                 p1, pair_i, pair_j, basis, norm_pair_diff
             )
-            output = self.out_layers[i](p1t1, output)
+            # output = self.out_layers[i](p1t1, output)
             p1 = self.res_update(p1, p1t1)
-        return (output, i1)
+        return (p1, i1)

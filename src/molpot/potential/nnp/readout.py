@@ -54,13 +54,13 @@ class Atomwise(nn.Module):
         self.outnet = FeedForward(
             *n_neurons,
             activation=activation,
+            last_bias=False,
         )
         self.reduce = reduce
 
     def forward(self, *inputs) -> tuple[dict, dict]:
-        # predict atomwise contributions
-        # y = self.outnet(inputs[1])  # (n_atoms, n_out)
-        y = inputs[1]
+
+        y = self.outnet(inputs[1])  # (n_atoms, n_out)
         if len(inputs) > 1:
             atom_batch = inputs[0]
             result = self.reduce_op[self.reduce](

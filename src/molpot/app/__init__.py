@@ -1,1 +1,1 @@
-from .base import MolpotApp
+from .base import MolpotApp, TrainPotentialApp

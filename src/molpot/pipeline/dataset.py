@@ -1,7 +1,4 @@
-import bz2
 import io
-import logging
-import random
 import tarfile
 import time
 from abc import abstractmethod
@@ -18,7 +15,8 @@ import molpot as mpot
 from molpot import Config, NameSpace, alias
 from molpot.process import AtomicDress
 
-logger = logging.getLogger("molpot")
+logger = mpot.get_logger("molpot.dataset")
+config = mpot.get_config()
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -170,12 +168,12 @@ class QM9(Dataset):
                     ]
                     frame = mpot.Frame()
                     frame[alias.Z] = torch.tensor(Z)
-                    frame[alias.R] = torch.tensor(R, dtype=Config.ftype)
-                    frame[alias.n_atoms] = torch.tensor(n_atoms, dtype=Config.itype)
+                    frame[alias.R] = torch.tensor(R, dtype=config.ftype)
+                    frame[alias.n_atoms] = torch.tensor(n_atoms, dtype=config.itype)
                     prop_line = lines[1].split()[2:]
                     for p, i in props_ind.items():
                         frame["labels", p[-1]] = torch.tensor(
-                            [float(prop_line[i])], dtype=Config.ftype
+                            [float(prop_line[i])], dtype=config.ftype
                         )
                     frames.append(frame)
             ## === on the fly parsing ===
@@ -192,12 +190,12 @@ class QM9(Dataset):
             #     frame = mpot.Frame()
             #     # frame["props", "name"] = lines.stem
             #     frame[alias.Z] = torch.tensor(Z)
-            #     frame[alias.R] = torch.tensor(R, dtype=Config.ftype)
-            #     frame[alias.n_atoms] = torch.tensor(n_atoms, dtype=Config.itype)
+            #     frame[alias.R] = torch.tensor(R, dtype=config.ftype)
+            #     frame[alias.n_atoms] = torch.tensor(n_atoms, dtype=config.itype)
             #     prop_line = lines[1].split()
             #     for k, v in zip(props, prop_line[1:]):
             #         frame["labels", k[-1]] = torch.tensor(
-            #             [float(v)], dtype=Config.ftype
+            #             [float(v)], dtype=config.ftype
             #         )
             #     frames.append(frame)
         logger.info(f"end parse, cost {time.perf_counter() - start_time:.2f}s")
@@ -354,7 +352,7 @@ class rMD17(MapStyleDataset):
         return data
 
     def parse_data(self, data, total: int|None) -> Sequence[mpot.Frame]:
-        numbers = torch.tensor(data["nuclear_charges"], dtype=Config.itype)
+        numbers = torch.tensor(data["nuclear_charges"], dtype=config.itype)
         frames = []
         if total is None:
             total = len(data["energies"])
@@ -367,12 +365,12 @@ class rMD17(MapStyleDataset):
                 [
                     data["energies"][idx]
                 ],  # - torch.sum(self.atomrefs["energy"][numbers])
-                dtype=Config.ftype,
+                dtype=config.ftype,
             )
             frame["labels", "forces"] = torch.tensor(
-                data["forces"][idx], dtype=Config.ftype
+                data["forces"][idx], dtype=config.ftype
             )
-            frame[alias.n_atoms] = torch.tensor([len(numbers)], dtype=Config.itype)
+            frame[alias.n_atoms] = torch.tensor([len(numbers)], dtype=config.itype)
             frames.append(frame)
         return frames
 

@@ -1,4 +1,5 @@
-from .config import Config
+from .logger import get_logger
+from .config import get_config, Config
 from .alias import Alias, NameSpace
 from .utils import *
 

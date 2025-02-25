@@ -1,7 +1,8 @@
+from pathlib import Path
 from typing import Any
 import inspect
 from typer import Typer
-import click
+import os
 
 class ConfigParser:
 
@@ -19,63 +20,29 @@ class ConfigParser:
     def config(self, config: dict[str, Any]) -> None:
         self._config = config
 
-    def capture_config(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        # get args name and their values
-        frame = inspect.currentframe().f_back
-        args_name = inspect.getargvalues(frame).args[1:]
-        config = dict(zip(args_name, args))
-        config.update(kwargs)
-        self.config = config
-
-    def save_config(self, path: str, format: str = 'yaml') -> None:
-        match format:
-            case 'json':
-                import json
-                with open(path, 'w') as f:
-                    json.dump(self.config, f)
-            case _:
-                raise ValueError(f'Unsupported format: {format}')
-
-    def load_config(self, path: str, format: str = 'yaml') -> None:
-        ...
-
 class MolpotApp:
 
     name: str = 'MolPotApp'
     version: str = '0.1.0'
 
-    def __init__(self, *args: Any, **configs: Any) -> None:
+    def __init__(self, work_dir: Path = Path.cwd()) -> None:
         self.cli = Typer(chain=True)
-        self._collect_commands()
-    #     self.config = ConfigParser()
-    #     self.config.capture_config(*args, **configs)
+        self.work_dir = work_dir
+        self.config = ConfigParser()
 
-    # @classmethod
-    # def load_config(cls, path: str, format: str = 'yaml') -> None:
-    #     configs = ConfigParser()
-    #     configs.load_config(path, format)
-    #     return cls(**configs)
+        self._setup_workspace()
 
-    def _collect_commands(self):
-        methods = inspect.getmembers(self, inspect.ismethod)
-        for method_name, method in methods:
-            if method_name.startswith('_'):
-                continue
-            self.cli.command()(method)
+    def _setup_workspace(self) -> None:
+        self.work_dir.mkdir(exist_ok=True)
 
 class TrainPotentialApp(MolpotApp):
 
-    def __init__(self, *args: tuple, **configs: dict) -> None:
-        super().__init__(*args, **configs)
-        self._model = None
-        self.cli.command()(self)
-        self.cli.command()(self.train)
+    def __init__(self, name: str, root: str, ):
+        super().__init__(work_dir=Path(root)/name)
+        os.chdir(self.work_dir)
 
-    def train(self):
+    def run(self):
         ...
 
-class PiNetApp(TrainPotentialApp):
-
-    def __init__(self, a:int, b:str):
-        super().__init__(a=a, b=b)
-    
+    def profile(self):
+        ...
