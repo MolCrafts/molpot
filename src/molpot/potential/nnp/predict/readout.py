@@ -1,21 +1,19 @@
-from typing import Callable, Sequence
+from typing import Callable, Literal, Sequence
 
+from molpot.utils.batchtools import batch_add, get_natoms_per_batch
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from molpot import alias
-from .base import FeedForward
+from ..base import FeedForward
+from tensordict import TensorDict
 
 
 class Atomwise(nn.Module):
     """
     Predicts atom-wise contributions and accumulates global prediction, e.g. for the energy.
     """
-
-    in_keys = []
-    out_keys = []
-
     reduce_op = {"sum": torch.index_add}
 
     def __init__(
@@ -130,3 +128,53 @@ class PairForce(nn.Module):
         )
         atom_force = torch.index_add(atom_force, 0, pair_i, dfdx, alpha=-1)
         return atom_force
+
+
+class SystemChargeNeutralize(nn.Module):
+
+    def __init__(self, in_keys: str, out_keys: str):
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+        super().__init__()
+
+    def forward(self, td: TensorDict):
+
+        p1 = td[self.in_keys]
+        atom_batch = td[alias.atom_batch]
+        q_batch = torch.index_add(
+            torch.zeros_like(p1),
+            0,
+            atom_batch,
+            p1,
+        )  # shape (n_batch,)
+        natoms_per_molecule = get_natoms_per_batch(atom_batch)
+        p_charge = q_batch / natoms_per_molecule
+        charge_corr = p_charge[atom_batch]
+        td[self.out_keys] = p1 - charge_corr
+        return td
+
+class DipoleAC(nn.Module):
+
+    def __init__(self, in_keys: str, out_keys: str):
+        self.in_keys = [in_keys]
+        self.out_keys = out_keys
+        super().__init__()
+
+    def forward(self, td: TensorDict):
+
+        p1 = td[self.in_keys[0]]
+
+        q_batch = batch_add(
+            p1, td[alias.atom_batch]
+        )  # total charge per batch
+
+        q_d = p1 * td[alias.xyz]
+        dipole = torch.index_add(
+            torch.zeros_like(q_d),
+            0,
+            q_d,
+        )
+
+        td[self.out_keys] = dipole
+
+        return td  # charge, dipole

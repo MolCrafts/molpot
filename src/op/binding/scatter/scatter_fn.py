@@ -23,14 +23,7 @@ def scatter_sum(src: torch.Tensor,
         return out.scatter_add_(dim, index, src)
     else:
         return out.scatter_add_(dim, index, src)
-
-
-def scatter_add(src: torch.Tensor,
-                index: torch.Tensor,
-                dim: int = -1,
-                out: Optional[torch.Tensor] = None,
-                dim_size: Optional[int] = None) -> torch.Tensor:
-    return scatter_sum(src, index, dim, out, dim_size)
+    
 
 def scatter(src: torch.Tensor,
             index: torch.Tensor,

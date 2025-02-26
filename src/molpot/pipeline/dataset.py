@@ -171,6 +171,7 @@ class QM9(Dataset):
                     frame[alias.R] = torch.tensor(R, dtype=config.ftype)
                     frame[alias.n_atoms] = torch.tensor(n_atoms, dtype=config.itype)
                     prop_line = lines[1].split()[2:]
+                    # prop_line: tag, index, A, B, C, mu, alpha, homo, lumo, gap, r2, zpve, U0, U, H, G, Cv
                     for p, i in props_ind.items():
                         frame["labels", p[-1]] = torch.tensor(
                             [float(prop_line[i])], dtype=config.ftype
