@@ -102,9 +102,7 @@ class QM9(Dataset):
         return self._frames[idx]
 
     def prepare(self, total: int = None, preprocess=[]):
-
-        logger.info("downloading...")
-
+        logger.info("prepaering QM9 dataset...")
         def get_content(save_dir: Path | None):
             if save_dir and (save_dir / "qm9.tar.bz2").exists():
                 qm9_bytes = io.BytesIO((save_dir / "qm9.tar.bz2").read_bytes())
@@ -113,6 +111,7 @@ class QM9(Dataset):
 
             qm9_url = "https://ndownloader.figshare.com/files/3195389"
             exclude_url = "https://figshare.com/ndownloader/files/3195404"
+            logger.info("downloading...")
             qm9_bytes = requests.get(qm9_url, allow_redirects=True).content
             exclude_bytes = requests.get(exclude_url, allow_redirects=True).content
             exclude_txt = exclude_bytes.decode("utf-8")
@@ -125,7 +124,6 @@ class QM9(Dataset):
             return qm9_bytes, exclude_txt
 
         qm9_bytes, exclude_txt = get_content(self.save_dir)
-        logger.info("done")
         exclude = set(int(line.split()[0]) for line in exclude_txt.split("\n")[9:-2])
 
         start_extract_time = time.perf_counter()
@@ -144,7 +142,23 @@ class QM9(Dataset):
             )
 
             QM9 = self.labels
-            props = [QM9.A, QM9.B, QM9.C, QM9.mu, QM9.alpha, QM9.homo, QM9.lumo, QM9.gap, QM9.r2, QM9.zpve, QM9.U0, QM9.U, QM9.H, QM9.G, QM9.Cv]
+            props = [
+                QM9.A,
+                QM9.B,
+                QM9.C,
+                QM9.mu,
+                QM9.alpha,
+                QM9.homo,
+                QM9.lumo,
+                QM9.gap,
+                QM9.r2,
+                QM9.zpve,
+                QM9.U0,
+                QM9.U,
+                QM9.H,
+                QM9.G,
+                QM9.Cv,
+            ]
             props_ind = {k: i for i, k in enumerate(props)}
             logger.info("parsing...")
             start_time = time.perf_counter()
@@ -352,12 +366,14 @@ class rMD17(MapStyleDataset):
         data = np.load(self.npz_path)
         return data
 
-    def parse_data(self, data, total: int|None) -> Sequence[mpot.Frame]:
+    def parse_data(self, data, total: int | None) -> Sequence[mpot.Frame]:
         numbers = torch.tensor(data["nuclear_charges"], dtype=config.itype)
         frames = []
         if total is None:
             total = len(data["energies"])
-        indices = torch.randperm(total, )
+        indices = torch.randperm(
+            total,
+        )
         for idx in indices:
             frame = mpot.Frame()
             frame[alias.Z] = numbers

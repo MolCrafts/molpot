@@ -1,1 +1,1 @@
-from .scatter_fn import scatter_add, scatter_sum, scatter
+from .scatter_fn import scatter_sum, scatter

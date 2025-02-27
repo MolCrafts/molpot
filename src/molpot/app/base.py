@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 import inspect
@@ -20,29 +21,20 @@ class ConfigParser:
     def config(self, config: dict[str, Any]) -> None:
         self._config = config
 
-class MolpotApp:
+from burr.core import Action
 
-    name: str = 'MolPotApp'
-    version: str = '0.1.0'
 
-    def __init__(self, work_dir: Path = Path.cwd()) -> None:
+class MolpotApp(Action):
+
+    name: str = None
+    version: str = None
+
+    def __init__(self) -> None:
+        super().__init__()
         self.cli = Typer(chain=True)
-        self.work_dir = work_dir
-        self.config = ConfigParser()
 
-        self._setup_workspace()
-
-    def _setup_workspace(self) -> None:
-        self.work_dir.mkdir(exist_ok=True)
+    def with_config(self, *args, **kwargs):
+        ...
 
 class TrainPotentialApp(MolpotApp):
-
-    def __init__(self, name: str, root: str, ):
-        super().__init__(work_dir=Path(root)/name)
-        os.chdir(self.work_dir)
-
-    def run(self):
-        ...
-
-    def profile(self):
-        ...
+    ...

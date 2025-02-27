@@ -1,16 +1,17 @@
-from typing import Callable, Literal, Sequence
+from typing import Callable
 
-from molpot.utils.batchtools import batch_add, get_natoms_per_batch
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from molpot import alias
 from ..base import FeedForward
-from tensordict import TensorDict
+from molpot_op.scatter import batch_add, get_natoms_per_batch
+
+from torch.nn import LazyLinear
 
 
-class Atomwise(nn.Module):
+class Batchwise(nn.Module):
     """
     Predicts atom-wise contributions and accumulates global prediction, e.g. for the energy.
     """
@@ -22,8 +23,7 @@ class Atomwise(nn.Module):
         in_keys: str,
         out_keys: str,
         activation: Callable = F.silu,
-        reduce: str = "sum",
-        per_atom_output_key: str | None = None,
+        reduce: str = "sum"
     ):
         """
         Args:
@@ -42,10 +42,6 @@ class Atomwise(nn.Module):
         super().__init__()
         self.in_keys = in_keys
         self.out_keys = out_keys
-        self.model_outputs = [out_keys]
-        self.per_atom_output_key = per_atom_output_key
-        if self.per_atom_output_key is not None:
-            self.model_outputs.append(self.per_atom_output_key)
         assert len(n_neurons) > 1, ValueError("Need at least one in and one out layer")
         self.n_out = n_neurons[-1]
 
@@ -56,27 +52,10 @@ class Atomwise(nn.Module):
         )
         self.reduce = reduce
 
-    def forward(self, *inputs) -> tuple[dict, dict]:
+    def forward(self, atom_batch, px) -> tuple[dict, dict]:
 
-        y = self.outnet(inputs[1])  # (n_atoms, n_out)
-        if len(inputs) > 1:
-            atom_batch = inputs[0]
-            result = self.reduce_op[self.reduce](
-                torch.zeros(
-                    (torch.max(atom_batch) + 1, *y.shape[1:]),
-                    device=y.device,
-                    dtype=y.dtype,
-                ),
-                0,
-                atom_batch,
-                y,
-            )
-        else:
-            result = torch.sum(y, dim=0)
-
-        # accumulate the per-atom output if necessary
-        if self.per_atom_output_key is not None:
-            inputs[self.per_atom_output_key] = y
+        y = self.outnet(px)  # (n_atoms, n_out)
+        result = batch_add(y, atom_batch)
 
         return result.squeeze()
 
@@ -133,14 +112,13 @@ class PairForce(nn.Module):
 class SystemChargeNeutralize(nn.Module):
 
     def __init__(self, in_keys: str, out_keys: str):
-        self.in_keys = in_keys
+        self.in_keys = [alias.atom_batch, in_keys]
         self.out_keys = out_keys
         super().__init__()
+        self.layer = LazyLinear(1)
 
-    def forward(self, td: TensorDict):
-
-        p1 = td[self.in_keys]
-        atom_batch = td[alias.atom_batch]
+    def forward(self, atom_batch, p1):
+        p1 = self.layer(p1).squeeze()
         q_batch = torch.index_add(
             torch.zeros_like(p1),
             0,
@@ -150,31 +128,28 @@ class SystemChargeNeutralize(nn.Module):
         natoms_per_molecule = get_natoms_per_batch(atom_batch)
         p_charge = q_batch / natoms_per_molecule
         charge_corr = p_charge[atom_batch]
-        td[self.out_keys] = p1 - charge_corr
-        return td
+        return p1 - charge_corr
 
 class DipoleAC(nn.Module):
 
     def __init__(self, in_keys: str, out_keys: str):
-        self.in_keys = [in_keys]
+        self.in_keys = [alias.atom_batch, alias.xyz, in_keys]
         self.out_keys = out_keys
         super().__init__()
+        self.layer = LazyLinear(1)
 
-    def forward(self, td: TensorDict):
+    def forward(self, atom_batch, p1: torch.Tensor, xyz):
 
-        p1 = td[self.in_keys[0]]
-
+        p1 = self.layer(p1).squeeze()
         q_batch = batch_add(
-            p1, td[alias.atom_batch]
+            p1, atom_batch
         )  # total charge per batch
 
-        q_d = p1 * td[alias.xyz]
+        q_d = p1 * xyz
         dipole = torch.index_add(
             torch.zeros_like(q_d),
             0,
             q_d,
         )
 
-        td[self.out_keys] = dipole
-
-        return td  # charge, dipole
+        return q_batch, dipole
