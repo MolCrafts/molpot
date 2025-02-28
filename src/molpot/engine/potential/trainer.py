@@ -75,6 +75,9 @@ class PotentialTrainer(MolpotEngine):
         self.metrics = defaultdict(dict)
         self.loggers = {}
 
+        # metrics settings
+        self._metrics_usage = {}
+
     def compile(self):
         self.model = self.model.to(self.device)
         self.loss_fn = self.loss_fn.to(self.device)
@@ -191,21 +194,29 @@ class PotentialTrainer(MolpotEngine):
         for logger in self.loggers.values():
             logger.close()
         return state
+    
+    def set_metric_usage(self, **engine_metric: dict[str, MetricUsage]) -> None:
+        for engine, usage in engine_metric.items():
+            self._metrics_usage[engine] = usage
 
     def add_metric(
         self,
         name: str,
-        metric: Metric,
-        usage: str | MetricUsage = EpochWise(),
-        engine: str | None = None,
+        metric_factory_fn: Callable[[], Metric],
+        engine: str | list[str] | None = None,
     ) -> None:
-        if engine:
-            metric.attach(self._engines[engine], name, usage)
-            self.metrics[engine][name] = metric
+        metric = metric_factory_fn()
+
+        if isinstance(engine, str):
+            _engine = [engine]
+        elif engine is None:
+            _engine = self._engines.keys()
         else:
-            for engine in self._engines:
-                metric.attach(self._engines[engine], name, usage)
-                self.metrics[engine][name] = metric
+            raise ValueError("engine must be a string or a list of strings")
+        
+        for name in _engine:
+            usage = self._metrics_usage.get(name, None)
+            metric.attach(self._engines[name], name, usage)
 
     def enable_progressbar(self, engine: str) -> None:
         ProgressBar().attach(self._engines[engine])

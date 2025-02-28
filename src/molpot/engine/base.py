@@ -1,7 +1,6 @@
 from abc import ABC
 
 from ignite.engine import Engine
-from typing import Callable
 
 
 class MolpotEngine(ABC):

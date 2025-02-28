@@ -1,5 +1,8 @@
+from collections import namedtuple
 import torch
 import torch.nn as nn
+
+constraint = namedtuple("constraint", ["name", "kernel", "target", "label", "weight"])
 
 class Constraint(nn.Module):
 
@@ -20,7 +23,7 @@ class Constraint(nn.Module):
     ):
         if name is None:
             name = f"{target}-{label} {kernel.__class__.__name__}"
-        self._losses.append((name, kernel, target, label, weight))
+        self._losses.append(constraint(name, kernel, target, label, weight))
 
         if log:
             self._metrics.append(name)
