@@ -121,6 +121,10 @@ class QM9(Dataset):
                 with open(save_dir / "exclude.txt", "w") as f:
                     f.write(exclude_txt)
             # stream
+            qm9_bytes = io.BytesIO(qm9_bytes)
+            qm9_bytes.seek(0)
+            exclude_txt = io.BytesIO(exclude_bytes)
+            exclude_txt.seek(0)
             return qm9_bytes, exclude_txt
 
         qm9_bytes, exclude_txt = get_content(self.save_dir)

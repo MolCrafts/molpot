@@ -6,40 +6,16 @@ import torch
 from ignite.engine.deterministic import DeterministicEngine
 from ignite.engine.engine import Engine
 from ignite.engine import _check_arg
+from tensordict import TensorDict
 
-def _prepare_batch(
-    batch: Sequence[torch.Tensor],
-    device: Optional[Union[str, torch.device]] = None,
-    non_blocking: bool = False,
-) -> Tuple[Union[torch.Tensor, Sequence, Mapping, str, bytes], ...]:
-    """Prepare batch for training or evaluation: pass to a device with options."""
-    return batch.to(device=device, non_blocking=non_blocking)
-
-def _model_transform(output):
-    return (output["predicts"], output["labels"])
-
-def _train_output_transform(predicts, labels, loss):
-    return {"predicts": predicts, "labels": labels, "loss": loss.item()}
-
-def _eval_output_transform(predicts, labels):
-    return {
-        "predicts": predicts,
-        "labels": labels,
-    }
+def model_transform(td: TensorDict) -> Tuple[TensorDict, TensorDict]:
+    return td["predicts"], td["labels"]
 
 def supervised_training_step(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     loss_fn: Union[Callable[[Any, Any], torch.Tensor], torch.nn.Module],
-    device: Optional[Union[str, torch.device]] = None,
-    non_blocking: bool = False,
-    prepare_batch: Callable = _prepare_batch,
-    model_transform: Callable[[Any], Any] = _model_transform,
-    output_transform: Callable[
-        [Any, Any, Any, torch.Tensor], Any
-    ] = _train_output_transform,
     gradient_accumulation_steps: int = 1,
-    model_fn: Callable[[torch.nn.Module, Any], Any] = lambda model, x: model(x),
     clip_grad_norm: Optional[float] = None,
 ) -> Callable:
     """Factory function for supervised training.
@@ -96,23 +72,24 @@ def supervised_training_step(
         )
 
     def update(
-        engine: Engine, batch: Sequence[torch.Tensor]
+        engine: Engine, td: TensorDict
     ) -> Union[Any, Tuple[torch.Tensor]]:
         if (engine.state.iteration - 1) % gradient_accumulation_steps == 0:
             optimizer.zero_grad()
         model.train()
-        inputs = prepare_batch(batch, device=device, non_blocking=non_blocking)
-        model_fn(model, inputs)  # https://pytorch.org/tensordict/stable/tutorials/tensordict_module.html#do-s-and-don-t-with-tensordictmodule
-        outputs = model_transform(inputs)  # (predicts, labels)
-        loss = loss_fn(*outputs)
+        td = model(td)  # https://pytorch.org/tensordict/stable/tutorials/tensordict_module.html#do-s-and-don-t-with-tensordictmodule
+        loss = loss_fn(
+            *model_transform(td)
+        )
         if gradient_accumulation_steps > 1:
             loss = loss / gradient_accumulation_steps
         if clip_grad_norm is not None:
             torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
         loss.backward()
+        td["loss"] = loss
         if engine.state.iteration % gradient_accumulation_steps == 0:
             optimizer.step()
-        return output_transform(*outputs, loss * gradient_accumulation_steps)
+        return td
 
     return update
 
@@ -122,17 +99,10 @@ def create_supervised_trainer(
     optimizer: torch.optim.Optimizer,
     loss_fn: Union[Callable[[Any, Any], torch.Tensor], torch.nn.Module],
     device: Optional[Union[str, torch.device]] = None,
-    non_blocking: bool = False,
-    prepare_batch: Callable = _prepare_batch,
-    model_transform: Callable[[Any], Any] = _model_transform,
-    output_transform: Callable[
-        [Any, Any, Any, torch.Tensor], Any
-    ] = _train_output_transform,
     deterministic: bool = False,
     amp_mode: Optional[str] = None,
     scaler: Union[bool, "torch.cuda.amp.GradScaler"] = False,
     gradient_accumulation_steps: int = 1,
-    model_fn: Callable[[torch.nn.Module, Any], Any] = lambda model, x: model(x),
     clip_grad_norm: Optional[float] = None,
 ) -> Engine:
     """Factory function for creating a trainer for supervised models.
@@ -306,13 +276,7 @@ def create_supervised_trainer(
             model,
             optimizer,
             loss_fn,
-            device,
-            non_blocking,
-            prepare_batch,
-            model_transform,
-            output_transform,
             gradient_accumulation_steps,
-            model_fn,
             clip_grad_norm
         )
 
@@ -325,12 +289,6 @@ def create_supervised_trainer(
 
 def supervised_evaluation_step(
     model: torch.nn.Module,
-    device: Optional[Union[str, torch.device]] = None,
-    non_blocking: bool = False,
-    prepare_batch: Callable = _prepare_batch,
-    model_transform: Callable[[Any], Any] = _model_transform,
-    output_transform: Callable[[Any, Any, Any], Any] = _eval_output_transform,
-    model_fn: Callable[[torch.nn.Module, Any], Any] = lambda model, x: model(x),
     grad_context: Callable = torch.no_grad,
 ) -> Callable:
     """
@@ -372,14 +330,12 @@ def supervised_evaluation_step(
     """
 
     def evaluate_step(
-        engine: Engine, batch: Sequence[torch.Tensor]
+        engine: Engine, td: TensorDict
     ) -> Union[Any, Tuple[torch.Tensor]]:
         model.eval()
         with grad_context():
-            inputs = prepare_batch(batch, device=device, non_blocking=non_blocking)
-            model_fn(model, inputs)
-            y_pred = model_transform(inputs)
-            return output_transform(*y_pred)
+            td = model(td)
+            return td
 
     return evaluate_step
 
@@ -387,12 +343,7 @@ def supervised_evaluation_step(
 def create_supervised_evaluator(
     model: torch.nn.Module,
     device: Optional[Union[str, torch.device]] = None,
-    non_blocking: bool = False,
-    prepare_batch: Callable = _prepare_batch,
-    model_transform: Callable[[Any], Any] = _model_transform,
-    output_transform: Callable[[Any, Any, Any], Any] =_eval_output_transform,
     amp_mode: Optional[str] = None,
-    model_fn: Callable[[torch.nn.Module, Any], Any] = lambda model, x: model(x),
     no_grad: bool = True,
 ) -> Engine:
     """
@@ -467,12 +418,6 @@ def create_supervised_evaluator(
     else:
         evaluate_step = supervised_evaluation_step(
             model,
-            device,
-            non_blocking=non_blocking,
-            prepare_batch=prepare_batch,
-            model_transform=model_transform,
-            output_transform=output_transform,
-            model_fn=model_fn,
             grad_context=grad_context,
         )
 

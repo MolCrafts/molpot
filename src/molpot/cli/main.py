@@ -1,11 +1,8 @@
-import typer
 from pathlib import Path
-import json
-from typing_extensions import Annotated
-from .utils import get_version
 
-from .config import ConfigCLI
-from .app import AppCLI, app_cli
+import typer
+
+from .utils import get_version
 
 APP_PATH = Path.home() / ".molpot_app"
 
@@ -30,8 +27,3 @@ r"""
         typer.echo(f"Welcome to MolPot {version}")
         typer.echo()
         typer.echo(ctx.get_help())
-
-config_cli = ConfigCLI()
-main_cli.add_typer(config_cli.cli, name="config")
-app_cli = AppCLI()
-main_cli.add_typer(app_cli.cli, name="app")

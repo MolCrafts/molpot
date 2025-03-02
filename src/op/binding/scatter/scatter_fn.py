@@ -152,5 +152,5 @@ def batch_add(props: Tensor, atom_batch: Tensor) -> Tensor:
         tensor([ 1,  9, 11])
     """
     return scatter_sum(
-        props, atom_batch, dim=0, dim_size=len(atom_batch.unique())
+        props, atom_batch.to(torch.int64), dim=0, dim_size=len(atom_batch.unique())
     )

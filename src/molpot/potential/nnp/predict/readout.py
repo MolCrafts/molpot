@@ -119,12 +119,7 @@ class SystemChargeNeutralize(nn.Module):
 
     def forward(self, atom_batch, p1):
         p1 = self.layer(p1).squeeze()
-        q_batch = torch.index_add(
-            torch.zeros_like(p1),
-            0,
-            atom_batch,
-            p1,
-        )  # shape (n_batch,)
+        q_batch = batch_add(p1, atom_batch)  # shape (n_batch,)
         natoms_per_molecule = get_natoms_per_batch(atom_batch)
         p_charge = q_batch / natoms_per_molecule
         charge_corr = p_charge[atom_batch]
@@ -146,10 +141,5 @@ class DipoleAC(nn.Module):
         )  # total charge per batch
 
         q_d = p1 * xyz
-        dipole = torch.index_add(
-            torch.zeros_like(q_d),
-            0,
-            q_d,
-        )
-
+        dipole = batch_add(q_d, atom_batch)
         return q_batch, dipole

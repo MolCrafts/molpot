@@ -27,21 +27,17 @@ class PotentialTrainer(MolpotEngine):
         amp_mode: str | None = None,
         scaler: Union[bool, "torch.cuda.amp.GradScaler"] = False,
         gradient_accumulation_steps: int = 1,
-        model_fn: Callable[[torch.nn.Module, Any], Any] = lambda model, x: model(x),
         no_grad_eval: bool = False,
         clip_grad_norm: float | None = None,
     ):
         super().__init__()
 
         self.model = model
-        # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         self.loss_fn = loss_fn
         self.device = device
         self.non_blocking = non_blocking
-        # self.output_transform = output_transform
         self.deterministic = deterministic
         self.amp_mode = amp_mode
-        self.model_fn = model_fn
         self.optimizer = optimizer
 
         self.add_engine(
@@ -51,12 +47,10 @@ class PotentialTrainer(MolpotEngine):
                 optimizer,
                 loss_fn,
                 device=device,
-                non_blocking=non_blocking,
                 deterministic=deterministic,
                 amp_mode=amp_mode,
                 scaler=scaler,
                 gradient_accumulation_steps=gradient_accumulation_steps,
-                model_fn=model_fn,
                 clip_grad_norm=clip_grad_norm,
             ),
         )
@@ -65,9 +59,7 @@ class PotentialTrainer(MolpotEngine):
             create_supervised_evaluator(
                 self.model,
                 device=self.device,
-                non_blocking=self.non_blocking,
                 amp_mode=self.amp_mode,
-                model_fn=self.model_fn,
                 no_grad=no_grad_eval,
             ),
         )

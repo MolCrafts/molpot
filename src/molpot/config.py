@@ -4,7 +4,9 @@ import torch
 from collections import defaultdict
 import numpy as np
 import threading
-from .logger import molpot_logger as logger
+from .logger import get_logger
+
+logger = get_logger()
 
 class Config:
 

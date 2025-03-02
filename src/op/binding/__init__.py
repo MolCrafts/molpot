@@ -7,5 +7,5 @@ import torch
 torch.ops.load_library(os.path.join(os.path.dirname(__file__), 'libmolpot_opLib.so'))
 
 from .locality.neighbors import get_neighbor_pairs
-from .scatter import scatter_add, scatter_sum
+from .scatter import scatter_sum, batch_add
 from .pot import PME, PMEkernel
