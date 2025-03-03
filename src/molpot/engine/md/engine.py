@@ -1,12 +1,13 @@
 from ..base import MolpotEngine
 from ignite.engine import Engine, Events
+from pathlib import Path
 from .main import main_process, MDMainEvents
 
-class MolPotMD(MolpotEngine):
+class MoleculeDymanics(MolpotEngine):
 
-    def __init__(self, integrator, calculator, neighborlist, grad_required=False):
+    def __init__(self, integrator, calculator, neighborlist, grad_required=False, work_dir=Path.cwd()):
 
-        super().__init__()
+        super().__init__(work_dir=work_dir)
 
         self.integrator = integrator
         self.calculator = calculator

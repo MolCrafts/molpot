@@ -33,7 +33,7 @@ class PotentialTrainer(MolpotEngine):
         clip_grad_norm: float | None = None,
         work_dir: Path = Path.cwd(),
     ):
-        super().__init__()
+        super().__init__(work_dir=work_dir)
 
         self.model = model
         self.loss_fn = loss_fn
@@ -42,8 +42,6 @@ class PotentialTrainer(MolpotEngine):
         self.deterministic = deterministic
         self.amp_mode = amp_mode
         self.optimizer = optimizer
-        self.work_dir = Path(work_dir).absolute()
-        self.work_dir.mkdir(parents=True, exist_ok=True)
 
         self.add_engine(
             "trainer",
@@ -97,12 +95,6 @@ class PotentialTrainer(MolpotEngine):
         self.trainer.add_event_handler(
             Events.ITERATION_COMPLETED(every=10000), scheduler_handler
         )
-
-    def get_absolute_path(self, path: Path|str) -> Path:
-        path = Path(path)
-        if path.is_absolute():
-            return path
-        return self.work_dir / path
 
     def add_checkpoint(
         self,

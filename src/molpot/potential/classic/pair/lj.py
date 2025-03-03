@@ -1,8 +1,14 @@
+from typing import Callable
 import torch
+from torch import nn
 
-class LJ126(torch.nn.Module):
+from molpot import alias
 
-    name = "LJ126"
+from torch.nn.init import xavier_uniform_
+
+class LJ126(nn.Module):
+
+    in_keys = [alias.pair_dist]
 
     @staticmethod
     def E(sig, eps, d_ij):
@@ -18,23 +24,32 @@ class LJ126(torch.nn.Module):
         power_12 = torch.square(power_6)
         return 24 * eps * (2 * power_12 - power_6) * r_ij / torch.square(d_ij)
 
-    def __init__(self, sig, eps):
+    def __init__(self, sig: torch.Tensor|None = None, eps: torch.Tensor|None = None):
         super().__init__()
         self.eps = eps
         self.sig = sig
+        self.register_forward_pre_hook(self._inter_parameters, with_kwargs=False)
 
-    def forward(self, inputs, outputs):
+    def _inter_parameters(self, module, args, kwargs):
+        pair_dist, atom_types = args
+        if self.sig is None:
+            self.sig = torch.zeros((atom_types, atom_types))
+        if self.eps is None:
+            self.eps = torch.ones((atom_types, atom_types))
+        
+
+
+    def forward(self, pair_dist, atom_types):
 
         self.energy(inputs, outputs)
 
         return inputs, outputs
 
-    def energy(self, inputs, outputs):
+    def energy(self, pair_dist, atom_types):
 
-        d_ij = outputs['pairs'][alias.pair_dist]
-        outputs["pairs"]["lj126_energy"] = self.E(self.sig, self.eps, d_ij)
-
-        return inputs, outputs
+        power_6 = torch.pow(sig / d_ij, 6)
+        power_12 = torch.square(power_6)
+        return 4 * eps * (power_12 - power_6)
 
     def forces(self, inputs, outputs):
 

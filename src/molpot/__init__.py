@@ -4,7 +4,7 @@ from .alias import Alias, NameSpace
 from .utils import *
 
 from . import alias, engine, inspector, process, potential
-from .engine import PotentialTrainer
+from .engine import md, PotentialTrainer, MoleculeDymanics
 from .inspector import DataInspector
 from .pipeline import dataset
 from .pipeline.dataloader import DataLoader
