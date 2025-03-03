@@ -31,7 +31,7 @@ class PotentialTrainer(MolpotEngine):
         gradient_accumulation_steps: int = 1,
         no_grad_eval: bool = False,
         clip_grad_norm: float | None = None,
-        work_dir: Path = Path.cwd()
+        work_dir: Path = Path.cwd(),
     ):
         super().__init__()
 
@@ -42,6 +42,8 @@ class PotentialTrainer(MolpotEngine):
         self.deterministic = deterministic
         self.amp_mode = amp_mode
         self.optimizer = optimizer
+        self.work_dir = Path(work_dir).absolute()
+        self.work_dir.mkdir(parents=True, exist_ok=True)
 
         self.add_engine(
             "trainer",
@@ -67,16 +69,16 @@ class PotentialTrainer(MolpotEngine):
             ),
         )
 
-        self._metrics = defaultdict(dict)
         self.loggers = {}
 
         # metrics settings
+        self._metrics = defaultdict(dict)
         self._metrics_usage = {}
 
     def compile(self):
         self.model = self.model.to(self.device)
         self.loss_fn = self.loss_fn.to(self.device)
-        torch.compile(self.model, dynamic=True, fullgraph=True, mode="reduce-overhead")
+        self.model = torch.compile(self.model, dynamic=True, fullgraph=True, mode="reduce-overhead")
 
     @property
     def trainer(self):
@@ -95,6 +97,12 @@ class PotentialTrainer(MolpotEngine):
         self.trainer.add_event_handler(
             Events.ITERATION_COMPLETED(every=10000), scheduler_handler
         )
+
+    def get_absolute_path(self, path: Path|str) -> Path:
+        path = Path(path)
+        if path.is_absolute():
+            return path
+        return self.work_dir / path
 
     def add_checkpoint(
         self,
@@ -118,7 +126,7 @@ class PotentialTrainer(MolpotEngine):
             "optimizer": self.optimizer,
             "trainer": self.trainer,
         }
-        # save_handler =
+        save_dir = self.get_absolute_path(save_dir)
         if n_every is not None:
             prefix = f"{filename_prefix}_step"
             handler = Checkpoint(
@@ -193,7 +201,6 @@ class PotentialTrainer(MolpotEngine):
     def set_metric_usage(self, **engine_metric: dict[str, MetricUsage]) -> None:
         for engine, usage in engine_metric.items():
             self._metrics_usage[engine] = usage
-            print(f"Set metric usage for {engine} to {usage}")
 
     def add_metric(
         self,
@@ -222,7 +229,7 @@ class PotentialTrainer(MolpotEngine):
         self,
         log_dir: str
     ):
-
+        log_dir = self.get_absolute_path(log_dir)
         tb_logger = TensorboardLogger(log_dir)
 
         # add default training loss
@@ -265,6 +272,7 @@ class PotentialTrainer(MolpotEngine):
         self, loader, wait=1, warmup=1, active=3, repeat=1, log_dir="."
     ):
         logger.info("Running Tensorboard Profiler")
+        log_dir = self.get_absolute_path(log_dir)
         with torch.profiler.profile(
             activities=[
                 torch.profiler.ProfilerActivity.CUDA,
