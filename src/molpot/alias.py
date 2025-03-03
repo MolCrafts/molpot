@@ -125,10 +125,11 @@ xyz = R = atoms_ns.set("R", "atom coordinates", float, shape=(None, 3))
 Z = atoms_ns.set("Z", "atomic number", int)
 atom_batch = atoms_ns.set("atom_batch", "atoms batch mask", torch.int64)
 atom_offset = atoms_ns.set("atomistic_offset", "atomistic offset", torch.int64)
+atom_types = atoms_ns.set("atom_types", "atom types", int)
 
 # cell section
 pbc = default_ns.set("pbc", "periodic boundary condition", bool, shape=(3,))[1:]
-cell = default_ns.set("cell", "cell matrix", float, shape=(3, 3))[1:]
+cell = box = default_ns.set("cell", "cell matrix", float, shape=(3, 3))[1:]
 
 # # bonds section
 bonds_ns = NameSpace("bonds")

@@ -1,3 +1,3 @@
 from .potential import PotentialTrainer
-from . import loss
+from .potential import loss
 from .md import *

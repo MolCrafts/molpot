@@ -27,3 +27,4 @@ class MolpotEngine(ABC):
     def add_engine(self, name: str, engine: Engine):
 
         self._engines[name] = engine
+        setattr(self, name, engine)
