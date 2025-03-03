@@ -1,15 +1,17 @@
 from collections import defaultdict
+from pathlib import Path
 from typing import Any, Callable, Iterable, Union
 
 import torch
 from ignite.engine.events import Events, State
-from ignite.handlers import ProgressBar, TensorboardLogger, global_step_from_engine
+from ignite.handlers import (ProgressBar, TensorboardLogger,
+                             global_step_from_engine)
 from ignite.metrics import EpochWise, Metric, MetricUsage
+
+import molpot as mpot
 
 from ..base import MolpotEngine
 from .utils import create_supervised_evaluator, create_supervised_trainer
-
-import molpot as mpot
 
 logger = mpot.get_logger("molpot.engine")
 
@@ -29,6 +31,7 @@ class PotentialTrainer(MolpotEngine):
         gradient_accumulation_steps: int = 1,
         no_grad_eval: bool = False,
         clip_grad_norm: float | None = None,
+        work_dir: Path = Path.cwd()
     ):
         super().__init__()
 
@@ -64,7 +67,7 @@ class PotentialTrainer(MolpotEngine):
             ),
         )
 
-        self.metrics = defaultdict(dict)
+        self._metrics = defaultdict(dict)
         self.loggers = {}
 
         # metrics settings
@@ -190,6 +193,7 @@ class PotentialTrainer(MolpotEngine):
     def set_metric_usage(self, **engine_metric: dict[str, MetricUsage]) -> None:
         for engine, usage in engine_metric.items():
             self._metrics_usage[engine] = usage
+            print(f"Set metric usage for {engine} to {usage}")
 
     def add_metric(
         self,
@@ -206,20 +210,17 @@ class PotentialTrainer(MolpotEngine):
         else:
             raise ValueError("engine must be a string or a list of strings")
         
-        for name in _engine:
-            usage = self._metrics_usage.get(name, None)
-            metric.attach(self._engines[name], name, usage)
+        for engine_name in _engine:
+            usage = self._metrics_usage.get(engine_name, None)
+            metric.attach(self._engines[engine_name], name, usage)
+            self._metrics[engine_name][name] = metric
 
     def enable_progressbar(self, engine: str) -> None:
         ProgressBar().attach(self._engines[engine])
 
     def attach_tensorboard(
         self,
-        log_dir: str,
-        tag_event_map={
-            "trainer": Events.ITERATION_COMPLETED(every=100),
-            "evaluator": Events.EPOCH_COMPLETED,
-        },
+        log_dir: str
     ):
 
         tb_logger = TensorboardLogger(log_dir)
@@ -227,15 +228,15 @@ class PotentialTrainer(MolpotEngine):
         # add default training loss
         tb_logger.attach_output_handler(
             self.trainer,
-            event_name=tag_event_map["trainer"],
+            event_name=self._metrics_usage["trainer"].COMPLETED,
             tag="trainer",
             output_transform=lambda x: {"loss": x["loss"]},
             global_step_transform=global_step_from_engine(self.trainer),
         )
-        for engine_name, metric_info in self.metrics.items():
+        for engine_name, metric_info in self._metrics.items():
             tb_logger.attach_output_handler(
                 self._engines[engine_name],
-                event_name=tag_event_map[engine_name],
+                event_name=self._metrics_usage[engine_name].COMPLETED,
                 tag=engine_name,
                 metric_names=list(metric_info.keys()),
                 global_step_transform=lambda e, event: self.trainer.state.iteration,

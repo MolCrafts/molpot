@@ -123,23 +123,22 @@ class SystemChargeNeutralize(nn.Module):
         natoms_per_molecule = get_natoms_per_batch(atom_batch)
         p_charge = q_batch / natoms_per_molecule
         charge_corr = p_charge[atom_batch]
-        return p1 - charge_corr
+        return (p1 - charge_corr).reshape(-1, 1)
 
 class DipoleAC(nn.Module):
 
-    def __init__(self, in_keys: str, out_keys: str):
+    def __init__(self, in_keys: str, out_keys: str, return_norm: bool = False):
         self.in_keys = [alias.atom_batch, alias.xyz, in_keys]
         self.out_keys = out_keys
         super().__init__()
         self.layer = LazyLinear(1)
+        self.return_norm = return_norm
 
-    def forward(self, atom_batch, p1: torch.Tensor, xyz):
-
-        p1 = self.layer(p1).squeeze()
-        q_batch = batch_add(
-            p1, atom_batch
-        )  # total charge per batch
-
+    def forward(self, atom_batch, xyz, p1: torch.Tensor):
+        p1 = self.layer(p1)
         q_d = p1 * xyz
         dipole = batch_add(q_d, atom_batch)
-        return q_batch, dipole
+        if self.return_norm:
+            dipole_norm = torch.norm(dipole, dim=-1)
+            return dipole, dipole_norm
+        return dipole
