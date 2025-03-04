@@ -7,7 +7,13 @@ from .main import main_process, MDMainEvents
 import torch
 from itertools import islice, cycle
 
+def _infinite_iterator(frame):
+    while True:
+        yield frame
+
 class MoleculeDymanics(MolpotEngine):
+
+    main: Engine
 
     def __init__(self, grad_required=False, work_dir=Path.cwd()):
 
@@ -38,14 +44,6 @@ class MoleculeDymanics(MolpotEngine):
 
         self.add_module(Potential(potential))
 
-    def run(self, frame, max_steps):
+    def run(self, frame, steps):
 
-        self.main.add_event_handler(
-            Events.ITERATION_STARTED,
-            lambda engine: (
-                engine.terminate() if engine.state.iteration >= max_steps else None
-            ),
-        )
-
-
-        self.main.run(islice(cycle(frame), max_steps), max_epochs=torch.inf)
+        self.main.run(_infinite_iterator(frame), max_epochs=steps, epoch_length=1)

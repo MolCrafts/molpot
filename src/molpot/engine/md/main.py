@@ -1,4 +1,3 @@
-from tkinter.tix import MAIN
 import torch
 import torch.nn as nn
 from contextlib import nullcontext

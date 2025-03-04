@@ -79,7 +79,6 @@ class NeighborList(MDHandler):
         Returns:
             torch.tensor: indices of neighbors.
         """
-        # TODO: check consistent wrapping
         inputs = engine.state.frame
         positions = inputs[alias.R]
         molid = inputs[alias.molid]

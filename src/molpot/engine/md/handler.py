@@ -9,11 +9,6 @@ class MDHandler:
     def __init__(self, events: set[EventEnum], priorities: Sequence[int]):
         self.events = events
         self.priorities = priorities
-        for event in self.events:
-            # add a dummy handler for each event
-            setattr(self, "on_" + event.value, lambda
-                engine: engine
-            )
 
     def attach(self, engine: Engine):
 

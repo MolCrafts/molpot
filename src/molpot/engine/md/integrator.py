@@ -1,9 +1,9 @@
-
 import torch
 import torch.nn as nn
 from molpot import Frame, alias
 from .handler import MDHandler
 from .main import MDMainEvents
+
 
 class Integrator(MDHandler):
     """
@@ -55,7 +55,9 @@ class VelocityVerlet(Integrator):
             frame (schnetpack.md.Frame): Frame class containing all molecules and their
                              replicas.
         """
-        frame["atoms", "momenta"] = frame["atoms", "momenta"] + 0.5 * frame["atoms", "forces"] * self.time_step
+        frame["atoms", "momenta"] = (
+            frame["atoms", "momenta"] + 0.5 * frame["atoms", "forces"] * self.time_step
+        )
 
     def main_step(self, frame: Frame):
         r"""
@@ -69,5 +71,6 @@ class VelocityVerlet(Integrator):
                              replicas.
         """
         frame[alias.R] = (
-            frame[alias.R] + self.time_step * frame["atoms", "momenta"] / frame["atoms", "masses"]
+            frame[alias.R]
+            + self.time_step * frame["atoms", "momenta"] / frame["atoms", "masses"]
         )
