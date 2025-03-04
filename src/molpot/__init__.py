@@ -12,4 +12,4 @@ from .pipeline import dataset
 from .pipeline.dataloader import DataLoader
 from .pipeline.dataset import Dataset
 from .potential import classic, nnp
-from .potential.base import PotentialSeq
+from .potential.base import PotentialSeq, Reducer

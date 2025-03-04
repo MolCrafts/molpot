@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 from molpot import Frame, alias
 from .handler import MDHandler
-from .main import MDMainEvents
+from .events import MDMainEvents
+from ignite.engine import Engine
 
 
 class Integrator(MDHandler):
@@ -19,18 +20,10 @@ class Integrator(MDHandler):
         time_step (float): Integration time step in femto seconds.
     """
 
-    def __init__(self, time_step: float):
-        super(Integrator, self).__init__(
-            {MDMainEvents.INITIAL_INTEGRATE, MDMainEvents.FINAL_INTEGRATE}, (0, 0)
-        )
+    def __init__(self, time_step: float, *args, **kwargs):
+        super(Integrator, self).__init__(*args, **kwargs)
         # Convert fs to internal time units.
         self.time_step = time_step
-
-    def half_step(self, frame: Frame):
-        raise NotImplementedError
-
-    def main_step(self, frame: Frame):
-        raise NotImplementedError
 
 
 class VelocityVerlet(Integrator):
@@ -42,9 +35,17 @@ class VelocityVerlet(Integrator):
     """
 
     def __init__(self, time_step: float):
-        super(VelocityVerlet, self).__init__(time_step)
+        super(VelocityVerlet, self).__init__(
+            time_step,
+            {
+                MDMainEvents.INITIAL_INTEGRATE,
+                MDMainEvents.POST_INTEGRATE,
+                MDMainEvents.FINAL_INTEGRATE,
+            },
+            (0, 0, 0),
+        )
 
-    def half_step(self, frame: Frame):
+    def on_initial_integrate(self, engine: Engine):
         r"""
         Half steps propagating the frame momenta according to:
 
@@ -55,11 +56,12 @@ class VelocityVerlet(Integrator):
             frame (schnetpack.md.Frame): Frame class containing all molecules and their
                              replicas.
         """
+        frame = engine.state.frame
         frame["atoms", "momenta"] = (
             frame["atoms", "momenta"] + 0.5 * frame["atoms", "forces"] * self.time_step
         )
 
-    def main_step(self, frame: Frame):
+    def on_post_integrate(self, engine: Engine):
         r"""
         Propagate the positions of the frame according to:
 
@@ -70,7 +72,10 @@ class VelocityVerlet(Integrator):
             frame (schnetpack.md.Frame): Frame class containing all molecules and their
                              replicas.
         """
+        frame = engine.state.frame
         frame[alias.R] = (
             frame[alias.R]
             + self.time_step * frame["atoms", "momenta"] / frame["atoms", "masses"]
         )
+
+    on_final_integrate = on_initial_integrate

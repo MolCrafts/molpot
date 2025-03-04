@@ -126,6 +126,7 @@ Z = atoms_ns.set("Z", "atomic number", int)
 atom_batch = atoms_ns.set("atom_batch", "atoms batch mask", torch.int64)
 atom_offset = atoms_ns.set("atomistic_offset", "atomistic offset", torch.int64)
 atom_types = atoms_ns.set("atom_types", "atom types", int)
+atom_masses = atoms_ns.set("masses", "atom masses", float)
 
 # cell section
 pbc = default_ns.set("pbc", "periodic boundary condition", bool, shape=(3,))[1:]
