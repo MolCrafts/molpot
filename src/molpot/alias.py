@@ -1,22 +1,21 @@
+from collections import namedtuple
 from typing import Union
 import torch
 from molpot import Config
 
-AliasKey = tuple[str, str] | str
+AliasKey = tuple[str, str]
 
+class Alias(tuple):
 
-class Alias:
-
-    def __init__(
+    def __new__(
         self,
         name: str,
         comment: str,
         dtype: type,
         unit: str | None = None,
         shape: tuple = (),
-        category: str = "",
         namespace: str = "",
-    ) -> None:
+    ) -> "Alias":
         self.name = name
         self.unit = unit
         self.comment = comment
@@ -25,13 +24,7 @@ class Alias:
         self.shape = shape
 
         self.namespace = namespace
-        self.category = category
-
-    @property
-    def key(self) -> AliasKey:
-        return tuple(
-            [part for part in (self.namespace, self.category, self.name) if part]
-        )
+        return super().__new__(self, [part for part in (self.namespace, self.name) if part])
 
     @property
     def is_array(self) -> bool:
@@ -42,15 +35,7 @@ class Alias:
 
     def __str__(self) -> str:
         return self.name
-
-    def __hash__(self) -> int:
-        return hash(self.key)
-
-    def __eq__(self, other: Union["Alias", tuple]) -> bool:
-        if isinstance(other, (tuple, str)):
-            return self.key == other
-        return self.key == other.key
-
+    
 
 class NameSpace(dict):
 
@@ -71,9 +56,9 @@ class NameSpace(dict):
         return f"<NameSpace: {self.name}>"
 
     def add(self, alias: Alias) -> AliasKey:
-        alias.namespace = self.name
+        assert alias.namespace == self.name, f"Alias {alias.name} already has `{alias.namespace}` namespace"
         self[alias.name] = alias
-        return alias.key
+        return alias
     
     def __getitem__(self, key):
         if isinstance(key, Alias):
@@ -93,8 +78,7 @@ class NameSpace(dict):
         comment: str,
         dtype: type,
         unit: str | None = None,
-        shape: tuple = (),
-        category: str = "",
+        shape: tuple = ()
     ) -> AliasKey:
         return self.add(
             Alias(
@@ -103,8 +87,7 @@ class NameSpace(dict):
                 unit=unit,
                 dtype=dtype,
                 shape=shape,
-                namespace=self.name,
-                category=category,
+                namespace=self.name
             )
         )
 
