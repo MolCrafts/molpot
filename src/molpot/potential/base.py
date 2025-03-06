@@ -1,14 +1,20 @@
+from abc import abstractmethod
 import torch
 import torch.nn as nn
 
-from tensordict.nn import TensorDictSequential, TensorDictModule
+from tensordict.nn import TensorDictSequential, TensorDictModuleBase, TensorDictModule
 
 
-class PotentialSeq(nn.Module):
+class Potential(TensorDictModuleBase):
+
+    def cite(self):
+        return f"{self.__class__.__name__} from molpot"
+
+
+class PotentialSeq(TensorDictSequential):
 
     def __init__(self, *modules):
-        super().__init__()
-        self.kernel = TensorDictSequential(
+        super().__init__(
             *[
                 TensorDictModule(
                     module, in_keys=module.in_keys, out_keys=module.out_keys
@@ -17,9 +23,7 @@ class PotentialSeq(nn.Module):
             ]
         )
 
-    def forward(self, td):
-        return self.kernel(td)
-    
+
 class Reducer(nn.Module):
 
     def __init__(self, target: str, *keys: str):

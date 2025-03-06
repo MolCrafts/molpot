@@ -38,3 +38,42 @@ potential = mpot.potential.PotentialSeq(pinet, coulomb, e_readout, f_readout)
 ```
 
 After above code, we have a `potential` instance that can calculate the energy and forces of a given atomic configuration. The `PotentialSeq` class is a subclass of `TensorDictSequential`. It ensures that the input and output tensors of each potential function are correctly connected. 
+
+It's quite easy to implement new potential without intrude the existing code. Just inherit the `Potential` class and implement the `forward` method, and also specify the input and output tensors' names. 
+
+```python
+import molpot as mpot
+class FixedKeysPotential(mpot.Potential):
+
+    in_keys = ["positions", "charges"]
+    out_keys = ["energy"]
+
+    def __init__(self, some_args):
+        super().__init__()
+        self.some_args = some_args
+
+    def forward(self, positions, charges):
+        # do something
+        return energy
+
+    def cite(self):
+        return "Some paper"  # don't forget to cite your work
+```
+
+sometimes the potential is too flexible you can't specify the input and output tensors' names in advance, you can also assign it when initilize the potential.
+
+```python
+import molpot as mpot
+
+class DynamicKeysPotential(mpot.Potential):
+
+    def __init__(self, in_keys, out_keys, some_args):
+        super().__init__()
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+        self.some_args = some_args
+
+    def forward(self, **kwargs):
+        # do something
+        return energy
+```

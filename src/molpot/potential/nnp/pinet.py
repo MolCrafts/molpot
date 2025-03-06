@@ -1,3 +1,4 @@
+from molpot.potential.base import Potential
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -204,7 +205,7 @@ class ResUpdate(nn.Module):
         return old + new
 
 
-class PiNet2(nn.Module):
+class PiNet2(Potential):
 
     in_keys = [
         alias.Z,
@@ -273,9 +274,12 @@ class PiNet2(nn.Module):
             p1 = self.res_update(p1, p1t1)
             p3 = self.res_update(p3, p3t1)
         return (p1, p3t1, i1, i3)
+    
+    def cite(self):
+        return "Li, J.; Knijff, L.; Zhang, Z.-Y.; Andersson, L.; Zhang, C. PiNN: Equivariant Neural Network Suite for Modelling Electrochemical Systems. J. Chem. Theory Comput., 2025, 21: 1382."
 
 
-class PiNet1(nn.Module):
+class PiNet1(Potential):
 
     in_keys = [
         alias.Z,
@@ -346,3 +350,6 @@ class PiNet1(nn.Module):
             # output = self.out_layers[i](p1t1, output)
             p1 = self.res_update(p1, p1t1)
         return (p1, i1)
+
+    def cite(self):
+        return "Shao, Y.; Hellström, M.; Mitev, P. D.; Knijff, L.; Zhang, C. PiNN: A Python Library for Building Atomic Neural Networks of Molecules and Materials. J. Chem. Inf. Model., 2020, 60: 1184."
