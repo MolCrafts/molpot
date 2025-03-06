@@ -4,8 +4,8 @@ The most important feature of MolPot is its modular design, which allows users t
 
 Let's start with a simple example of combining a neural network potential with a coulomb potential, as well as energy and force readout modules.
 
-```python
-
+``` py
+import molpot as mpot
 # define PiNet potential
 pinet = mpot.potential.nnp.PiNet2(
     depth=4,
@@ -41,8 +41,7 @@ After above code, we have a `potential` instance that can calculate the energy a
 
 It's quite easy to implement new potential without intrude the existing code. Just inherit the `Potential` class and implement the `forward` method, and also specify the input and output tensors' names. 
 
-```python
-import molpot as mpot
+``` py
 class FixedKeysPotential(mpot.Potential):
 
     in_keys = ["positions", "charges"]
@@ -62,9 +61,7 @@ class FixedKeysPotential(mpot.Potential):
 
 sometimes the potential is too flexible you can't specify the input and output tensors' names in advance, you can also assign it when initilize the potential.
 
-```python
-import molpot as mpot
-
+``` py
 class DynamicKeysPotential(mpot.Potential):
 
     def __init__(self, in_keys, out_keys, some_args):

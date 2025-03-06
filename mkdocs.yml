@@ -1,22 +1,44 @@
 site_name: MolPot
+repo_name: molcrafts/molpot
+repo_url: https://github.com/MolCrafts/molpot
+
+copyright: Copyright &copy; 2024 - 2025 Jichen Li
 
 theme:
   name: material
   palette:
-    primary: 'white'
-    accent: 'light blue'
-  font:
-    text: 'Roboto'
-    code: 'Roboto Mono'
+    - scheme: default
+      primary: deep orange
+      toggle:
+        icon: material/brightness-7 
+        name: Switch to dark mode
+    - scheme: slate
+      primary: red
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.code.annotate
 
 nav:
   - Home: index.md
-  - About: about.md
-  - Installation: installation.md
-  - Usage: usage.md
+  - Start:
+      - Overview: start/index.md
+      - Model: start/model.md
+      - Data: start/td.md
+      - Pipeline: start/pipeline.md
+      - Engine: start/engine.md
   - API Reference: api.md
+  - Readmap: roadmap.md
   - Contributing: contributing.md
-  - Changelog: changelog.md
+  - About: about.md
 
 markdown_extensions:
   - admonition
@@ -25,6 +47,14 @@ markdown_extensions:
   - meta
   - toc:
       permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.details
 
 extra_css:
   - stylesheets/extra.css
