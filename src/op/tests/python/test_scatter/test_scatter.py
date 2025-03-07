@@ -4,10 +4,9 @@ import molpot_op
 import pytest
 import torch
 from torch.autograd import gradcheck
-from molpot_op.scatter import scatter_add, scatter_sum, scatter
 from .utils import devices, dtypes
 
-reductions = ["sum", "add"]
+reductions = ['sum', 'add', 'mean', 'min', 'max'] + ["mul"]
 
 tests = [
     {

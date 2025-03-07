@@ -105,5 +105,4 @@ TORCH_LIBRARY_IMPL(neighbors, AutogradCPU, m) {
                 const Tensor& box_vectors, const bool &checkErrors){
                  return forward(positions, cutoff, max_num_pairs, box_vectors, checkErrors);
      });
-    // m.fallback(torch::CppFunction::makeFallthrough());
 }
