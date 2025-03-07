@@ -5,7 +5,7 @@
 #include <cmath>
 #include <vector>
 
-#include "common/cuda/accessor.cuh"
+#include "common/accessor.cuh"
 
 using namespace std;
 using namespace torch::autograd;

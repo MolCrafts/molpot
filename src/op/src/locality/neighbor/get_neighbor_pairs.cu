@@ -6,8 +6,8 @@
 #include <algorithm>
 #include <tuple>
 
-#include "common/cuda/accessor.cuh"
-#include "common/cuda/atomicAdd.cuh"
+#include "common/accessor.cuh"
+#include "common/atomicAdd.cuh"
 
 using c10::cuda::CUDAStreamGuard;
 using c10::cuda::getCurrentCUDAStream;
