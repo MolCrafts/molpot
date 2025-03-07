@@ -1,1 +1,1 @@
-from .pme import PME, PMEkernel
+from .pme import PMEkernel

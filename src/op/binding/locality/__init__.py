@@ -1,1 +1,1 @@
-from . import neighbors
+from . import neighbor

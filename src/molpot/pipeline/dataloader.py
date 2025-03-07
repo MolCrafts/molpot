@@ -86,7 +86,7 @@ def _compact_collate(batch: Sequence[Frame]):
 
 
 def _nested_collate(batch: Sequence[Frame]):
-    return Frame.from_frames(batch)
+    return Frame.from_frames(batch).densify()
 
 
 class MapAndCollate:

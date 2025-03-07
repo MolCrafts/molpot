@@ -202,9 +202,9 @@ class TestPiNet:
         test_utils.test_shape((p3, p1), p3.shape)
 
     def test_selfdotlayer(self, p3):
-        from molpot.potential.nnp.pinet import SelfDotLayer
+        from molpot.potential.nnp.pinet import DotLayer
 
-        sdl = SelfDotLayer()
+        sdl = DotLayer()
         test_utils = ModuleTester(sdl)
         test_utils.test_shape((p3,), (p3.shape[0], 1, p3.shape[-1]))
 
@@ -298,8 +298,7 @@ class TestPiNet:
                 cutoff_fn=mpot.potential.nnp.cutoff.CosineCutoff(r_cutoff),
                 pp_nodes=[n_features, n_features],
                 pi_nodes=[n_features, n_features],
-                ii_nodes=[n_features, n_features],
-                out_nodes=[n_features, n_features]
+                ii_nodes=[n_features, n_features]
             )
         )
 

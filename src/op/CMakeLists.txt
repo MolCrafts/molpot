@@ -2,19 +2,7 @@ cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 
 # Configure
 set(NAME molpot_op)
-project(${NAME} LANGUAGES CXX)
-option(ENABLE_CUDA "Enable biuilding CUDA components" ON)
-
-# Automatically detect CUDA (only proceed if found)
-find_package(CUDAToolkit QUIET)
-
-if(CMAKE_CUDA_COMPILER)
-    message(STATUS "CUDA detected: ${CMAKE_CUDA_COMPILER}, version: ${CUDAToolkit_VERSION}")
-    set(ENABLE_CUDA ON)
-else()
-    message(STATUS "CUDA not found, disabling CUDA support.")
-    set(ENABLE_CUDA OFF)
-endif()
+project(${NAME} LANGUAGES CXX CUDA)
 
 set(CMAKE_CUDA_COMPILER "/usr/local/cuda/bin/nvcc")
 # Find dependencies
@@ -23,14 +11,10 @@ find_package(Torch REQUIRED)
 enable_testing()
 
 # Source files of the library
-set(SRC_FILES 
-    src/locality/neighbors/get_neighbor_pairs.cpp
-    src/locality/neighbors/get_neighbor_pairs.cu
-    src/locality/neighbors/neighbors.cpp
-    src/pot/pme/pme_cpu.cpp
-    src/pot/pme/pme_cuda.cu
-    src/pot/pme/pme.cpp
-)
+file(GLOB_RECURSE SRC_FILES src/*.cpp)
+file(GLOB_RECURSE SRC_FILES ${SRC_FILES} src/*.cu)
+
+message(STATUS "Found src files: ${SRC_FILES}")
 
 # Build the library
 set(LIBRARY ${NAME}Lib)
@@ -38,10 +22,6 @@ add_library(${LIBRARY} SHARED ${SRC_FILES})
 set_property(TARGET ${LIBRARY} PROPERTY CXX_STANDARD 17)
 target_include_directories(${LIBRARY} PRIVATE ${Python3_INCLUDE_DIRS} include)
 target_link_libraries(${LIBRARY} ${TORCH_LIBRARIES} ${Python3_LIBRARIES})
-if(ENABLE_CUDA)
-    set_property(TARGET ${LIBRARY} PROPERTY CUDA_STANDARD 17)
-    target_compile_definitions(${LIBRARY} PRIVATE ENABLE_CUDA)
-endif(ENABLE_CUDA)
 
 # List of directories containing  test scripts
 set(PYTHON_TEST_DIRS

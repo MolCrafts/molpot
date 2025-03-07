@@ -69,7 +69,7 @@ def gen_heterogenous_frames():
     def _generator(n_frames):
 
         R = torch.tensor(
-            [[0, 0, 0], [0, 0, 1], [0, 1, 0]]
+            [[0., 0, 0], [0, 0, 1], [0, 1, 0]]
         )
         pair_i = [0, 0, 1]
         pair_j = [1, 2, 2]
@@ -100,10 +100,10 @@ def gen_heterogenous_frames():
         )
 
         R = torch.tensor(
-            [[0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0], [0, 1, 1]]
+            [[0., 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0], [0, 1, 1]]
         )
-        pair_i = [0, 0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4]
-        pair_j = [1, 2, 3, 4, 2, 3, 4, 3, 4, 4, 5, 5]
+        pair_i = [0, 0, 0, 0, 1, 1, 1, 2, 2, 3]
+        pair_j = [1, 2, 3, 4, 2, 3, 4, 3, 4, 4]
         pair_diff = R[pair_j] - R[pair_i]
         pair_dist = torch.linalg.norm(pair_diff, dim=-1)        
 
