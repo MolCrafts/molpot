@@ -4,8 +4,6 @@ import typer
 
 from .utils import get_version
 
-APP_PATH = Path.home() / ".molpot_app"
-
 main_cli = typer.Typer()
 
 
@@ -27,3 +25,6 @@ r"""
         typer.echo(f"Welcome to MolPot {version}")
         typer.echo()
         typer.echo(ctx.get_help())
+
+from .log import log_cli
+main_cli.add_typer(log_cli)

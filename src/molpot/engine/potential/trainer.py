@@ -12,11 +12,15 @@ import molpot as mpot
 
 from ..base import MolpotEngine
 from .utils import create_supervised_evaluator, create_supervised_trainer
+from ignite.engine import Engine
 
 logger = mpot.get_logger("molpot.engine")
 
 
 class PotentialTrainer(MolpotEngine):
+
+    trainer: Engine
+    evaluator: Engine
 
     def __init__(
         self,
@@ -77,16 +81,6 @@ class PotentialTrainer(MolpotEngine):
         self.model = self.model.to(self.device)
         self.loss_fn = self.loss_fn.to(self.device)
         self.model = torch.compile(self.model, dynamic=True, fullgraph=True, mode="reduce-overhead")
-
-    @property
-    def trainer(self):
-        return self._engines["trainer"]
-
-    @property
-    def evaluator(self):
-        if "evaluator" not in self._engines:
-            raise ValueError("Evaluator not yet added to the trainer")
-        return self._engines["evaluator"]
 
     def add_lr_scheduler(self, scheduler):
         from ignite.handlers import LRScheduler

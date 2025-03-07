@@ -101,7 +101,7 @@ class Config:
         logger.setLevel(level)
 
     def get_generator(self):
-        gen = torch.Generator(device=self.device)
+        gen = torch.Generator()  # caveat: mismatch device
         if self.seed is not None:
             gen = gen.manual_seed(self.seed)
         return gen

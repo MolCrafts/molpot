@@ -1,9 +1,9 @@
 import typer
-from .main import main_cli
 from pathlib import Path
 
+log_cli = typer.Typer()
 
-@main_cli.command()
+@log_cli.command()
 def log(
     log_dir: Path = typer.Argument(..., help="Path to the log directory."),
     port: int = typer.Option(6006, "--port", "-p", help="Port to run the server on."),

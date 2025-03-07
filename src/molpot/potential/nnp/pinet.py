@@ -175,25 +175,22 @@ class GCBlock3(nn.Module):
         return (p1t1, p3t1), (i1s[0], i3)
 
 
-class OutLayer(nn.Module):
+# class OutLayer(nn.Module):
 
-    def __init__(self, out_nodes: list[int], out_units: int):
-        super().__init__()
-        if len(out_nodes) < 2:
-            raise ValueError("out_nodes must have at least 2 elements")
-        elif len(out_nodes) == 2:
-            out_nodes.append(out_nodes[-1])
-        # self.ff_layer = FeedForward(
-        #     *out_nodes[:-1], activation=None, bias=True, last_bias=False
-        # )
-        self.ff_layer = FeedForward(
-            *out_nodes[:-1], activation=None, bias=True, last_bias=True
-        )
-        self.out_units = Dense(out_nodes[-1], out_units, activation=None, bias=False)
+#     def __init__(self, out_nodes: list[int], out_units: int):
+#         super().__init__()
+#         if len(out_nodes) < 2:
+#             raise ValueError("out_nodes must have at least 2 elements")
+#         elif len(out_nodes) == 2:
+#             out_nodes.append(out_nodes[-1])
+#         self.ff_layer = FeedForward(
+#             *out_nodes[:-1], activation=None, bias=True, last_bias=True
+#         )
+#         self.out_units = Dense(out_nodes[-1], out_units, activation=None, bias=False)
 
-    def forward(self, px, prev_px):
-        px = self.ff_layer(px)
-        return self.out_units(px) + prev_px
+#     def forward(self, px, prev_px):
+#         px = self.ff_layer(px)
+#         return self.out_units(px) + prev_px
 
 
 class ResUpdate(nn.Module):
@@ -223,8 +220,6 @@ class PiNet2(Potential):
         pp_nodes: list[int] = [16, 16],
         pi_nodes: list[int] = [16, 16],
         ii_nodes: list[int] = [16, 16],
-        # out_nodes: list[int] = [16, 16],
-        # out_units: int = 1,
         activation: Callable | None = F.tanh,
         max_atomtypes: int = 100,
     ):
@@ -265,12 +260,10 @@ class PiNet2(Potential):
         p1 = self.before_gc_block_layer(p1)
         p3 = torch.zeros([n_atoms, 3, p1.shape[-1]], dtype=p1.dtype, device=p1.device)
 
-        # output = 0.0
         for i in range(self.depth.item()):
             (p1t1, p3t1), (i1, i3) = self.gc_blocks[i](
                 p1, p3, pair_i, pair_j, basis, norm_pair_diff
             )
-            # output = self.out_layers[i](p1t1, output)
             p1 = self.res_update(p1, p1t1)
             p3 = self.res_update(p3, p3t1)
         return (p1, p3t1, i1, i3)
@@ -322,7 +315,7 @@ class PiNet1(Potential):
                 for _ in range(depth)
             ]
         )
-        self.out_layers = nn.ModuleList([OutLayer(out_nodes, out_units) for _ in range(depth)])
+        # self.out_layers = nn.ModuleList([OutLayer(out_nodes, out_units) for _ in range(depth)])
 
         self.res_update = ResUpdate()
 

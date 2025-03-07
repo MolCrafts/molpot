@@ -77,6 +77,7 @@ def supervised_training_step(
         if (engine.state.iteration - 1) % gradient_accumulation_steps == 0:
             optimizer.zero_grad()
         model.train()
+        td = td.to(model.device)
         td = model(td)  # https://pytorch.org/tensordict/stable/tutorials/tensordict_module.html#do-s-and-don-t-with-tensordictmodule
         loss = loss_fn(
             *model_transform(td)
@@ -333,6 +334,7 @@ def supervised_evaluation_step(
         engine: Engine, td: TensorDict
     ) -> Union[Any, Tuple[torch.Tensor]]:
         model.eval()
+        td = td.to(model.device)
         with grad_context():
             td = model(td)
             return td

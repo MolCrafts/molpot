@@ -20,8 +20,8 @@ class Batchwise(nn.Module):
     def __init__(
         self,
         n_neurons: list[int],
-        in_keys: str,
-        out_keys: str,
+        in_key: str,
+        out_key: str,
         activation: Callable = F.silu,
         reduce: str = "sum"
     ):
@@ -40,8 +40,8 @@ class Batchwise(nn.Module):
             per_atom_output_key: If not None, the key under which the per-atom result will be stored
         """
         super().__init__()
-        self.in_keys = in_keys
-        self.out_keys = out_keys
+        self.in_keys = [alias.atom_batch, in_key]
+        self.out_keys = out_key if not isinstance(out_key, str) else ("predicts", out_key)
         assert len(n_neurons) > 1, ValueError("Need at least one in and one out layer")
         self.n_out = n_neurons[-1]
 
@@ -56,7 +56,6 @@ class Batchwise(nn.Module):
 
         y = self.outnet(px)  # (n_atoms, n_out)
         result = batch_add(y, atom_batch)
-
         return result.squeeze()
 
 
@@ -64,9 +63,9 @@ class PairForce(nn.Module):
 
     def __init__(
         self,
-        in_keys: str,
+        in_key: str,
+        out_key: str,
         dx_key: str = alias.pair_diff,
-        out_keys: str = alias.pair_force,
         create_graph=True,
         retain_graph=True,
     ):
@@ -81,8 +80,8 @@ class PairForce(nn.Module):
             retain_graph (bool, optional): _description_. Defaults to True.
         """
         super().__init__()
-        self.in_keys = [in_keys, dx_key, alias.pair_i, alias.pair_j]
-        self.out_keys = out_keys
+        self.in_keys = [in_key, dx_key, alias.pair_i, alias.pair_j]
+        self.out_keys = ("predicts", out_key)
         self.create_graph = create_graph
         self.retain_graph = retain_graph
 

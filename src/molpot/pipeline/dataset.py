@@ -78,22 +78,22 @@ class QM9(Dataset):
         self.remove_uncharacterized = remove_uncharacterized
         self.atom_ref = atom_ref
 
-        self.labels.set("A", float, "GHz", "rotational_constant_A")
-        self.labels.set("B", float, "GHz", "rotational_constant_B")
-        self.labels.set("C", float, "GHz", "rotational_constant_C")
-        self.labels.set("mu", float, "Debye", "dipole_moment")
-        self.labels.set("alpha", float, "a0", "isotropic_polarizability")
-        self.labels.set("alpha", float, "a0", "isotropic_polarizability")
-        self.labels.set("homo", float, "hartree", "homo")
-        self.labels.set("lumo", float, "hartree", "lump")
-        self.labels.set("gap", float, "hartree", "gap")
-        self.labels.set("r2", float, "a0", "electronic_spatial_extent")
-        self.labels.set("zpve", float, "hartree", "zpve")
-        self.labels.set("U0", float, "hartree", "energy_U0")
-        self.labels.set("U", float, "hartree", "energy_U")
-        self.labels.set("H", float, "hartree", "enthalpy_H")
-        self.labels.set("G", float, "hartree", "free_energy")
-        self.labels.set("Cv", float, "cal/mol/K", "heat_capacity")
+        self.labels.set("A", "rotational_constant_A", "GHz", float)
+        self.labels.set("B", "rotational_constant_B", "GHz", float)
+        self.labels.set("C", "rotational_constant_C", "GHz", float)
+        self.labels.set("mu", "dipole_moment", "Debye", float)
+        self.labels.set("alpha", "isotropic_polarizability", "a0", float)
+        self.labels.set("alpha", "isotropic_polarizability", "a0", float)
+        self.labels.set("homo", "homo", "hartree", float)
+        self.labels.set("lumo", "lumo", "hartree", float)
+        self.labels.set("gap", "gap", "hartree", float)
+        self.labels.set("r2", "electronic_spatial_extent", "a0", float)
+        self.labels.set("zpve", "zpve", "hartree", float)
+        self.labels.set("U0", "energy_U0", "hartree", float)
+        self.labels.set("U", "energy_U", "hartree", float)
+        self.labels.set("H", "enthalpy_H", "hartree", float)
+        self.labels.set("G", "free_energy", "hartree", float)
+        self.labels.set("Cv", "heat_capacity", "cal/mol/K", float)
 
     def __len__(self):
         return len(self._frames)
@@ -103,6 +103,7 @@ class QM9(Dataset):
 
     def prepare(self, total: int = None, preprocess=[]):
         logger.info("prepaering QM9 dataset...")
+
         def get_content(save_dir: Path | None):
             if save_dir and (save_dir / "qm9.tar.bz2").exists():
                 qm9_bytes = io.BytesIO((save_dir / "qm9.tar.bz2").read_bytes())
@@ -262,6 +263,7 @@ class rMD17(MapStyleDataset):
 
     def __init__(
         self,
+        save_dir: Path | None,
         molecule: Literal[
             "aspirin",
             "azobenzene",
@@ -274,7 +276,6 @@ class rMD17(MapStyleDataset):
             "toluene",
             "uracil",
         ],
-        save_dir: Path | None = None,
         device: str = "cpu",
         atomic_dress: bool = True,
     ):
@@ -283,12 +284,8 @@ class rMD17(MapStyleDataset):
             save_dir=save_dir,
             device=device,
         )
-        self.labels.set(
-            "energy", "total energy", float, "kcal/mol", (None, 1), "labels"
-        )
-        self.labels.set(
-            "forces", "all forces", float, "kcal/mol/A", (None, 3), "labels"
-        )
+        self.labels.set("energy", "total energy", float, "kcal/mol", (None, 1))
+        self.labels.set("forces", "all forces", float, "kcal/mol/A", (None, 3))
 
         self.molecule = molecule
 
@@ -385,7 +382,7 @@ class rMD17(MapStyleDataset):
             frame["labels", "energy"] = torch.tensor(
                 [
                     data["energies"][idx]
-                ],  # - torch.sum(self.atomrefs["energy"][numbers])
+                ],
                 dtype=config.ftype,
             )
             frame["labels", "forces"] = torch.tensor(
