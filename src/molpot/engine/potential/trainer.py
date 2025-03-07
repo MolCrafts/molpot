@@ -90,6 +90,12 @@ class PotentialTrainer(MolpotEngine):
             Events.ITERATION_COMPLETED(every=10000), scheduler_handler
         )
 
+    def add_lw_scheduler(self, scheduler):
+        
+        self.trainer.add_event_handler(
+            Events.ITERATION_COMPLETED(every=1000), lambda: scheduler.step()
+        )
+
     def add_checkpoint(
         self,
         save_dir,
