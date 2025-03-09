@@ -1,11 +1,11 @@
 import torch
 from molpot import Frame, alias
 from molpot_op import get_neighbor_pairs
-from .handler import MDHandler, MDMainEvents
+from .handler import MDEvent, MDMainEvents
 from ignite.engine import Engine
 
 
-class NeighborList(MDHandler):
+class NeighborList(MDEvent):
     """
     Wrapper for neighbor list transforms to make them suitable for molecular dynamics simulations. Introduces handling
     of multiple replicas and a cutoff shell (buffer region) to avoid recomputations of the neighbor list in every step.

@@ -1,16 +1,15 @@
+from calendar import c
 from contextlib import nullcontext
 from pathlib import Path
-
-from molpot.engine.md.initializer import Zeros
+import molpot as mpot
 import torch
-import torch.nn as nn
-from ignite.engine import Engine, Events
+from ignite.engine import Engine, State
 from torch.nn import Module
 
 from ..base import MolpotEngine
-from .events import MDMainEvents
-from .handler import MDHandler, Potential
+from .events import MDMainEvents, MDEvent
 
+logger = mpot.get_logger("molpot.md")
 
 def _infinite_iterator(frame):
     while True:
@@ -54,6 +53,40 @@ def main_process(gradients_required):
 
     return update
 
+class MDState(State):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._integrator = None
+        self._frame: mpot.Frame = None
+
+    @property
+    def integrator(self):
+        return self._integrator
+    
+    @integrator.setter
+    def integrator(self, integrator):
+        if self._integrator is not None:
+            logger.warning(f"Overwriting existing integrator {self._integrator}.")
+        self._integrator = integrator
+
+    @property
+    def frame(self):
+        return self._frame
+    
+    @frame.setter
+    def frame(self, frame):
+        self._frame = frame
+
+
+class MDEngine(Engine):
+
+    def __init__(self, process_function):
+        
+        super().__init__(process_function)
+
+        self.state = MDState()
+
 
 class MoleculeDymanics(MolpotEngine):
 
@@ -74,17 +107,17 @@ class MoleculeDymanics(MolpotEngine):
         self.add_engine("main", main_engine)
 
 
-    def add_handler(self, handler: MDHandler):
+    def add_handler(self, handler: MDEvent):
 
         for event in handler.events:
-            self.main.add_event_handler(event, getattr(handler, "on_" + event.value))
+            self.main.add_event_handler(event, getattr(handler, f"on_{event.value}"))
 
-    def add_handlers(self, *handlers: MDHandler):
+    def add_handlers(self, *handlers: MDEvent):
 
         events_handlers = {event: [] for event in MDMainEvents}
         for handler in handlers:
             for event, prio in zip(handler.events, handler.priorities):
-                events_handlers[event].append((getattr(handler, "on_" + event.value), prio))
+                events_handlers[event].append((getattr(handler, f"on_{event.value}"), prio))
 
         for event, handlers in events_handlers.items():
             handlers.sort(key=lambda x: x[1])

@@ -1,8 +1,8 @@
-from .handler import MDHandler, MDMainEvents, Events
+from .handler import MDEvent, MDMainEvents, Events
 
 import torch
 
-class Initializer(MDHandler):
+class Initializer(MDEvent):
 
     def __init__(self):
         super().__init__(
