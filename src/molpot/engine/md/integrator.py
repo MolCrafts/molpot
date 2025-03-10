@@ -1,12 +1,11 @@
-import torch
-import torch.nn as nn
-from molpot import Frame, alias
-from .handler import MDHandler
+from molpot import Frame, alias, get_logger
 from .events import MDMainEvents
 from ignite.engine import Engine
+from .events import MDEvent
 
+logger = get_logger("molpot.md")
 
-class Integrator(MDHandler):
+class Integrator(MDEvent):
     """
     Basic integrator class template. Uses the typical scheme of propagating
     frame momenta in two half steps and frame positions in one main step.
@@ -44,6 +43,9 @@ class VelocityVerlet(Integrator):
             },
             (0, 0, 0),
         )
+
+    def on_engine_start(self, engine):
+        engine.integrator = self
 
     def on_initial_integrate(self, engine: Engine):
         r"""

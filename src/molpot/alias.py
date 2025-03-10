@@ -108,8 +108,12 @@ xyz = R = atoms_ns.set("R", "atom coordinates", float, shape=(None, 3))
 Z = atoms_ns.set("Z", "atomic number", int)
 atom_batch = atoms_ns.set("atom_batch", "atoms batch mask", torch.int64)
 atom_offset = atoms_ns.set("atomistic_offset", "atomistic offset", torch.int64)
-atom_types = atoms_ns.set("atom_types", "atom types", int)
-atom_masses = atoms_ns.set("masses", "atom masses", float)
+atom_type = atoms_ns.set("atom_type", "atom types", str)
+atom_type_id = atoms_ns.set("atom_type_id", "atom type id", int)
+atom_mass = atoms_ns.set("mass", "atom mass", float)
+
+# mask section
+molid = atoms_ns.set("molid", "molecule index", int)
 
 # cell section
 pbc = default_ns.set("pbc", "periodic boundary condition", bool, shape=(3,))[1:]

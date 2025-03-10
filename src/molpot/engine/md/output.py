@@ -1,6 +1,6 @@
 from typing import Callable
 from molpot.engine.md.events import MDMainEvents
-from .handler import MDHandler
+from .handler import MDEvent
 from ignite.engine import Events
 from torch.nn import Module
 from molpot import alias
@@ -25,7 +25,7 @@ class Thermo(Module):
         return state.thermo
 
 
-class ThermoOutput(MDHandler):
+class ThermoOutput(MDEvent):
 
     def __init__(self, every: int, thermo: Thermo, *output_handlers: Callable):
         super().__init__(
