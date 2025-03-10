@@ -10,7 +10,7 @@ from torch.nn.parameter import UninitializedParameter
 
 class LJ126(LazyModuleMixin, Module):
 
-    in_keys = [alias.pair_i, alias.pair_j, alias.pair_diff, alias.atom_types]
+    in_keys = [alias.pair_i, alias.pair_j, alias.pair_diff, alias.atom_type]
     out_keys = [
         ("predicts", "lj126_energy"),
     ]

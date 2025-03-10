@@ -4,8 +4,7 @@ from typing import Any, Callable, Iterable, Union
 
 import torch
 from ignite.engine.events import Events, State
-from ignite.handlers import (ProgressBar, TensorboardLogger,
-                             global_step_from_engine)
+from ignite.handlers import ProgressBar, TensorboardLogger, global_step_from_engine
 from ignite.metrics import EpochWise, Metric, MetricUsage
 
 import molpot as mpot
@@ -80,7 +79,9 @@ class PotentialTrainer(MolpotEngine):
     def compile(self):
         self.model = self.model.to(self.device)
         self.loss_fn = self.loss_fn.to(self.device)
-        self.model = torch.compile(self.model, dynamic=True, fullgraph=True, mode="reduce-overhead")
+        self.model = torch.compile(
+            self.model, dynamic=True, fullgraph=True, mode="reduce-overhead"
+        )
 
     def add_lr_scheduler(self, scheduler):
         from ignite.handlers import LRScheduler
@@ -91,7 +92,7 @@ class PotentialTrainer(MolpotEngine):
         )
 
     def add_lw_scheduler(self, scheduler):
-        
+
         self.trainer.add_event_handler(
             Events.ITERATION_COMPLETED(every=1000), lambda: scheduler.step()
         )
@@ -165,7 +166,9 @@ class PotentialTrainer(MolpotEngine):
         eval_data: Iterable | None = None,
         epoch_length: int | None = None,
     ) -> State:
-
+        max_steps = int(max_steps) if max_steps is not None else None
+        max_epochs = int(max_epochs) if max_epochs is not None else None
+        epoch_length = int(epoch_length) if epoch_length is not None else None
         if eval_data is not None:
             self.trainer.add_event_handler(
                 Events.EPOCH_COMPLETED,
@@ -189,7 +192,7 @@ class PotentialTrainer(MolpotEngine):
         for logger in self.loggers.values():
             logger.close()
         return state
-    
+
     def set_metric_usage(self, **engine_metric: dict[str, MetricUsage]) -> None:
         for engine, usage in engine_metric.items():
             self._metrics_usage[engine] = usage
@@ -208,7 +211,7 @@ class PotentialTrainer(MolpotEngine):
             _engine = self._engines.keys()
         else:
             raise ValueError("engine must be a string or a list of strings")
-        
+
         for engine_name in _engine:
             usage = self._metrics_usage.get(engine_name, None)
             metric.attach(self._engines[engine_name], name, usage)
@@ -217,10 +220,7 @@ class PotentialTrainer(MolpotEngine):
     def enable_progressbar(self, engine: str) -> None:
         ProgressBar().attach(self._engines[engine])
 
-    def attach_tensorboard(
-        self,
-        log_dir: str
-    ):
+    def attach_tensorboard(self, log_dir: str):
         log_dir = self.get_absolute_path(log_dir)
         tb_logger = TensorboardLogger(log_dir)
 

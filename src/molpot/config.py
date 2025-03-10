@@ -4,7 +4,7 @@ import torch
 from collections import defaultdict
 import numpy as np
 import threading
-from .logger import get_logger
+from .logging import get_logger
 
 logger = get_logger()
 
@@ -32,7 +32,7 @@ class Config:
     def get_dtype(self, dtype_name):
         return self.global_dtypes.get(dtype_name, None)
 
-    def set_device(self, device: str|torch.device):
+    def set_device(self, device: str|torch.device) -> torch.device:
         if isinstance(device, torch.device):
             self._device = device
         elif isinstance(device, str):

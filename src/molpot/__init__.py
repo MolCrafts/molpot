@@ -1,4 +1,5 @@
-from .logger import get_logger
+# isort: skip_file
+from .logging import get_logger
 from .config import get_config, Config
 from .alias import Alias, NameSpace
 from .utils import *
