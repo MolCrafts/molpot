@@ -1,7 +1,8 @@
 import torch
-from ..events import MDEvent
+from ..events import MDEvent, MDMainEvents
 from .utils import YSWeights
 import molpot as mpot
+from torch.nn.parameter import UninitializedParameter
 
 config = mpot.get_config()
 
@@ -10,11 +11,18 @@ kB = 1
 class Thermostat(MDEvent):
 
     def __init__(self, temperature: float, time_constant: float):
-
+        super().__init__({MDMainEvents.STARTED, MDMainEvents.START_STEP, MDMainEvents.END_STEP}, (0, 0, 0))
         self.register_buffer("temperature", torch.tensor(temperature))
         self.register_buffer("time_constant", torch.tensor(time_constant))
 
-        
+    def on_start_step(self, engine):
+        self._apply_thermostat(engine.frame)
+
+    def on_end_step(self, engine):
+        self._apply_thermostat(engine.frame)
+
+    def _apply_thermostat(self, frame):
+        raise NotImplementedError
 
 class NoseHoverThermostat(Thermostat):
 
@@ -28,17 +36,17 @@ class NoseHoverThermostat(Thermostat):
         self.register_buffer("kb_temperature", self.temperature * kB)
         self.register_buffer("multi_step", torch.tensor(multi_step))
         self.register_buffer("integration_order", torch.tensor(integration_order))
-        self.register_uninitialized_buffer("time_step")
+        self.register_buffer("time_step", UninitializedParameter())
 
         # Find out number of particles (depends on whether massive or not)
-        self.register_uninitialized_buffer("degrees_of_freedom")
-        self.register_uninitialized_buffer("masses")
+        self.register_buffer("degrees_of_freedom", UninitializedParameter())
+        self.register_buffer("masses", UninitializedParameter())
 
-        self.register_uninitialized_buffer("velocities")
-        self.register_uninitialized_buffer("positions")
-        self.register_uninitialized_buffer("forces")
+        self.register_buffer("velocities", UninitializedParameter())
+        self.register_buffer("positions", UninitializedParameter())
+        self.register_buffer("forces", UninitializedParameter())
 
-    def on_engine_start(self, engine):
+    def on_started(self, engine):
         frame = engine.frame
         integration_weights = (
             YSWeights()

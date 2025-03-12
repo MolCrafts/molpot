@@ -20,7 +20,7 @@ class Integrator(MDEvent):
     """
 
     def __init__(self, time_step: float, *args, **kwargs):
-        super(Integrator, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         # Convert fs to internal time units.
         self.time_step = time_step
 
@@ -34,17 +34,18 @@ class VelocityVerlet(Integrator):
     """
 
     def __init__(self, time_step: float):
-        super(VelocityVerlet, self).__init__(
+        super().__init__(
             time_step,
             {
+                MDMainEvents.STARTED,
                 MDMainEvents.INITIAL_INTEGRATE,
                 MDMainEvents.POST_INTEGRATE,
                 MDMainEvents.FINAL_INTEGRATE,
             },
-            (0, 0, 0),
+            (0, 0, 0, 0),
         )
 
-    def on_engine_start(self, engine):
+    def on_started(self, engine):
         engine.integrator = self
 
     def on_initial_integrate(self, engine: Engine):

@@ -1,5 +1,3 @@
-from collections import namedtuple
-from typing import Union
 import torch
 from molpot import Config
 

@@ -1,8 +1,8 @@
 import torch
-from molpot import Frame, alias
+from molpot import alias
 from molpot_op import get_neighbor_pairs
-from .handler import MDEvent, MDMainEvents
 from ignite.engine import Engine
+from .events import MDEvent, MDMainEvents
 
 
 class NeighborList(MDEvent):

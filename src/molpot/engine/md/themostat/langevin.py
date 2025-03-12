@@ -1,10 +1,11 @@
 from .base import Thermostat
 import torch
-from molpot import get_config
+from molpot import get_config, get_unit, alias
+from torch.nn.parameter import UninitializedParameter
 
 config = get_config()
+unit = get_unit()
 
-kB = 1
 
 class Langevin(Thermostat):
 
@@ -26,11 +27,11 @@ class Langevin(Thermostat):
         
         super().__init__(temperature=temperature, time_constant=time_constant)
 
-        self.register_uninitialized_buffer("thermostat_factor")
-        self.register_uninitialized_buffer("c1")
-        self.register_uninitialized_buffer("c2")
+        self.register_buffer("thermostat_factor", UninitializedParameter())
+        self.register_buffer("c1", UninitializedParameter())
+        self.register_buffer("c2", UninitializedParameter())
 
-    def on_engine_start(self, engine):
+    def on_started(self, engine):
         """
         Initialize the Langevin coefficient matrices based on the system and simulator properties.
 
@@ -40,12 +41,12 @@ class Langevin(Thermostat):
         """
         # Initialize friction coefficients
         gamma = (
-            torch.ones(1, device=config.device, dtype=config.dtype)
+            torch.ones(1, device=config.device, dtype=config.ftype)
             / self.time_constant
         )
 
         # Initialize coefficient matrices
-        c1 = torch.exp(-0.5 * config.integrator.time_step * gamma)
+        c1 = torch.exp(-0.5 * engine.integrator.time_step * gamma)
         c2 = torch.sqrt(1 - c1**2)
 
         self.c1 = c1[:, None, None]
@@ -53,14 +54,8 @@ class Langevin(Thermostat):
 
         # Get mass and temperature factors
         self.thermostat_factor = torch.sqrt(
-            config.system.masses * kB * self.temperature_bath
+            engine.frame[alias.atom_mass] * unit.kB * self.temperature
         )
-
-    def on_start_step(self, engine):
-        self._apply_thermostat()
-
-    def on_end_step(self, engine):
-        self._apply_thermostat()
 
     def _apply_thermostat(self, frame):
         
