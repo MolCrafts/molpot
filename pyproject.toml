@@ -19,7 +19,8 @@ dependencies = [
     "torchdata",
     "pytorch-ignite",
     "rich",
-    "typer"
+    "typer",
+    "pint"
 ]
 
 [project.optional-dependencies]
