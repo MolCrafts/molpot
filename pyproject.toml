@@ -25,7 +25,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest"
+    "pytest",
+    "pre-commit"
+]
+doc = [
+    "mkdocs",
+    "mkdocs-material"
 ]
 
 [project.scripts]

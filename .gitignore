@@ -6,6 +6,9 @@ tmp/
 train_*/
 runs/
 log*
+tblog/
+ckpt/
+*.db
 # ide
 .vscode/
 

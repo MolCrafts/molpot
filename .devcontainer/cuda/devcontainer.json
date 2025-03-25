@@ -1,5 +1,5 @@
 {
-    "name": "MolCrafts - GPU",
+    "name": "MolPot - GPU",
     "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
     "features": {
         "ghcr.io/molcrafts/features/utils:latest": {},
@@ -13,7 +13,7 @@
             "cudaVersion": "12.5",
             "cudannVersion": "9.3.0"
         },
-        "../features/molpot": {
+        "ghcr.io/molcrafts/features/molpot:latest": {
             "enableCuda": true,
             "pytorchCudaVersion": "cu124"
         }
@@ -40,6 +40,5 @@
         "LD_LIBRARY_PATH": "$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64",
         "XLA_FLAGS": "--xla_gpu_cuda_data_dir=/usr/local/cuda"
     },
-    "onCreateCommand": "bash ../install.sh",
     "remoteUser": "root"
 }
