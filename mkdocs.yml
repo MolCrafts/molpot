@@ -8,12 +8,12 @@ theme:
   name: material
   palette:
     - scheme: default
-      primary: deep orange
+      primary: cyan
       toggle:
         icon: material/brightness-7 
         name: Switch to dark mode
     - scheme: slate
-      primary: red
+      primary: indigo
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
@@ -44,6 +44,7 @@ markdown_extensions:
   - admonition
   - codehilite
   - footnotes
+  - md_in_html
   - meta
   - toc:
       permalink: true
@@ -55,6 +56,7 @@ markdown_extensions:
   - pymdownx.snippets
   - pymdownx.superfences
   - pymdownx.details
+  - pymdownx.blocks.caption
 
 extra_css:
   - stylesheets/extra.css
