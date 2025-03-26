@@ -72,7 +72,7 @@ class TestDerivative:
         frame["predicts", "pair_energy"] = torch.sum(
             0.5 * torch.linalg.norm(frame["pairs", "diff"], dim=1) ** 2
         )
-        force_readout = mpot.potential.nnp.readout.PairForce(
+        force_readout = mpot.potential.nnp.base.PairForce(
             in_key=("predicts", "pair_energy"),
             dx_key=("pairs", "diff"),
             out_key=("predicts", "forces"),

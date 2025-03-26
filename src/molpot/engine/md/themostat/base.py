@@ -1,5 +1,6 @@
 import torch
-from ..events import MDEvent, MDMainEvents
+from ..event import MDMainEvents
+from ..handler import MDHandler
 from .utils import YSWeights
 import molpot as mpot
 from torch.nn.parameter import UninitializedParameter
@@ -8,7 +9,7 @@ config = mpot.get_config()
 
 kB = 1
 
-class Thermostat(MDEvent):
+class Thermostat(MDHandler):
 
     def __init__(self, temperature: float, time_constant: float):
         super().__init__({MDMainEvents.STARTED, MDMainEvents.START_STEP, MDMainEvents.END_STEP}, (0, 0, 0))

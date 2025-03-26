@@ -6,11 +6,11 @@ from .config import get_config, Config
 from .alias import Alias, NameSpace
 from .utils import *
 
-from . import alias, engine, inspector, process, potential
-from .engine import md
+from . import alias, inspector, process, potential
+from .engine import md, potential
 from .engine.potential import PotentialTrainer
 from .engine.md import MoleculeDymanics
-from .engine.potential.loss import Constraint
+from .constrain import Constraint
 from .inspector import DataInspector
 from .pipeline import dataset
 from .pipeline.dataloader import DataLoader

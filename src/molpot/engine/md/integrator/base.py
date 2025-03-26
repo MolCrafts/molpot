@@ -1,11 +1,11 @@
 from molpot import Frame, alias, get_logger
-from .events import MDMainEvents
+from ..event import MDMainEvents
 from ignite.engine import Engine
-from .events import MDEvent
+from ..handler import MDHandler
 
 logger = get_logger("molpot.md")
 
-class Integrator(MDEvent):
+class Integrator(MDHandler):
     """
     Basic integrator class template. Uses the typical scheme of propagating
     frame momenta in two half steps and frame positions in one main step.
@@ -19,8 +19,8 @@ class Integrator(MDEvent):
         time_step (float): Integration time step in femto seconds.
     """
 
-    def __init__(self, time_step: float, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, name, events, priorities, time_step: float, ):
+        super().__init__(name, events, priorities)
         # Convert fs to internal time units.
         self.time_step = time_step
 
@@ -33,9 +33,9 @@ class VelocityVerlet(Integrator):
         time_step (float): Integration time step in femto seconds.
     """
 
-    def __init__(self, time_step: float):
+    def __init__(self, time_step: float, name: str = "velocity_verlet"):
         super().__init__(
-            time_step,
+            name,
             {
                 MDMainEvents.STARTED,
                 MDMainEvents.INITIAL_INTEGRATE,
@@ -43,6 +43,7 @@ class VelocityVerlet(Integrator):
                 MDMainEvents.FINAL_INTEGRATE,
             },
             (0, 0, 0, 0),
+            time_step,
         )
 
     def on_started(self, engine):
@@ -60,8 +61,8 @@ class VelocityVerlet(Integrator):
                              replicas.
         """
         frame = engine.state.frame
-        frame["atoms", "momenta"] = (
-            frame["atoms", "momenta"] + 0.5 * frame["atoms", "forces"] * self.time_step
+        frame["predicts", "momenta"] = (
+            frame["predicts", "momenta"] + 0.5 * frame["predicts", "forces"] * self.time_step
         )
 
     def on_post_integrate(self, engine: Engine):
@@ -78,7 +79,7 @@ class VelocityVerlet(Integrator):
         frame = engine.state.frame
         frame[alias.R] = (
             frame[alias.R]
-            + self.time_step * frame["atoms", "momenta"] / frame["atoms", "masses"]
+            + self.time_step * frame["predicts", "momenta"] / frame["atoms", "mass"]
         )
 
     on_final_integrate = on_initial_integrate

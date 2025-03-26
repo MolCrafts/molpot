@@ -47,3 +47,5 @@ build-backend = "scikit_build_core.build"
 
 [tool.scikit-build]
 cmake.source-dir = "src/op"
+build.verbose = true
+logging.level = "INFO"

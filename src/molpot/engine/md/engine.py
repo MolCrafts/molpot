@@ -5,7 +5,8 @@ from ignite.engine import Engine, State
 from torch.nn import Module
 
 from ..base import MolpotEngine
-from .events import MDMainEvents, MDEvent, Potential
+from .event import MDMainEvents
+from .handler import MDHandler, Potential
 
 logger = mpot.get_logger("molpot.md")
 
@@ -88,6 +89,37 @@ class MDEngine(Engine):
         self.state = MDState()
 
 
+class HandlerManager:
+
+    def __init__(self):
+
+        self._handlers: dict[str, MDHandler] = {}
+
+    @property
+    def handlers(self):
+        return self._handlers
+
+    def add_handler(self, handler: MDHandler):
+        self._handlers[handler.name] = handler
+
+    def get_handlers_by_event(self, sort=True) -> dict[MDMainEvents, list[MDHandler]]:
+        events_handlers = {event: [] for event in MDMainEvents}
+        for handler in self._handlers.values():
+            for event in handler.events:
+                events_handlers[event].append(handler)
+        if sort:
+            for event, handlers in events_handlers.items():
+                handlers.sort(key=lambda x: x.priorities)
+        return events_handlers
+
+    def register_to_engine(self, engine: Engine):
+
+        events_handlers = self.get_handlers_by_event()
+        for event, handlers in events_handlers.items():
+            for handler in handlers:
+                engine.add_event_handler(event, handler.get_event_handler(event))
+
+
 class MoleculeDymanics(MolpotEngine):
 
     main: Engine
@@ -106,23 +138,16 @@ class MoleculeDymanics(MolpotEngine):
 
         self.add_engine("main", main_engine)
 
-    def add_handler(self, handler: MDEvent):
+        self._handlers = HandlerManager()
 
-        for event in handler.events:
-            self.main.add_event_handler(event, getattr(handler, f"on_{event.value}"))
+    def add_handler(self, handler: MDHandler):
 
-    def add_handlers(self, *handlers: MDEvent):
+        self._handlers.add_handler(handler)
 
-        events_handlers = {event: [] for event in MDMainEvents}
+    def add_handlers(self, *handlers: MDHandler):
+
         for handler in handlers:
-            for event, prio in zip(handler.events, handler.priorities):
-                events_handlers[event].append(
-                    (getattr(handler, f"on_{event.value}"), prio)
-                )
-        for event, handlers in events_handlers.items():
-            handlers.sort(key=lambda x: x[1])
-            for handler, _ in handlers:
-                self.main.add_event_handler(event, handler)
+            self.add_handler(handler)
 
     def set_potential(self, potential: Module):
 
@@ -130,14 +155,18 @@ class MoleculeDymanics(MolpotEngine):
 
     def run(self, frame, steps):
 
-        self.main.frame = frame
-
+        self._handlers.register_to_engine(self.main)
         self.main.state.frame = self._init_frame(frame)
+        self.main.state.thermo = self._init_thermo()
         self.main.run(_infinite_iterator(frame), max_epochs=steps, epoch_length=1)
 
     def _init_frame(self, frame):
 
-        frame["atoms", "forces"] = torch.zeros_like(frame["atoms", "R"])
-        frame["atoms", "momenta"] = torch.zeros_like(frame["atoms", "R"])
+        frame["predicts"] = {}
+        frame["predicts", "forces"] = torch.zeros_like(frame["atoms", "R"])
+        frame["predicts", "momenta"] = torch.zeros_like(frame["atoms", "R"])
 
         return frame
+
+    def _init_thermo(self):
+        return {}

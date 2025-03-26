@@ -4,4 +4,4 @@ from .cutoff import *
 from .equivariant import *
 from .pinet import *
 from .radial import *
-from .predict import *
+from .readout import *
