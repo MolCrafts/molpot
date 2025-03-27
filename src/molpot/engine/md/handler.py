@@ -15,7 +15,7 @@ class MDHandler(nn.modules.lazy.LazyModuleMixin, nn.Module):
         self.name = name
         self.events = events
         self.priorities = priorities
-        assert len(events) == len(priorities), "events and priorities should have the same length"
+        assert len(events) == len(priorities), f"{self} events and priorities should have the same length"
 
     def get_event_handler(self, event: EventEnum):
         return getattr(self, f"on_{event.name.lower()}", None)
@@ -25,6 +25,9 @@ class MDHandler(nn.modules.lazy.LazyModuleMixin, nn.Module):
 
     def on_completed(self, engine: Engine):
         ...
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__}: {self.name}>"
 
 
 class Potential(MDHandler):

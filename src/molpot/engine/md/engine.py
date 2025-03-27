@@ -94,6 +94,7 @@ class HandlerManager:
     def __init__(self):
 
         self._handlers: dict[str, MDHandler] = {}
+        self._registered: set = set()
 
     @property
     def handlers(self):
@@ -115,9 +116,20 @@ class HandlerManager:
     def register_to_engine(self, engine: Engine):
 
         events_handlers = self.get_handlers_by_event()
-        for event, handlers in events_handlers.items():
+        to_be_registered = set()
+        for event_enum, handlers in events_handlers.items():
             for handler in handlers:
-                engine.add_event_handler(event, handler.get_event_handler(event))
+                if handler.name in self._registered:
+                    continue
+                handler_event = next(
+                    (e for e in handler.events if e == event_enum), None
+                )  # event_enum is defined in MDMainEvents
+                # it's without every info
+                engine.add_event_handler(
+                    handler_event, handler.get_event_handler(event_enum)
+                )
+                to_be_registered.add(handler.name)
+        self._registered.update(to_be_registered)
 
 
 class MoleculeDymanics(MolpotEngine):
@@ -148,6 +160,10 @@ class MoleculeDymanics(MolpotEngine):
 
         for handler in handlers:
             self.add_handler(handler)
+
+    def get_handler(self, name: str) -> MDHandler:
+
+        return self._handlers.handlers[name]
 
     def set_potential(self, potential: Module):
 

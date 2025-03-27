@@ -1,24 +1,28 @@
-from molpot.md.handler import MDHandler
-from molpot.md.event import MDMainEvents
+from molpot.engine.md.handler import MDHandler
+from molpot.engine.md.event import MDMainEvents
 
 class Dump(MDHandler):
     
     _dump_instance = {}
 
+    def __new__(cls, name, *args, **kwargs):
+        ins = super().__new__(cls)
+        cls._dump_instance[name] = ins
+        return ins
+
     def __init__(self, name, event, priority):
         super().__init__(name, event, priority)
-        self._dump_instance[name] = self
 
-    @staticmethod
-    def get_dump(name):
-        return Dump._dump_instance[name]
+    @classmethod
+    def get_dump(cls, name):
+        return cls._dump_instance[name]
 
 
 class DumpFrame(Dump):
 
-    def __init__(self, name, every):
+    def __init__(self, name, every=1, before=None, after=None):
 
-        super().__init__(name, MDMainEvents.END_STEP(every=every), (5,))
+        super().__init__(name, (MDMainEvents.END_STEP(every=every, before=before, after=after), ), (5,))
         self._frames = []
 
     @property
