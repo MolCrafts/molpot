@@ -1,0 +1,51 @@
+[project]
+name = "molpot"
+version = "0.0.1"
+authors = [
+    { name = "Roy Kid", email = "lijichen365@gmail.com" }
+]
+description = "Molecular Potential Training Framework"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: BSD License",
+    "Development Status :: 1 - Planning",
+]
+
+dependencies = [
+    "torch",
+    "tensordict",
+    "torchdata",
+    "pytorch-ignite",
+    "rich",
+    "typer",
+    "pint"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pre-commit"
+]
+doc = [
+    "mkdocs",
+    "mkdocs-material"
+]
+
+[project.scripts]
+molpot = "molpot.cli.main:main_cli"
+
+
+[project.urls]
+Homepage = "https://github.com/MolCrafts/molpot"
+Issues = "https://github.com/MolCrafts/molpot/issues"
+
+[build-system]
+requires = ["scikit-build-core"]
+build-backend = "scikit_build_core.build"
+
+[tool.scikit-build]
+cmake.source-dir = "src/op"
+build.verbose = true
+logging.level = "INFO"

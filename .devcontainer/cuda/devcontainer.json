@@ -1,0 +1,44 @@
+{
+    "name": "MolPot - GPU",
+    "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+    "features": {
+        "ghcr.io/molcrafts/features/utils:latest": {},
+        "ghcr.io/devcontainers/features/nvidia-cuda:1": {
+            "installCudann": true,
+            "installCudannDev": true,
+            "installNvtx": true,
+            "installToolkit": true,
+            // Volta or later: cuDNN 9.3.0 with CUDA 12.5
+            // before Volta: cuDNN 9.3.0 with CUDA 11.8
+            "cudaVersion": "12.5",
+            "cudannVersion": "9.3.0"
+        },
+        "ghcr.io/molcrafts/features/molpot:latest": {
+            "enableCuda": true,
+            "pytorchCudaVersion": "cu124"
+        }
+    },
+    "hostRequirements": {
+        "gpu": "optional"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.black-formatter",
+                "ms-python.isort",
+                "njpwerner.autodocstring"
+            ]
+        }
+      },
+    "runArgs": [
+        "--gpus",
+        "all"
+    ],
+    "remoteEnv": {
+        "PATH": "${containerEnv:PATH}:/usr/local/cuda/bin",
+        "LD_LIBRARY_PATH": "$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64",
+        "XLA_FLAGS": "--xla_gpu_cuda_data_dir=/usr/local/cuda"
+    },
+    "remoteUser": "root"
+}

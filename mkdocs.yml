@@ -1,0 +1,65 @@
+site_name: MolPot
+repo_name: molcrafts/molpot
+repo_url: https://github.com/MolCrafts/molpot
+
+copyright: Copyright &copy; 2024 - 2025 Jichen Li
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: cyan
+      toggle:
+        icon: material/brightness-7 
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.code.annotate
+
+nav:
+  - Home: index.md
+  - Start:
+      - Overview: start/index.md
+      - Model: start/model.md
+      - Data: start/td.md
+      - Pipeline: start/pipeline.md
+      - Engine: start/engine.md
+  - API Reference: api.md
+  - Readmap: roadmap.md
+  - Contributing: contributing.md
+  - About: about.md
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - footnotes
+  - md_in_html
+  - meta
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.blocks.caption
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/extra.js

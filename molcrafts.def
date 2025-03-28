@@ -1,0 +1,27 @@
+Bootstrap: docker
+From: ghcr.io/molcrafts/molcrafts-dev:latest-gpu  # or latest-cpu
+Stage: build
+
+%environment
+    export PATH=$PATH:/usr/local/cuda/bin
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64
+    export XLA_FLAGS=--xla_gpu_cuda_data_dir=/usr/local/cuda
+
+%post
+
+    apt update
+    apt install curl -y
+    curl -fsSL https://code-server.dev/install.sh | sh
+
+    pip install ipykernel tensorboard
+    pip install pytest
+
+    # if editable mode
+    # pip uninstall -y molpot
+
+%labels
+    Author lijichen365@gmail.com
+    Version v0.0.1
+
+%help
+    This is a dev container used to develop locally
