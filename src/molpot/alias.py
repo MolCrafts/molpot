@@ -109,6 +109,7 @@ atom_offset = atoms_ns.set("atomistic_offset", "atomistic offset", torch.int64)
 atom_type = atoms_ns.set("atom_type", "atom types", str)
 atom_type_id = atoms_ns.set("atom_type_id", "atom type id", int)
 atom_mass = atoms_ns.set("mass", "atom mass", float)
+atom_momentum = atoms_ns.set("momentum", "atom momentum", float, shape=(None, 3))
 
 # mask section
 molid = atoms_ns.set("molid", "molecule index", int)

@@ -1,7 +1,7 @@
 from ignite.engine import EventEnum, Events
 
 
-class MDMainEvents(EventEnum):
+class MDEvents(EventEnum):
     """
     timestep execution events. The protocol is adapted from: https://docs.lammps.org/Developer_flow.html
     """

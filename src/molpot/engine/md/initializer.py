@@ -1,4 +1,4 @@
-from .handler import MDHandler, MDMainEvents, Events
+from .handler import MDHandler, MDEvents, Events
 
 import torch
 

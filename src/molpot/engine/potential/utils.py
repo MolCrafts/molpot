@@ -1,11 +1,9 @@
-from collections.abc import Mapping
-from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Optional, Tuple, Union
 
 import torch
-
+from ignite.engine import _check_arg
 from ignite.engine.deterministic import DeterministicEngine
 from ignite.engine.engine import Engine
-from ignite.engine import _check_arg
 from tensordict import TensorDict
 
 def model_transform(td: TensorDict) -> Tuple[TensorDict, TensorDict]:
@@ -13,56 +11,56 @@ def model_transform(td: TensorDict) -> Tuple[TensorDict, TensorDict]:
 
 def supervised_training_step(
     model: torch.nn.Module,
-    optimizer: torch.optim.Optimizer,
-    loss_fn: Union[Callable[[Any, Any], torch.Tensor], torch.nn.Module],
+    optimizer: torch.optim.Optimizer | None,
+    loss_fn: Union[Callable[[TensorDict, TensorDict], torch.Tensor], torch.nn.Module],
     gradient_accumulation_steps: int = 1,
     clip_grad_norm: Optional[float] = None,
 ) -> Callable:
-    """Factory function for supervised training.
+    """Creates and returns a function that performs a single training step in a supervised learning setting.
+    The returned function is designed to be used as an update function with an ignite Engine.
 
-    Args:
-        model: the model to train.
-        optimizer: the optimizer to use.
-        loss_fn: the loss function that receives `y_pred` and `y`, and returns the loss as a tensor.
-        device: device type specification (default: None).
-            Applies to batches after starting the engine. Model *will not* be moved.
-            Device can be CPU, GPU.
-        non_blocking: if True and this copy is between CPU and GPU, the copy may occur asynchronously
-            with respect to the host. For other cases, this argument has no effect.
-        prepare_batch: function that receives `batch`, `device`, `non_blocking` and outputs
-            tuple of tensors `(batch_x, batch_y)`.
-        model_transform: function that receives the output from the model and convert it into the form as required
-            by the loss function
-        output_transform: function that receives 'x', 'y', 'y_pred', 'loss' and returns value
-            to be assigned to engine's state.output after each iteration. Default is returning `loss.item()`.
-        gradient_accumulation_steps: Number of steps the gradients should be accumulated across.
-            (default: 1 (means no gradient accumulation))
-        model_fn: the model function that receives `model` and `x`, and returns `y_pred`.
+    Parameters
+    ----------
+    model : torch.nn.Module
+        The neural network model to be trained.
+    optimizer : torch.optim.Optimizer | None
+        The optimizer to use for training. If None, the returned update function
+        will only perform a forward pass without parameter updates.
+    loss_fn : Union[Callable[[TensorDict, TensorDict], torch.Tensor], torch.nn.Module]
+        The loss function to compute model loss. Takes the outputs of model_transform(td)
+        as arguments and returns a tensor.
+    gradient_accumulation_steps : int, default=1
+        Number of steps to accumulate gradients before performing an optimizer step.
+        When set to 1 (default), no gradient accumulation is performed.
+    clip_grad_norm : Optional[float], default=None
+        Maximum norm for gradient clipping. None means no gradient clipping.
 
-    Returns:
-        Callable: update function.
+    Returns
+    -------
+    Callable
+        A function that takes an engine and a tensordict as inputs and returns a tensordict
+        with updated values. This function handles forward pass, loss calculation, and when
+        optimizer is not None, gradient computation and parameter updates.
 
-    Examples:
-        .. code-block:: python
+    Raises
+    ------
+    ValueError
+        If gradient_accumulation_steps is not a positive integer.
 
-            from ignite.engine import Engine, supervised_training_step
+    Notes
+    -----
+    The returned update function expects the input TensorDict to be compatible with the model.
+    It will move the TensorDict to the model's device before processing.
 
-            model = ...
-            optimizer = ...
-            loss_fn = ...
-
-            update_fn = supervised_training_step(model, optimizer, loss_fn, 'cuda')
-            trainer = Engine(update_fn)
-
-    .. versionadded:: 0.4.5
-    .. versionchanged:: 0.4.7
-        Added Gradient Accumulation.
-    .. versionchanged:: 0.4.11
-        Added `model_transform` to transform model's output
-    .. versionchanged:: 0.4.13
-        Added `model_fn` to customize model's application on the sample
-    .. versionchanged:: 0.5.0
-        Added support for ``mps`` device
+    When optimizer is provided, the returned function:
+    1. Zeroes gradients at appropriate intervals based on gradient_accumulation_steps
+    2. Performs forward pass via model(td)
+    3. Calculates loss using the provided loss_fn
+    4. Scales loss if using gradient accumulation
+    5. Applies gradient clipping if specified
+    6. Performs backward pass
+    7. Updates parameters at appropriate intervals based on gradient_accumulation_steps
+    8. Stores the loss in td["loss"]
     """
 
     if gradient_accumulation_steps <= 0:
@@ -71,26 +69,35 @@ def supervised_training_step(
             "No gradient accumulation if the value set to one (default)."
         )
 
-    def update(
-        engine: Engine, td: TensorDict
-    ) -> Union[Any, Tuple[torch.Tensor]]:
-        if (engine.state.iteration - 1) % gradient_accumulation_steps == 0:
-            optimizer.zero_grad()
-        model.train()
-        td = td.to(model.device)
-        td = model(td)  # https://pytorch.org/tensordict/stable/tutorials/tensordict_module.html#do-s-and-don-t-with-tensordictmodule
-        loss = loss_fn(
-            *model_transform(td)
-        )
-        if gradient_accumulation_steps > 1:
-            loss = loss / gradient_accumulation_steps
-        if clip_grad_norm is not None:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
-        loss.backward()
-        td["loss"] = loss
-        if engine.state.iteration % gradient_accumulation_steps == 0:
-            optimizer.step()
-        return td
+    if optimizer is None:
+        def update(engine: Engine, td: TensorDict) -> Union[Any, Tuple[torch.Tensor]]:
+            model.train()
+            td = td.to(model.device)
+            td = model(td)
+            return td
+        return update
+    else:
+        def update(
+            engine: Engine, td: TensorDict
+        ) -> Union[Any, Tuple[torch.Tensor]]:
+            if (engine.state.iteration - 1) % gradient_accumulation_steps == 0:
+                optimizer.zero_grad()
+            model.train()
+            td = td.to(model.device)
+            td = model(td)  # https://pytorch.org/tensordict/stable/tutorials/tensordict_module.html#do-s-and-don-t-with-tensordictmodule
+            loss = loss_fn(
+                *model_transform(td)
+            )
+            if gradient_accumulation_steps > 1:
+                loss = loss / gradient_accumulation_steps
+            if clip_grad_norm is not None:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
+            loss.backward()
+            td["loss"] = loss
+            # TODO: engine.state.loss = loss?
+            if engine.state.iteration % gradient_accumulation_steps == 0:
+                optimizer.step()
+            return td
 
     return update
 
@@ -98,7 +105,7 @@ def supervised_training_step(
 def create_supervised_trainer(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
-    loss_fn: Union[Callable[[Any, Any], torch.Tensor], torch.nn.Module],
+    loss_fn: Union[Callable[[TensorDict, TensorDict], torch.Tensor], torch.nn.Module],
     device: Optional[Union[str, torch.device]] = None,
     deterministic: bool = False,
     amp_mode: Optional[str] = None,
@@ -106,180 +113,42 @@ def create_supervised_trainer(
     gradient_accumulation_steps: int = 1,
     clip_grad_norm: Optional[float] = None,
 ) -> Engine:
-    """Factory function for creating a trainer for supervised models.
+    """
+    Creates a supervised training engine for a given model, optimizer, and loss function.
 
     Args:
-        model: the model to train.
-        optimizer: the optimizer to use.
-        loss_fn: the loss function that receives `y_pred` and `y`, and returns the loss as a tensor.
-        device: device type specification (default: None).
-            Applies to batches after starting the engine. Model *will not* be moved.
-            Device can be CPU, GPU or TPU.
-        non_blocking: if True and this copy is between CPU and GPU, the copy may occur asynchronously
-            with respect to the host. For other cases, this argument has no effect.
-        prepare_batch: function that receives `batch`, `device`, `non_blocking` and outputs
-            tuple of tensors `(batch_x, batch_y)`.
-        model_transform: function that receives the output from the model and convert it into the form as required
-            by the loss function
-        output_transform: function that receives 'x', 'y', 'y_pred', 'loss' and returns value
-            to be assigned to engine's state.output after each iteration. Default is returning `loss.item()`.
-        deterministic: if True, returns deterministic engine of type
-            :class:`~ignite.engine.deterministic.DeterministicEngine`, otherwise :class:`~ignite.engine.engine.Engine`
-            (default: False).
-        amp_mode: can be ``amp`` or ``apex``, model and optimizer will be casted to float16 using
-            `torch.cuda.amp <https://pytorch.org/docs/stable/amp.html>`_ for ``amp`` and
-            using `apex <https://nvidia.github.io/apex>`_ for ``apex``. (default: None)
-        scaler: GradScaler instance for gradient scaling if `torch>=1.6.0`
-            and ``amp_mode`` is ``amp``. If ``amp_mode`` is ``apex``, this argument will be ignored.
-            If True, will create default GradScaler. If GradScaler instance is passed, it will be used instead.
-            (default: False)
-        gradient_accumulation_steps: Number of steps the gradients should be accumulated across.
-            (default: 1 (means no gradient accumulation))
-        model_fn: the model function that receives `model` and `x`, and returns `y_pred`.
+        model (torch.nn.Module): The model to be trained.
+        optimizer (torch.optim.Optimizer): The optimizer used for training.
+        loss_fn (Union[Callable[[TensorDict, TensorDict], torch.Tensor], torch.nn.Module]): 
+            The loss function to compute the loss between predictions and targets.
+        device (Optional[Union[str, torch.device]]): The device to run the training on. 
+            Can be a string (e.g., "cpu", "cuda") or a `torch.device` object. Defaults to None.
+        deterministic (bool): If True, uses a deterministic engine for training. Defaults to False.
+        amp_mode (Optional[str]): The automatic mixed precision (AMP) mode to use. 
+            Can be "amp" or "apex". Defaults to None.
+        scaler (Union[bool, "torch.cuda.amp.GradScaler"]): If True, enables AMP with a GradScaler. 
+            Can also pass a custom GradScaler instance. Defaults to False.
+        gradient_accumulation_steps (int): Number of steps to accumulate gradients before updating 
+            the model parameters. Defaults to 1.
+        clip_grad_norm (Optional[float]): Maximum norm of gradients for gradient clipping. 
+            If None, gradient clipping is not applied. Defaults to None.
 
     Returns:
-        a trainer engine with supervised update function.
-
-    Examples:
-
-        Create a trainer
-
-        .. code-block:: python
-
-            from ignite.engine import create_supervised_trainer
-            from ignite.utils import convert_tensor
-            from ignite.handlers.tqdm_logger import ProgressBar
-
-            model = ...
-            loss = ...
-            optimizer = ...
-            dataloader = ...
-
-            def prepare_batch_fn(batch, device, non_blocking):
-                x = ...  # get x from batch
-                y = ...  # get y from batch
-
-                # return a tuple of (x, y) that can be directly runned as
-                # `loss_fn(model(x), y)`
-                return (
-                    convert_tensor(x, device, non_blocking),
-                    convert_tensor(y, device, non_blocking)
-                )
-
-            def output_transform_fn(x, y, y_pred, loss):
-                # return only the loss is actually the default behavior for
-                # trainer engine, but you can return anything you want
-                return loss.item()
-
-            trainer = create_supervised_trainer(
-                model,
-                optimizer,
-                loss,
-                prepare_batch=prepare_batch_fn,
-                output_transform=output_transform_fn
-            )
-
-            pbar = ProgressBar()
-            pbar.attach(trainer, output_transform=lambda x: {"loss": x})
-
-            trainer.run(dataloader, max_epochs=5)
-
-    Note:
-        If ``scaler`` is True, GradScaler instance will be created internally and trainer state has attribute named
-        ``scaler`` for that instance and can be used for saving and loading.
-
-    Note:
-        `engine.state.output` for this engine is defined by `output_transform` parameter and is the loss
-        of the processed batch by default.
-
-    .. warning::
-        The internal use of `device` has changed.
-        `device` will now *only* be used to move the input data to the correct device.
-        The `model` should be moved by the user before creating an optimizer.
-        For more information see:
-
-        - `PyTorch Documentation <https://pytorch.org/docs/stable/optim.html#constructing-it>`_
-        - `PyTorch's Explanation <https://github.com/pytorch/pytorch/issues/7844#issuecomment-503713840>`_
-
-    .. warning::
-        If ``amp_mode='apex'`` , the model(s) and optimizer(s) must be initialized beforehand
-        since ``amp.initialize`` should be called after you have finished constructing your model(s)
-        and optimizer(s), but before you send your model through any DistributedDataParallel wrapper.
-
-        See more: https://nvidia.github.io/apex/amp.html#module-apex.amp
-
-    .. versionchanged:: 0.4.5
-
-        - Added ``amp_mode`` argument for automatic mixed precision.
-        - Added ``scaler`` argument for gradient scaling.
-
-    .. versionchanged:: 0.4.7
-        Added Gradient Accumulation argument for all supervised training methods.
-    .. versionchanged:: 0.4.11
-        Added ``model_transform`` to transform model's output
-    .. versionchanged:: 0.4.13
-        Added `model_fn` to customize model's application on the sample
-    .. versionchanged:: 0.5.0
-        Added support for ``mps`` device
+        Engine: An Ignite Engine object that runs the supervised training process.
     """
-
     device_type = device.type if isinstance(device, torch.device) else device
     on_tpu = "xla" in device_type if device_type is not None else False
     on_mps = "mps" in device_type if device_type is not None else False
     mode, _scaler = _check_arg(on_tpu, on_mps, amp_mode, scaler)
 
-    if mode == "amp":
-        raise NotImplementedError(
-            "Automatic Mixed Precision (AMP) is not supported in this version of molpot. "
-            "Please use torch.cuda.amp or apex for AMP."
-        )
-        # _update = supervised_training_step_amp(
-        #     model,
-        #     optimizer,
-        #     loss_fn,
-        #     device,
-        #     non_blocking,
-        #     prepare_batch,
-        #     model_transform,
-        #     output_transform,
-        #     _scaler,
-        #     gradient_accumulation_steps,
-        #     model_fn,
-        # )
-    # elif mode == "apex":
-    #     _update = supervised_training_step_apex(
-    #         model,
-    #         optimizer,
-    #         loss_fn,
-    #         device,
-    #         non_blocking,
-    #         prepare_batch,
-    #         model_transform,
-    #         output_transform,
-    #         gradient_accumulation_steps,
-    #         model_fn,
-    #     )
-    # elif mode == "tpu":
-    #     _update = supervised_training_step_tpu(
-    #         model,
-    #         optimizer,
-    #         loss_fn,
-    #         device,
-    #         non_blocking,
-    #         prepare_batch,
-    #         model_transform,
-    #         output_transform,
-    #         gradient_accumulation_steps,
-    #         model_fn,
-    #     )
-    else:
-        _update = supervised_training_step(
-            model,
-            optimizer,
-            loss_fn,
-            gradient_accumulation_steps,
-            clip_grad_norm
-        )
+
+    _update = supervised_training_step(
+        model,
+        optimizer,
+        loss_fn,
+        gradient_accumulation_steps,
+        clip_grad_norm
+    )
 
     trainer = Engine(_update) if not deterministic else DeterministicEngine(_update)
     if _scaler and scaler and isinstance(scaler, bool):
@@ -332,7 +201,7 @@ def supervised_evaluation_step(
 
     def evaluate_step(
         engine: Engine, td: TensorDict
-    ) -> Union[Any, Tuple[torch.Tensor]]:
+    ) -> Union[TensorDict, Tuple[torch.Tensor]]:
         model.eval()
         td = td.to(model.device)
         with grad_context():

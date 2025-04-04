@@ -49,3 +49,7 @@ build-backend = "scikit_build_core.build"
 cmake.source-dir = "src/op"
 build.verbose = true
 logging.level = "INFO"
+
+[[tool.scikit-build.overrides]]
+if.any.env.BUILD_DOCS = true
+wheel.cmake = false

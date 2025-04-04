@@ -25,7 +25,7 @@ class Langevin(Thermostat):
 
     def __init__(self, temperature: float, time_constant: float):
         
-        super().__init__(temperature=temperature, time_constant=time_constant)
+        super().__init__("Langevin", temperature=temperature, time_constant=time_constant)
 
         self.register_buffer("thermostat_factor", UninitializedParameter())
         self.register_buffer("c1", UninitializedParameter())
@@ -49,16 +49,15 @@ class Langevin(Thermostat):
         c1 = torch.exp(-0.5 * engine.integrator.time_step * gamma)
         c2 = torch.sqrt(1 - c1**2)
 
-        self.c1 = c1[:, None, None]
-        self.c2 = c2[:, None, None]
+        self.c1 = c1[:, None]
+        self.c2 = c2[:, None]
 
         # Get mass and temperature factors
         self.thermostat_factor = torch.sqrt(
-            engine.frame[alias.atom_mass] * unit.kB * self.temperature
+            engine.state.frame[alias.atom_mass] * unit.kB * self.temperature
         )
 
     def _apply_thermostat(self, frame):
-        
         momenta = frame["atoms", "momenta"]
         thermostat_noise = torch.randn_like(momenta)
         frame["atoms", "momenta"] = (

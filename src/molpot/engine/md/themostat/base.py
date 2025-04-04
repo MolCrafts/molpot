@@ -1,33 +1,49 @@
 import torch
-from ..event import MDMainEvents
+from ..event import MDEvents
 from ..handler import MDHandler
 from .utils import YSWeights
 import molpot as mpot
 from torch.nn.parameter import UninitializedParameter
+from torch.nn import Module
+from torch.nn.modules.lazy import LazyModuleMixin
 
 config = mpot.get_config()
 
 kB = 1
 
-class Thermostat(MDHandler):
 
-    def __init__(self, temperature: float, time_constant: float):
-        super().__init__({MDMainEvents.STARTED, MDMainEvents.START_STEP, MDMainEvents.END_STEP}, (0, 0, 0))
+class Thermostat(MDHandler, Module, LazyModuleMixin):
+
+    def __init__(self, name, temperature: float, time_constant: float):
+        super().__init__(
+            name, {MDEvents.STARTED, MDEvents.START_STEP, MDEvents.END_STEP}, (1, 1, 1)
+        )
+        Module.__init__(self)
+        LazyModuleMixin.__init__(self)
         self.register_buffer("temperature", torch.tensor(temperature))
         self.register_buffer("time_constant", torch.tensor(time_constant))
 
     def on_start_step(self, engine):
-        self._apply_thermostat(engine.frame)
+        self._apply_thermostat(engine.state.frame)
 
     def on_end_step(self, engine):
-        self._apply_thermostat(engine.frame)
+        self._apply_thermostat(engine.state.frame)
 
     def _apply_thermostat(self, frame):
         raise NotImplementedError
 
+
 class NoseHoverThermostat(Thermostat):
 
-    def __init__(self, temperature: float, time_constant: float, chain_length: int = 3, massive: bool = False, multi_step: int = 2, integration_order: int = 3):
+    def __init__(
+        self,
+        temperature: float,
+        time_constant: float,
+        chain_length: int = 3,
+        massive: bool = False,
+        multi_step: int = 2,
+        integration_order: int = 3,
+    ):
         super().__init__(temperature=temperature, time_constant=time_constant)
 
         self.register_buffer("chain_length", torch.tensor(chain_length))
@@ -49,10 +65,7 @@ class NoseHoverThermostat(Thermostat):
 
     def on_started(self, engine):
         frame = engine.frame
-        integration_weights = (
-            YSWeights()
-            .get_weights(self.integration_order.item())
-        )
+        integration_weights = YSWeights().get_weights(self.integration_order.item())
 
         self.time_step = (
             engine.integrator.time_step * integration_weights / self.multi_step
@@ -160,7 +173,7 @@ class NoseHoverThermostat(Thermostat):
                 self.velocities[..., -1] += 0.25 * self.forces[..., -1] * time_step
 
         return scaling_factor
-    
+
     def _compute_kinetic_energy(self, frame):
         """
         Routine for computing the kinetic energy of the innermost NH thermostats based on the momenta and masses of the
@@ -181,7 +194,7 @@ class NoseHoverThermostat(Thermostat):
             return kinetic_energy
         else:
             return 2.0 * frame.kinetic_energy
-        
+
     def _apply_thermostat(self, engine):
         """
         Propagate the NHC thermostat, compute the corresponding scaling factor and apply it to the momenta of the

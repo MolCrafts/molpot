@@ -2,7 +2,7 @@ import torch
 from molpot import alias
 from molpot_op import get_neighbor_pairs
 from ignite.engine import Engine
-from .event import MDMainEvents
+from .event import MDEvents
 from .handler import MDHandler
 
 
@@ -25,7 +25,7 @@ class NeighborList(MDHandler):
             cutoff (float): Cutoff radius.
             cutoff_skin (float): Buffer region. Atoms can move this much unitil neighbor list needs to be recomputed.
         """
-        super().__init__({MDMainEvents.NEIGHBOR}, (0,))
+        super().__init__({MDEvents.NEIGHBOR}, (0,))
         self.cutoff = cutoff
         self.cutoff_skin = cutoff_skin
         self.cutoff_full = cutoff + cutoff_skin
