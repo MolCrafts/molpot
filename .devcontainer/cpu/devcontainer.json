@@ -1,5 +1,5 @@
 {
-    "name": "MolCrafts - CPU",
+    "name": "molpot - CPU",
     "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
     "features": {
         "ghcr.io/molcrafts/features/utils:latest": {},
