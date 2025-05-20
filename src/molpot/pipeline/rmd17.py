@@ -9,12 +9,11 @@ import torch
 
 import molpot as mpot
 from molpot import alias
-from .dataset import MapStyleDataset
 
 logger = mpot.get_logger("molpot.dataset")
 config = mpot.get_config()
 
-class rMD17(MapStyleDataset):
+class rMD17:
 
     atomrefs = {
         "energy": torch.tensor(
@@ -62,11 +61,16 @@ class rMD17(MapStyleDataset):
         ],
         device: str = "cpu"
     ):
-        super().__init__(
-            name="rmd17",
-            save_dir=save_dir,
-            device=device,
-        )
+        from .dataset import MapStyleDataset
+        
+        self.name = "rmd17"
+        self.save_dir = save_dir
+        self.device = device
+        
+        if not issubclass(self.__class__, MapStyleDataset):
+            self.__class__ = type('rMD17', (self.__class__, MapStyleDataset), {})
+            MapStyleDataset.__init__(self, self.name, save_dir=self.save_dir, device=self.device)
+            
         self.labels.set("energy", "total energy", float, "kcal/mol", (None, 1))
         self.labels.set("forces", "all forces", float, "kcal/mol/A", (None, 3))
 
