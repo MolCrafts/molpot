@@ -10,22 +10,22 @@ class FakeFrame:
 
 class FakeLoader:
     def __init__(self, save_dir):
-        # przyjmuje save_dir, ale nic z nim nie robi
+        # accepts save_dir but does nothing with it
         pass
 
     def load(self):
-        # zwracamy 3 fikcyjne klatki
+        # returns 3 fake frames
         return [FakeFrame(i) for i in range(3)]
 
 @pytest.fixture(autouse=True)
 def patch_loader_and_config(monkeypatch):
-    # 1) Zamień config.processes na pusty dict, by __init__ nie wywaliło błędu
+    # 1) Replace config.processes with empty dict to avoid errors in __init__
     monkeypatch.setattr(config, 'processes', {}, raising=False)
-    # 2) Podmień loader dla 'dummy' na FakeLoader
+    # 2) Replace loader for 'dummy' with FakeLoader
     monkeypatch.setitem(DATASET_LOADER_MAP, 'dummy', FakeLoader)
-    # 3) Dodaj brakującą metodę get() do FakeLoader (używaną w prepare())
+    # 3) Add missing get() method to FakeLoader (used in prepare())
     monkeypatch.setattr(FakeLoader, 'get', classmethod(lambda cls: cls), raising=False)
-    # 4) Zamień download() na no-op, by nie szukało config.urls
+    # 4) Replace download() with no-op so it doesn't look for config.urls
     monkeypatch.setattr(Dataset, "download", lambda self: None, raising=False)
     yield
 

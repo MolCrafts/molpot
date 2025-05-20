@@ -50,7 +50,7 @@ class Dataset(torch.utils.data.Dataset):
 
        
         self.processes = ProcessManager()
-        #secure downloading proces form configuration 
+        #secure downloading process from configuration 
         processes_cfg = getattr(config, "processes", None)
         if processes_cfg is None:
             raise logger.info(f"No `processes` section in config, skipping processing for dataset `{name}`")
@@ -75,11 +75,11 @@ class Dataset(torch.utils.data.Dataset):
 
     def prepare(self) -> int: 
         """
-        Prepering frame list
+        Preparing frame list
         - download
         - load file by exact loader
-        - full fill self.frames
-        retrun quantity of examples loaded
+        - fill self.frames
+        returns quantity of examples loaded
         """
         self.download()
         loader_cls = DATASET_LOADER_MAP[self.name].get()
@@ -92,7 +92,7 @@ class Dataset(torch.utils.data.Dataset):
        
 
     def download(self): 
-        #Download raw data and saves in self.save_dir if file already egsist does nothing
+        #Download raw data and saves in self.save_dir if file already exists does nothing
         url = config.urls.get(self.name)
         if not url:
             logger.info(f"No URL found for dataset {self.name}")

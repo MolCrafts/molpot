@@ -2,7 +2,7 @@ import molpot as mpot
 from ..engine.md import MoleculeDymanics
 
 
-class MDDataset:  # Usuń dziedziczenie Dataset na razie
+class MDDataset:  # Remove Dataset inheritance for now
     
     DUMP_HANDLER_NAME = "dump_frame"
 
@@ -10,12 +10,12 @@ class MDDataset:  # Usuń dziedziczenie Dataset na razie
         self,
         engine: MoleculeDymanics,
     ):
-        from .dataset import Dataset  # Import lokalny, aby uniknąć cyklicznego importu
+        from .dataset import Dataset  # Local import to avoid circular import
         self.engine = engine
         self.frames = []
-        # Upewniamy się, że klasa faktycznie dziedziczy po Dataset
+        # Make sure the class actually inherits from Dataset
         if not issubclass(self.__class__, Dataset):
-            # Podczas pierwszego ładowania dynamicznie modyfikujemy klasę
+            # During the first load, dynamically modify the class
             self.__class__ = type('MDDataset', (self.__class__, Dataset), {})
 
     def reset_dump(self, every: int, after: int):
