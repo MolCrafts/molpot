@@ -203,6 +203,35 @@ class ResUpdate(nn.Module):
 
 
 class PiNet2(Potential):
+    """
+    PiNet2: A neural network-based potential model for modeling interactions in molecular systems.
+    Attributes:
+        in_keys (list): Input keys required for the model, including atomic numbers, pairwise differences, and indices.
+        out_keys (list): Output keys produced by the model, including processed features and interaction terms.
+    Args:
+        depth (int): Number of graph convolution layers in the model.
+        basis_fn (Callable | None): Basis function used for feature transformation.
+        cutoff_fn (Callable | None): Cutoff function applied to pairwise distances.
+        pp_nodes (list[int]): Number of nodes in pair-pair interaction layers.
+        pi_nodes (list[int]): Number of nodes in pair-atom interaction layers.
+        ii_nodes (list[int]): Number of nodes in atom-atom interaction layers.
+        activation (Callable | None): Activation function used in the network (default: `torch.tanh`).
+        max_atomtypes (int): Maximum number of atom types supported by the embedding layer.
+    Methods:
+        forward(Z, pair_diff, pair_i, pair_j):
+            Performs a forward pass through the PiNet2 model.
+            Args:
+                Z (torch.Tensor): Atomic numbers of the atoms in the system.
+                pair_diff (torch.Tensor): Pairwise differences between atomic positions.
+                pair_i (torch.Tensor): Indices of the first atoms in the pairs.
+                pair_j (torch.Tensor): Indices of the second atoms in the pairs.
+            Returns:
+                tuple: Processed features and interaction terms (p1, p3t1, i1, i3).
+        cite():
+            Returns the citation for the PiNet2 model.
+            Returns:
+                str: Citation string for the PiNet2 model.
+    """
 
     in_keys = [
         alias.Z,

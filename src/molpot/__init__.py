@@ -6,7 +6,7 @@ from .config import get_config, Config
 from .alias import Alias, NameSpace
 from .utils import *
 
-from . import alias, inspector, process, potential
+from . import alias, inspector, potential
 from .engine import md, potential
 from .engine.potential import PotentialTrainer
 from .engine.md import MoleculeDymanics

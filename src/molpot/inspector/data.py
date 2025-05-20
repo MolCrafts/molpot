@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from rich.console import Console
 from rich.table import Column, Table
-from molpot.pipeline.dataset import Dataset
+from ..pipeline.dataset import Dataset
 
 class DataInspector:
 

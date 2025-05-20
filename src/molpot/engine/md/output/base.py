@@ -1,8 +1,10 @@
-from typing import Callable
-from molpot.engine.md.event import MDMainEvents
+from molpot.engine.md.event import MDEvents
 from molpot.engine.md.handler import MDHandler
-from torch.nn import Module
 from molpot import alias
+
+from rich.live import Live
+from rich.table import Table
+
 
 
 class Thermo(MDHandler):
@@ -17,7 +19,7 @@ class Thermo(MDHandler):
     }
 
     def __init__(self, every: int, *keywords: str):
-        super().__init__("thermo", {MDMainEvents.END_STEP(every=every)}, (0,))
+        super().__init__("thermo", {MDEvents.END_STEP(every=every)}, (0,))
         self.keywords = keywords
         self._kernels = [Thermo.kernels[key] for key in keywords]
 
@@ -35,11 +37,21 @@ class Thermo(MDHandler):
 
 class ThermoOutput(MDHandler):
 
-    def __init__(self, every: int, output_handler: Callable = print):
-        super().__init__("thermo_output", {MDMainEvents.END_STEP(every=every)}, (0,))
-        self.output_handler = output_handler
+    def __init__(self, every: int, *keys: str):
+        super().__init__("thermo_output", {MDEvents.END_STEP(every=every)}, (0, ))
+
+        self.table = Table()
+        for key in keys:
+            self.table.add_column(key, justify="right", style="cyan", no_wrap=True)
+        self.live = Live(self.table, auto_refresh=False)
 
     def on_end_step(self, engine):
         state = engine.state
-        self.output_handler(state.thermo)
+        self.table.add_row(
+            *[f"{state.thermo[key.header]:.3f}" for key in self.table.columns],
+        )
+        self.live.update(
+            self.table, refresh=True
+        )
         return engine
+    

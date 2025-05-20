@@ -1,8 +1,9 @@
 from molpot.engine.md.handler import MDHandler
-from molpot.engine.md.event import MDMainEvents
+from molpot.engine.md.event import MDEvents
+
 
 class Dump(MDHandler):
-    
+
     _dump_instance = {}
 
     def __new__(cls, name, *args, **kwargs):
@@ -20,9 +21,12 @@ class Dump(MDHandler):
 
 class DumpFrame(Dump):
 
-    def __init__(self, name, every=1, before=None, after=None):
+    def __init__(self, name, every=1, before=None, after=None, label_thermo=False):
 
-        super().__init__(name, (MDMainEvents.END_STEP(every=every, before=before, after=after), ), (5,))
+        super().__init__(
+            name, (MDEvents.END_STEP(every=every, before=before, after=after),), (5,)
+        )
+        self.label_thermo = label_thermo
         self._frames = []
 
     @property
@@ -30,5 +34,8 @@ class DumpFrame(Dump):
         return self._frames
 
     def on_end_step(self, engine):
-        self._frames.append(engine.state.frame)
+        frame = engine.state.frame
+        if self.label_thermo:
+            frame["thermo"] = engine.state.thermo
+        self._frames.append(engine.state.frame.copy())
         return engine

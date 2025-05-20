@@ -3,44 +3,73 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Union
 
 import torch
-from ignite.engine.events import Events, State
 from ignite.handlers import ProgressBar, TensorboardLogger, global_step_from_engine
 from ignite.metrics import EpochWise, Metric, MetricUsage
 
 import molpot as mpot
-
+from ignite.engine import Events, State
 from ..base import MolpotEngine
 from .utils import create_supervised_evaluator, create_supervised_trainer
 from ignite.engine import Engine
 
 logger = mpot.get_logger("molpot.engine")
+config = mpot.get_config()
 
 
 class PotentialTrainer(MolpotEngine):
+    """
+    PotentialTrainer is a specialized engine for training and evaluating potential models.
+
+    This class provides a comprehensive framework for training potential energy models
+    with PyTorch, using the Ignite engine underneath. It manages the training loop,
+    evaluation, checkpointing, metrics collection, and performance monitoring.
+
+    Attributes:
+        trainer (Engine): The Ignite engine for training.
+        evaluator (Engine): The Ignite engine for evaluation.
+        events (Events): Event types supported by the engines.
+        model (torch.nn.Module): The model being trained.
+        loss_fn (Callable or torch.nn.Module): The loss function used for training.
+        optimizer (torch.optim.Optimizer): The optimizer for parameter updates.
+        loggers (dict): Dictionary of attached loggers.
+        
+    Methods:
+        compile(): Compiles the model for optimized execution.
+        add_lr_scheduler(scheduler): Adds a learning rate scheduler.
+        add_lw_scheduler(scheduler): Adds a weight scheduler.
+        add_checkpoint(save_dir, ...): Sets up model checkpointing.
+        run(train_data, ...): Executes the training loop.
+        set_metric_usage(**engine_metric): Sets how metrics are used across engines.
+        add_metric(name, metric_factory_fn, engine): Adds a metric to track.
+        enable_progressbar(engine): Enables a progress bar for the specified engine.
+        attach_tensorboard(log_dir): Sets up TensorBoard logging.
+        enable_dataset_update(every, condition): Enables periodic dataset updates.
+        run_tensorboard_profiler(loader, ...): Runs performance profiling.
+        reset(): Resets the state of all engines.
+    """
 
     trainer: Engine
     evaluator: Engine
 
+    events = Events
+
     def __init__(
         self,
         model: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
-        loss_fn: Union[Callable[[Any, Any], torch.Tensor], torch.nn.Module],
-        device: Union[str, torch.device] | None = None,
+        optimizer: torch.optim.Optimizer | None,
+        loss_fn: Union[Callable[[Any, Any], torch.Tensor], torch.nn.Module] | None,
         non_blocking: bool = False,
         deterministic: bool = False,
         amp_mode: str | None = None,
         scaler: Union[bool, "torch.cuda.amp.GradScaler"] = False,
         gradient_accumulation_steps: int = 1,
         no_grad_eval: bool = False,
-        clip_grad_norm: float | None = None,
-        work_dir: Path = Path.cwd(),
+        clip_grad_norm: float | None = None
     ):
-        super().__init__(work_dir=work_dir)
+        super().__init__()
 
         self.model = model
         self.loss_fn = loss_fn
-        self.device = device
         self.non_blocking = non_blocking
         self.deterministic = deterministic
         self.amp_mode = amp_mode
@@ -52,7 +81,7 @@ class PotentialTrainer(MolpotEngine):
                 self.model,
                 optimizer,
                 loss_fn,
-                device=device,
+                device=config.device,
                 deterministic=deterministic,
                 amp_mode=amp_mode,
                 scaler=scaler,
@@ -64,7 +93,7 @@ class PotentialTrainer(MolpotEngine):
             "evaluator",
             create_supervised_evaluator(
                 self.model,
-                device=self.device,
+                device=config.device,
                 amp_mode=self.amp_mode,
                 no_grad=no_grad_eval,
             ),
@@ -77,8 +106,8 @@ class PotentialTrainer(MolpotEngine):
         self._metrics_usage = {}
 
     def compile(self):
-        self.model = self.model.to(self.device)
-        self.loss_fn = self.loss_fn.to(self.device)
+        self.model = self.model.to(config.device)
+        self.loss_fn = self.loss_fn.to(config.device)
         self.model = torch.compile(
             self.model, dynamic=True, fullgraph=True, mode="reduce-overhead"
         )
@@ -242,6 +271,14 @@ class PotentialTrainer(MolpotEngine):
             )
 
         self.loggers["tensorboard"] = tb_logger
+
+    def enable_dataset_update(self, every: int, condition):
+        self.trainer.add_event_handler(
+            Events.ITERATION_COMPLETED(every=every),
+            lambda engine: (
+                self.dataset.update(engine.state.output) if condition else None
+            ),
+        )
 
     # def attach_basic_time_profiler(self):
 

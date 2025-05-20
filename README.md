@@ -55,7 +55,8 @@ TO BE ANNOUNCED
 
 ## Roadmap
 
-TO BE ANNOUNCED
+* [x] Physical-based potential support
+* [ ] Active learning
 
 ## Citation
 

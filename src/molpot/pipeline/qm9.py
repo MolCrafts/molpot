@@ -12,12 +12,10 @@ from tqdm import tqdm
 import molpot as mpot
 from molpot import alias
 
-from .dataset import MapStyleDataset
-
 logger = mpot.get_logger("molpot.dataset")
 config = mpot.get_config()
 
-class QM9(MapStyleDataset):
+class QM9:
     def __init__(
         self,
         save_dir: Path | None = None,
@@ -25,10 +23,18 @@ class QM9(MapStyleDataset):
         atom_ref: bool = True,
         remove_uncharacterized: bool = True,
     ):
-        super().__init__("qm9", save_dir=save_dir, device=device)
-
+        from .dataset import MapStyleDataset
+        
+        self.name = "qm9"
+        self.save_dir = save_dir
+        self.device = device
+        
         self.remove_uncharacterized = remove_uncharacterized
         self.atom_ref = atom_ref
+        
+        if not issubclass(self.__class__, MapStyleDataset):
+            self.__class__ = type('QM9', (self.__class__, MapStyleDataset), {})
+            MapStyleDataset.__init__(self, self.name, save_dir=self.save_dir, device=self.device)
 
         self.labels.set("A", "rotational_constant_A", "GHz", float)
         self.labels.set("B", "rotational_constant_B", "GHz", float)

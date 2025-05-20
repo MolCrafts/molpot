@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from typing import Sequence
 import torch
 import torch.nn as nn
 
@@ -26,11 +27,14 @@ class PotentialSeq(TensorDictSequential):
 
 class Reducer(nn.Module):
 
-    def __init__(self, target: str, *keys: str):
-        super().__init__()
-        self.target = self.out_keys = ("predicts", target)
-        self.keys = self.in_keys = [("predicts", key) for key in keys]
+    in_keys: tuple[str, ...]
+    out_keys: str
 
-    def forward(self, td):
-        td[self.target] = torch.stack([td[key] for key in self.keys], dim=0)
-        return td
+    def __init__(self, out_keys: str, in_keys: Sequence[str], reduce = torch.sum):
+        super().__init__()
+        self.out_keys = ("predicts", out_keys)
+        self.in_keys = [("predicts", key) for key in in_keys]
+        self.reduce = reduce
+
+    def forward(self, *args):
+        return self.reduce(args, dim=0)

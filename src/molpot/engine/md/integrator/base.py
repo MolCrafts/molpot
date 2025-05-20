@@ -1,5 +1,5 @@
 from molpot import Frame, alias, get_logger
-from ..event import MDMainEvents
+from ..event import MDEvents
 from ignite.engine import Engine
 from ..handler import MDHandler
 
@@ -37,10 +37,10 @@ class VelocityVerlet(Integrator):
         super().__init__(
             name,
             {
-                MDMainEvents.STARTED,
-                MDMainEvents.INITIAL_INTEGRATE,
-                MDMainEvents.POST_INTEGRATE,
-                MDMainEvents.FINAL_INTEGRATE,
+                MDEvents.STARTED,
+                MDEvents.INITIAL_INTEGRATE,
+                MDEvents.POST_INTEGRATE,
+                MDEvents.FINAL_INTEGRATE,
             },
             (0, 0, 0, 0),
             time_step,
@@ -61,8 +61,8 @@ class VelocityVerlet(Integrator):
                              replicas.
         """
         frame = engine.state.frame
-        frame["predicts", "momenta"] = (
-            frame["predicts", "momenta"] + 0.5 * frame["predicts", "forces"] * self.time_step
+        frame["atoms", "momenta"] = (
+            frame["atoms", "momenta"] + 0.5 * frame["predicts", "forces"] * self.time_step
         )
 
     def on_post_integrate(self, engine: Engine):
@@ -79,7 +79,7 @@ class VelocityVerlet(Integrator):
         frame = engine.state.frame
         frame[alias.R] = (
             frame[alias.R]
-            + self.time_step * frame["predicts", "momenta"] / frame["atoms", "mass"]
+            + self.time_step * frame["atoms", "momenta"] / frame["atoms", "mass"]
         )
 
     on_final_integrate = on_initial_integrate

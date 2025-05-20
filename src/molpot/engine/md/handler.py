@@ -2,20 +2,14 @@ from typing import Sequence
 
 from ignite.engine import Engine, EventEnum
 from torch import nn
-from .event import MDMainEvents
+from .event import MDEvents
+from ..base import Handler
 
 
-class MDHandler(nn.modules.lazy.LazyModuleMixin, nn.Module):
-
-    events: set[EventEnum]
-    priorities: Sequence[int]
+class MDHandler(Handler):
 
     def __init__(self, name: str, events: set[EventEnum], priorities: Sequence[int]):
-        super().__init__()
-        self.name = name
-        self.events = events
-        self.priorities = priorities
-        assert len(events) == len(priorities), f"{self} events and priorities should have the same length"
+        super().__init__(name, events, priorities)
 
     def get_event_handler(self, event: EventEnum):
         return getattr(self, f"on_{event.name.lower()}", None)
@@ -35,7 +29,7 @@ class Potential(MDHandler):
     def __init__(self, potential: nn.Module):
         super().__init__(
             "potential",
-            {MDMainEvents.FORCE},
+            {MDEvents.FORCE},
             (0, ),
         )
         self.potential = potential
