@@ -12,13 +12,12 @@ from tqdm import tqdm
 import molpot as mpot
 from molpot import alias
 from collections import defaultdict
-from .dataset import MapStyleDataset
 import h5py
 
 logger = mpot.get_logger("molpot.dataset")
 config = mpot.get_config()
 
-class QDpi(MapStyleDataset):
+class QDpi:
 
     urls = {
         "charged": {
@@ -43,8 +42,18 @@ class QDpi(MapStyleDataset):
         device: str = "cpu",
         subset: str|list[str] = "all",
     ):
-        super().__init__("QDpi", save_dir=save_dir, device=device)
+        from .dataset import MapStyleDataset
+        
+        self.name = "QDpi"
+        self.save_dir = save_dir
+        self.device = device
         self.subset = subset
+        
+        if not issubclass(self.__class__, MapStyleDataset):
+            self.__class__ = type('QDpi', (self.__class__, MapStyleDataset), {})
+            MapStyleDataset.__init__(self, self.name, save_dir=self.save_dir, device=self.device)
+        
+        self._frames = []
 
 
     def __len__(self):
@@ -88,6 +97,8 @@ class QDpi(MapStyleDataset):
         for category, subds in ds.items():
             for key, url in subds.items():
                 self._download(url, key)
+        
+        return self._frames
 
     def _download(self, url: str, key: str):
         gitlab_root = "https://gitlab.com/RutgersLBSR/QDpiDataset/-/raw/main/data/"
