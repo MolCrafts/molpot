@@ -1,4 +1,6 @@
 from pathlib import Path
+from tempfile import TemporaryDirectory
+import tempfile
 from typing import Any, Sequence
 
 import torch
@@ -23,12 +25,14 @@ class Dataset(torch.utils.data.Dataset):
         self.labels: NameSpace = NameSpace(name)
         self.device = device
 
-        if save_dir is not None:
-            self.save_dir = Path(save_dir)
-            if not self.save_dir.exists():  # create save_dir
-                self.save_dir.mkdir(parents=True, exist_ok=True)
+        # if save_dir is None, use temporary directory
+        if save_dir is None:
+            save_dir = tempfile.mkdtemp(suffix=name)
         else:
-            self.save_dir = None
+            save_dir = Path(save_dir)
+            if not save_dir.exists():
+                save_dir.mkdir(parents=True, exist_ok=True)
+        self.save_dir = save_dir
 
         self.processes = ProcessManager()
 

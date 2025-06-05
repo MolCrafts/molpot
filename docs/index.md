@@ -4,7 +4,7 @@ hide:
   - toc
 ---
 
-# MolPot User Manual
+# Molpot User Manual
 
 `molpot` is designed for efficient building, training and deployment of molecular simulation potentials, leveraging a modular design to enable flexible customization and seamless integration into different workflows. It incorporates cutting-edge techniques, such as `torch.compile` for optimized deep learning execution and high-performance C++ operators for computational efficiency. 
 
