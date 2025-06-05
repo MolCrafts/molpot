@@ -37,7 +37,18 @@ def _compact_collate(batch: Sequence[Frame]):
     Returns:
         _type_: _description_
     """
+    print(f"[DEBUG] Collating batch of size {len(batch)}")
+    print(f"[DEBUG] First frame keys: {list(batch[0].keys())}")
+    
+    # Debug alias values
+    print(f"[DEBUG] alias.pair_i = {alias.pair_i}")
+    print(f"[DEBUG] alias.pair_j = {alias.pair_j}")
+    print(f"[DEBUG] alias.pair_diff = {alias.pair_diff}")
+    print(f"[DEBUG] alias.Z = {alias.Z}")
+    print(f"[DEBUG] alias.R = {alias.R}")
+    
     coll_batch = Frame.maybe_dense_stack(batch).densify()
+    print(f"[DEBUG] Stacked batch keys: {list(coll_batch.keys())}")
     # batch_size = int(coll_batch.batch_size.numel())
 
     if alias.n_atoms not in coll_batch:
@@ -60,7 +71,16 @@ def _compact_collate(batch: Sequence[Frame]):
     coll_frame[alias.atom_batch] = atom_batch
     coll_frame[alias.atom_offset] = atom_offset
 
-    if alias.pairs in coll_batch:
+    # Fix: Check if pair_i exists instead of pairs namespace
+    print(f"[DEBUG] Checking for pair_i key: {alias.pair_i} in coll_batch")
+    print(f"[DEBUG] pair_i exists: {alias.pair_i in coll_batch}")
+    
+    # Check what pairs keys actually exist
+    pairs_keys = [k for k in coll_batch.keys() if isinstance(k, tuple) and len(k) >= 2 and k[0] == "pairs"]
+    print(f"[DEBUG] Available pairs keys: {pairs_keys}")
+    
+    if alias.pair_i in coll_batch:
+        print(f"[DEBUG] Processing pairs data")
         n_pairs = torch.tensor(
             [len(frame[alias.pair_i]) for frame in batch], dtype=config.itype
         )
@@ -74,6 +94,8 @@ def _compact_collate(batch: Sequence[Frame]):
         torch.cumsum(torch.flatten(n_pairs)[:-1], dim=0, out=pair_offset[1:]).to(
             config.itype
         )
+        print(f"[DEBUG] atom_offset: {atom_offset}")
+        print(f"[DEBUG] pair_batch: {pair_batch}")
         coll_frame[alias.pair_i] = (
             torch.concat(coll_batch[alias.pair_i].unbind()) + atom_offset[pair_batch]
         )
@@ -82,12 +104,15 @@ def _compact_collate(batch: Sequence[Frame]):
         )
         coll_frame[alias.pair_batch] = pair_batch
         coll_frame[alias.pair_offset] = pair_offset
+    else:
+        print(f"[DEBUG] No pairs data found")
 
+    print(f"[DEBUG] Final collated frame keys: {list(coll_frame.keys())}")
     return coll_frame
 
 
-def _nested_collate(batch: Sequence[Frame]):
-    return Frame.from_frames(batch).densify()
+# def _nested_collate(batch: Sequence[Frame]):
+#     return Frame.from_frames(batch).densify()
 
 
 class MapAndCollate:

@@ -30,12 +30,12 @@ class NeighborList(Process):
         """ calculate neighbor list. The pair distance is calculated by xyz[pair_j] - xyz[pair_i]
 
         Args:
-            inputs (tensordict): required keys: alias.xyz, alias.cell
+            inputs (tensordict): required keys: alias.R, alias.cell
 
         Returns:
             tensordict: alias.pair_i, alias.pair_j, alias.pair_diff, alias.pair_dist, alias.n_pairs
         """
-        xyz = inputs[alias.xyz]
+        xyz = inputs[alias.R]
         if alias.cell not in inputs:
             box = None
         else:
