@@ -30,7 +30,7 @@ jobs:
           imageName: ghcr.io/molcrafts/molpot
           imageTag: latest-cpu
 
-  build-gpu:
+  build-cuda:
 
     permissions:
         packages: write
@@ -50,6 +50,6 @@ jobs:
       - name: Build and run Dev Container task
         uses: devcontainers/ci@v0.3
         with:
-          configFile: ./.devcontainer/gpu/devcontainer.json
+          configFile: ./.devcontainer/cuda/devcontainer.json
           imageName: ghcr.io/molcrafts/molpot
-          imageTag: latest-gpu
+          imageTag: latest-cuda
