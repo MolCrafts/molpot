@@ -53,14 +53,14 @@ class QDpi:
             self.__class__ = type('QDpi', (self.__class__, MapStyleDataset), {})
             MapStyleDataset.__init__(self, self.name, save_dir=self.save_dir, device=self.device)
         
-        self._frames = []
+        self.frames = []
 
 
     def __len__(self):
-        return len(self._frames)
+        return len(self.frames)
 
     def __getitem__(self, idx):
-        return self._frames[idx]
+        return self.frames[idx]
     
     def get_subset_data(self):
         if self.subset == "all":
@@ -90,7 +90,7 @@ class QDpi:
         return dict(ds)
 
     def prepare(self):
-        logger.info("prepaering QDpi dataset...")
+        logger.info("preparing QDpi dataset...")
 
         ds = self.get_subset_data()
 
@@ -98,36 +98,57 @@ class QDpi:
             for key, url in subds.items():
                 self._download(url, key)
         
-        return self._frames
+        return self.frames
 
     def _download(self, url: str, key: str):
         gitlab_root = "https://gitlab.com/RutgersLBSR/QDpiDataset/-/raw/main/data/"
         qdpi_hdf5 = f"{self.save_dir}/{key}.hdf5"
-        with requests.get(gitlab_root+url, stream=True) as response:
-            response.raise_for_status()
-            with open(qdpi_hdf5, "wb") as file:
-                for chunk in response.iter_content(chunk_size=8192):
-                    file.write(chunk)
+        
+        # Download if not exists
+        if not Path(qdpi_hdf5).exists():
+            logger.info(f"Downloading {key} dataset...")
+            with requests.get(gitlab_root+url, stream=True) as response:
+                response.raise_for_status()
+                with open(qdpi_hdf5, "wb") as file:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        file.write(chunk)
 
+        # Load data
         with h5py.File(qdpi_hdf5, 'r') as f:
+            logger.info(f"Loading {len(f)} molecules from {key}")
             
             for name, mol in f.items():
-                pbc = not bool(mol["nopbc"])
-                coord = torch.tensor(mol["set.000"]["coord.npy"]).reshape(-1, 3)
-                energy = torch.tensor(mol["set.000"]["energy.npy"])  # (1, 1)
-                force = torch.tensor(mol["set.000"]["force.npy"]).reshape(-1, 3)
-                net_charge = torch.tensor(mol["set.000"]["net_charge.npy"])  # (1, 1)
-                type_raw = torch.tensor(mol["type.raw"])
-                type_map = torch.tensor(mol["type.map"])
-                type_name = mpot.Element.get_atomic_number(type_map[type_raw])
+                try:
+                    # Basic data
+                    pbc = not bool(mol["nopbc"])
+                    coord = torch.tensor(np.array(mol["set.000"]["coord.npy"])).reshape(-1, 3)
+                    energy = torch.tensor(np.array(mol["set.000"]["energy.npy"]))
+                    force = torch.tensor(np.array(mol["set.000"]["force.npy"])).reshape(-1, 3)
+                    
+                    # Net charge might not exist for all molecules
+                    if "net_charge.npy" in mol["set.000"]:
+                        net_charge = torch.tensor(np.array(mol["set.000"]["net_charge.npy"]))
+                    else:
+                        net_charge = torch.tensor(0.0)  # Default to neutral
+                    
+                    # Type information
+                    type_raw = torch.tensor(np.array(mol["type.raw"]))
+                    type_map = [mol["type_map.raw"][i].decode() for i in range(len(mol["type_map.raw"]))]
+                    type_name = torch.tensor([mpot.Element(type_map[i]).number for i in type_raw])
 
-                frame = mpot.Frame()
-                frame[alias.R] = coord
-                frame[alias.F] = force
-                frame[alias.E] = energy
-                frame[alias.Q] = net_charge
-                frame[alias.Z] = type_name
+                    # Create frame
+                    frame = mpot.Frame()
+                    frame[alias.R] = coord
+                    frame[alias.F] = force
+                    frame[alias.E] = energy
+                    frame[alias.Q] = net_charge
+                    frame[alias.Z] = type_name
 
-                self._frames.append(frame)
+                    self.frames.append(frame)
+                    
+                except Exception as e:
+                    logger.warning(f"Skipping molecule {name} due to error: {e}")
+                    continue
 
-        return self._frames
+        logger.info(f"Successfully loaded {len(self.frames)} frames")
+        return self.frames 
