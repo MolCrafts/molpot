@@ -287,11 +287,11 @@ def main():
     
     # 9. Setup training with enhanced parameters
     criterion = nn.MSELoss()
-    # Enhanced optimizer settings - BACK TO WINNING FORMULA
+    
     optimizer = optim.Adam(
         model.parameters(), 
-        lr=0.01,  # Back to aggressive learning rate
-        weight_decay=5e-4,  # Back to original regularization
+        lr=0.0005,  
+        weight_decay=5e-4,  
         betas=(0.9, 0.999),
         eps=1e-8
     )
