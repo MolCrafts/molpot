@@ -1,0 +1,280 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Poniżej znajdziesz konkretne fragmenty kodu – w formie “diff-ów” i małych helperów – które pozwolą Ci dodać Δ‐learning na bazie potencjału Lennarda–Jonesa do Twojego skryptu. Założenie jest takie, że:
+
+Dataset będzie liczył 
+𝐸
+LJ
+E 
+LJ
+​
+  dla każdej próbki i przechowywał je równolegle z energią QM.
+
+Docelowo model będzie uczył się 
+Δ
+𝐸
+=
+𝐸
+QM
+−
+𝐸
+LJ
+ΔE=E 
+QM
+​
+ −E 
+LJ
+​
+ .
+
+W pętli treningowej będziemy minimalizować MSE(
+Δ
+𝐸
+pred
+,
+Δ
+𝐸
+ΔE 
+pred
+​
+ ,ΔE).
+
+Przy ewaluacji składamy z powrotem: 
+𝐸
+pred
+=
+𝐸
+LJ
++
+Δ
+𝐸
+pred
+E 
+pred
+​
+ =E 
+LJ
+​
+ +ΔE 
+pred
+​
+ .
+
+1. Funkcja licząca energię LJ
+python
+Copy
+import torch
+
+def compute_lj_energy(coords, epsilon=0.01, sigma=3.4, device='cpu'):
+    """
+    coords: tensor [n_atoms,3]
+    zwraca skalar: sumę par Lennard–Jonesa
+    """
+    # Parowanie atomów
+    diff = coords[:, None, :] - coords[None, :, :]         # (n,n,3)
+    r = torch.norm(diff, dim=-1) + 1e-8                  # (n,n)
+    # indeksy górnej trójkątnej (bez diagonalnej)
+    i, j = torch.triu_indices(r.size(0), r.size(0), offset=1)
+    rij = r[i, j]
+    # standardowy potencjał LJ
+    lj = 4 * epsilon * ((sigma/rij)**12 - (sigma/rij)**6)
+    return lj.sum().to(device)
+2. Dataset: liczymy i zapisujemy 
+𝐸
+LJ
+E 
+LJ
+​
+  i 
+Δ
+𝐸
+ΔE
+W MolecularDataset._prepare_data():
+
+diff
+Copy
+     for i, frame in enumerate(self.frames):
+         …
+         # tu już masz step_energy = E_QM
++        # policz Lennard–Jonesa
++        E_lj = compute_lj_energy(step_coords.to(DEVICE),
++                                 epsilon=0.02,   # wypróbuj grid-search
++                                 sigma=3.2,
++                                 device=DEVICE).cpu()
++
++        # teraz docelowo uczymy ΔE = E_QM - E_lj
++        delta_E = step_energy - E_lj.item()
++
+         mol_data = self._create_molecular_graph(step_coords, atomic_nums)
+         if mol_data is not None:
+-            self.energies.append(torch.tensor(step_energy, dtype=torch.float32))
++            self.energies.append(torch.tensor(delta_E,    dtype=torch.float32))
++            self.lj_energies.append(torch.tensor(E_lj,     dtype=torch.float32))
+             successful_points += 1
+Na końcu _prepare_data():
+
+diff
+Copy
+-    # Energy normalization statistics
+-    self.energies = torch.stack(self.energies)
+-    self.energy_mean = torch.mean(self.energies)
+-    self.energy_std  = torch.std(self.energies)
++    # Stackujemy ΔE i E_lj
++    self.delta_energies = torch.stack(self.energies)     # ΔE
++    self.lj_energies    = torch.stack(self.lj_energies)  # E_lj raw
++
++    # Normalizacja ΔE
++    self.delta_mean = self.delta_energies.mean()
++    self.delta_std  = self.delta_energies.std() + 1e-8
++
++    # Zastępujemy energies i ich statystyki:
++    self.energies = (self.delta_energies - self.delta_mean) / self.delta_std
+I w __getitem__:
+
+diff
+Copy
+-    energy = self.energies[idx]
+-    # Normalize energy
+-    normalized_energy = (energy - self.energy_mean) / self.energy_std
+-    return mol_data, normalized_energy
++    norm_delta = self.energies[idx]      # już znormalizowane ΔE
++    lj_raw    = self.lj_energies[idx]    # surowe E_lj
++    return mol_data, norm_delta, lj_raw
+3. Collate: zbieramy też LJ
+diff
+Copy
+ def collate_molecular_batch(batch):
+-    batch_data = []
+-    batch_energies = []
++    batch_data     = []
++    batch_deltas   = []
++    batch_lj_raw   = []
+     …
+     for mol_data, energy in batch:
+-        batch_energies.append(energy)
++        # batch[1] = norm ΔE, batch[2] = E_lj
++        batch_deltas.append(energy)
++        batch_lj_raw.append(mol_data[2] if False else batch[2])
+         …
+     # Concatenate all data
+-    return {
++    return {
+         'Z':           torch.cat(batch_Z, dim=0),
+         'pair_diff':   torch.cat(batch_pair_diff, dim=0),
+         'pair_i':      torch.cat(batch_pair_i, dim=0),
+         'pair_j':      torch.cat(batch_pair_j, dim=0),
+-        'batch_energies': torch.stack(batch_energies)
++        'batch_deltas':   torch.stack(batch_deltas),
++        'batch_lj':       torch.stack(batch_lj_raw)
+     }
+4. Pętla treningowa: uczymy ΔE
+W train_epoch:
+
+diff
+Copy
+-    target_energies = batch_data['batch_energies'].to(device)
++    target_delta    = batch_data['batch_deltas'].to(device)
++    lj_batch        = batch_data['batch_lj'].to(device)
+
+     # Forward pass
+     optimizer.zero_grad()
+-    pred_energy = model(Z, pair_diff, pair_i, pair_j)
+-    loss = criterion(pred_energy.unsqueeze(0), target_energies)
++    pred_delta = model(Z, pair_diff, pair_i, pair_j).squeeze()
++    loss = criterion(pred_delta, target_delta)
+     …
+Podobnie w validate_epoch:
+
+diff
+Copy
+-    if batch_size == 1:
+-        pred_energy = model(...)
+-        loss = criterion(pred_energy.unsqueeze(0), target_energies)
++    if batch_size == 1:
++        pred_delta    = model(...).squeeze()
++        loss          = criterion(pred_delta, target_delta)
++
++        # denormalizacja i rekonstrukcja pełnej energii
++        pred_full     = pred_delta * dataset.delta_std + dataset.delta_mean + lj_batch
++        true_full     = target_delta * dataset.delta_std + dataset.delta_mean + lj_batch
++
++        # dla metryk RMSE/MAE użyjemy pred_full vs. true_full
+         …
+-        pred_denorm = pred_energy.cpu() * energy_std
+-        target_denorm = target_energies[0].cpu() * energy_std
++        pred_denorm = pred_full.cpu()
++        target_denorm = true_full.cpu()
+Podsumowanie
+Compute LJ dla każdego wykresu i zapisz w dataset.
+
+Przekształć cel na 
+Δ
+𝐸
+=
+𝐸
+QM
+−
+𝐸
+LJ
+ΔE=E 
+QM
+​
+ −E 
+LJ
+​
+ , znormalizuj je.
+
+Collate zwraca zarówno normowane 
+Δ
+𝐸
+ΔE, jak i surowe 
+𝐸
+LJ
+E 
+LJ
+​
+ .
+
+Model nadal zwraca jednowymiarowy tensor 
+Δ
+𝐸
+^
+ΔE
+^
+ .
+
+Loss = MSE(
+Δ
+𝐸
+^
+,
+Δ
+𝐸
+ΔE
+^
+ ,ΔE).
+
+Metryki (RMSE/MAE) licz na odtworzonym 
+𝐸
+pred
+=
+𝐸
+LJ
++
+Δ
+𝐸
+^
+E 
+pred
+​
+ =E 
+LJ
+​
+ + 
+ΔE
+^
+
+ .
