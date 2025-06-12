@@ -90,6 +90,7 @@ class QDpi:
         return dict(ds)
 
     def prepare(self):
+        print(f"[DEBUG] QDpi.prepare() called, current frames: {len(self.frames)}")
         logger.info("preparing QDpi dataset...")
 
         ds = self.get_subset_data()
@@ -98,6 +99,7 @@ class QDpi:
             for key, url in subds.items():
                 self._download(url, key)
         
+        print(f"[DEBUG] QDpi.prepare() finished, frames: {len(self.frames)}")
         return self.frames
 
     def _download(self, url: str, key: str):

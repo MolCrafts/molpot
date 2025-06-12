@@ -1,357 +1,312 @@
 #!/usr/bin/env python3
 """
-Drug discovery training using PotentialTrainer architecture.
-Clean, simple script using existing molpot infrastructure.
+Lokalny trening PiNet2 z residual learning ΔE = E_QM – E_LJ,
+używając molpot-owych klas: QDpi, NeighborList, LJ126, PiNet2, Batchwise, PotentialTrainer.
 """
 
 import torch
-import torch.nn as nn
-import sys
-from pathlib import Path
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
-from collections import defaultdict
 
-# Add molpot to path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-
-
-from molpot import alias
-from molpot.potential.nnp import PiNet2, GaussianRBF, CosineCutoff
-from molpot.potential.nnp.readout import Batchwise
-from molpot.pipeline.qdpi import QDpi
-from molpot.pipeline.dataloader import DataLoader
-from molpot.engine.potential.trainer import PotentialTrainer
-from ignite.metrics import Loss, MeanAbsoluteError, RootMeanSquaredError
+from torch.utils.data import Dataset, Subset, random_split
+from ignite.metrics import MeanAbsoluteError, MeanSquaredError, RunningAverage
 from ignite.engine import Events
+from tensordict.nn import TensorDictModule
 
-# Configuration - BEZPIECZNE PARAMETRY DLA LOKALNEGO KOMPUTERA
-QDPI_SUBSET = "all"
-MAX_FRAMES = 500  # BARDZO MAŁO - żeby nie zawiesić komputera
-BATCH_SIZE = 2   # MAŁY batch size - mniej RAM-u
-MAX_ITERATIONS = 200  # KRÓTKI test - tylko sprawdzenie czy działa
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+from molpot.pipeline.qdpi import QDpi
+from molpot.pipeline.process.nblist import NeighborList
+from molpot.pipeline.process.base import Process, ProcessType, ProcessManager
+from molpot.pipeline.dataloader import DataLoader
 
-# PiNet Configuration - ZMNIEJSZONE
-CUTOFF_RADIUS = 4.0  # Mniejszy cutoff = mniej par = mniej RAM-u
-N_BASIS = 16         # Mniej basis functions = mniejszy model
-DEPTH = 2            # Płytszy model = mniej RAM-u
+from molpot.potential.classic.pair.lj import LJ126
+from molpot.potential.nnp import PiNet2
+from molpot.potential.nnp.radial import GaussianRBF
+from molpot.potential.nnp.cutoff import CosineCutoff
+from molpot.potential.nnp.readout.base import Batchwise
+from molpot.engine.potential.trainer import PotentialTrainer
+from molpot import alias
 
-# Training history storage
-training_history = defaultdict(list)
+# ------------------------------------------------------------------------------
+# Konfiguracja
+# ------------------------------------------------------------------------------
+MAX_FRAMES    = 500
+BATCH_SIZE    = 2
+MAX_EPOCHS    = 5
+DEVICE        = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def compute_lj_energy(coords, epsilon=0.02, sigma=3.2):
-    """Compute Lennard-Jones energy."""
-    diff = coords[:, None, :] - coords[None, :, :]
-    r = torch.norm(diff, dim=-1) + 1e-8
-    i, j = torch.triu_indices(r.size(0), r.size(0), offset=1)
-    rij = r[i, j]
-    lj = 4 * epsilon * ((sigma/rij)**12 - (sigma/rij)**6)
-    return lj.sum()
+# Parametry Lennard-Jones
+EPSILON       = 0.02
+SIGMA         = 3.2
 
-class DeltaEnergyProcessor:
-    """Add ΔE = E_QM - E_LJ to frames."""
-    
-    def __init__(self, epsilon=0.02, sigma=3.2):
-        self.epsilon = epsilon
-        self.sigma = sigma
-    
-    def process_frame(self, frame):
+# Parametry PiNet2
+CUTOFF_RADIUS = 5.0
+N_BASIS        = 16
+DEPTH          = 2
+PP_NODES       = [32, 32]
+PI_NODES       = [32, 32]
+II_NODES       = [32, 32]
+
+# ------------------------------------------------------------------------------
+# Procesor ΔE z LJ126
+# ------------------------------------------------------------------------------
+class DeltaEnergyProcessor(Process):
+    """Oblicza ΔE = E_QM - E_LJ używając gotowej klasy LJ126."""
+    type = ProcessType.ONE
+
+    def __init__(self, cutoff):
+        super().__init__()
+        self.cutoff = cutoff
+        n_types = 100
+        self.lj = LJ126()
+        # Inicjalizacja parametrów LJ
+        sig = torch.full((n_types, n_types), SIGMA, dtype=torch.float32)
+        eps = torch.full((n_types, n_types), EPSILON, dtype=torch.float32)
+        self.lj.sig = torch.nn.Parameter(sig)
+        self.lj.eps = torch.nn.Parameter(eps)
+
+    def forward(self, frame):
         try:
-            # Debug: print available keys in frame
-            if not hasattr(self, '_debug_printed'):
-                print(f"🔍 Debug: Frame keys = {list(frame.keys())}")
-                self._debug_printed = True
-            
-            # Try different possible energy keys
-            coords = None
-            energy_qm = None
-            
-            # Look for coordinates
-            if alias.R in frame:
-                coords = frame[alias.R]
-            elif 'R' in frame:
-                coords = frame['R']
-            elif 'coordinates' in frame:
-                coords = frame['coordinates']
-            elif 'pos' in frame:
-                coords = frame['pos']
-            else:
-                print(f"❌ No coordinates found in frame")
-                return None
-            
-            # Look for energy
-            if alias.E in frame:
-                energy_qm = frame[alias.E]
-            elif 'E' in frame:
-                energy_qm = frame['E']
-            elif 'energy' in frame:
-                energy_qm = frame['energy']
-            elif 'target' in frame:
-                energy_qm = frame['target']
-            else:
-                print(f"❌ No energy found in frame")
-                return None
-            
-            # Convert energy to float
-            if hasattr(energy_qm, 'item'):
-                if energy_qm.numel() == 1:
-                    energy_qm = energy_qm.item()
-                else:
-                    # For multi-element tensors, sum the energies (total molecular energy)
-                    energy_qm = energy_qm.sum().item()
-            elif isinstance(energy_qm, (list, tuple)) and len(energy_qm) > 0:
-                if isinstance(energy_qm[0], torch.Tensor):
-                    energy_qm = sum(e.sum().item() if e.numel() > 1 else e.item() for e in energy_qm)
-                else:
-                    energy_qm = sum(float(e) for e in energy_qm)
-            else:
-                energy_qm = float(energy_qm)
-            
-            # Compute LJ energy
-            E_lj = compute_lj_energy(coords, self.epsilon, self.sigma)
-            delta_E = energy_qm - E_lj.item()
-            
-            # Add to frame
-            frame[("delta", "energy")] = torch.tensor(delta_E, dtype=torch.float32)
+            if alias.pair_i not in frame or len(frame[alias.pair_i]) == 0:
+                frame[("delta","energy")] = torch.tensor(0.0, dtype=torch.float32)
+                return frame
+                
+            i = frame[alias.pair_i]
+            j = frame[alias.pair_j]
+            diff = frame[alias.pair_diff]
+            dists = torch.norm(diff, dim=-1)
+            Z = frame[alias.Z].to(torch.int64)
+
+            # Energia LJ
+            lj_pairs = self.lj.energy(i, j, dists, Z)
+            ELJ = lj_pairs.sum()
+
+            # Energia QM
+            EQM = frame[alias.E]
+            if EQM.dim() > 0:
+                EQM = EQM.flatten()[0]
+
+            # Delta energy
+            delta = float(EQM) - float(ELJ)
+            frame[("delta","energy")] = torch.tensor(delta, dtype=torch.float32)
             return frame
             
         except Exception as e:
-            print(f"❌ Error processing frame: {e}")
-            return None
+            frame[("delta","energy")] = torch.tensor(0.0, dtype=torch.float32)
+            return frame
 
-class PiNet2Model(nn.Module):
-    """Complete PiNet2 model for drug discovery."""
+# ------------------------------------------------------------------------------
+# QDpi Wrapper (omija problemy z dziedziczeniem)
+# ------------------------------------------------------------------------------
+class QDpiWrapper(Dataset):
+    """Wrapper dla QDpi który omija problemy z dziedziczeniem MapStyleDataset."""
     
-    def __init__(self):
-        super().__init__()
+    def __init__(self, subset="all", save_dir="data/qdpi"):
+        from molpot.pipeline.qdpi import QDpi as _QDpi
+        from pathlib import Path
         
-        # Basis and cutoff
-        self.basis_fn = GaussianRBF(n_rbf=N_BASIS, r_max=CUTOFF_RADIUS)
-        self.cutoff_fn = CosineCutoff(r_max=CUTOFF_RADIUS)
+        # Ręczne tworzenie QDpi bez problematycznego dziedziczenia
+        self.qdpi = _QDpi.__new__(_QDpi)
+        self.qdpi.name = "QDpi"
+        self.qdpi.save_dir = Path(save_dir)
+        self.qdpi.save_dir.mkdir(parents=True, exist_ok=True)
+        self.qdpi.device = "cpu"
+        self.qdpi.subset = subset
+        self.qdpi.frames = []
         
-        # PiNet2
-        self.pinet = PiNet2(
-            depth=DEPTH,
-            basis_fn=self.basis_fn,
-            cutoff_fn=self.cutoff_fn,
-            pp_nodes=[64, 64],
-            pi_nodes=[64, 64],
-            ii_nodes=[64, 64],
-            activation=torch.tanh,
-            max_atomtypes=100
-        )
-        
-        # Energy readout
-        self.energy_readout = Batchwise(
-            n_neurons=[64, 32, 1],
-            in_key=("pinet", "p1"),
-            out_key=("predicted", "delta_energy"),
-            reduce="sum"
-        )
+        # Przygotuj dane
+        self.qdpi.prepare()
+        self.frames = self.qdpi.frames.copy()
+        self.processes = ProcessManager()
     
-    def forward(self, frame):
-        """Forward pass using molpot Frame format."""
-        # Get required data from frame
-        Z = frame[alias.Z]
-        pair_diff = frame[alias.pair_diff] 
-        pair_i = frame[alias.pair_i]
-        pair_j = frame[alias.pair_j]
-        atom_batch = frame[alias.atom_batch]
-        
-        # PiNet2 forward pass - TYLKO p1 nas interesuje!
-        p1, _, _, _ = self.pinet(Z, pair_diff, pair_i, pair_j)  # Ignorujemy p3, i1, i3
-        
-        # Store tylko to co używamy
-        frame[("pinet", "p1")] = p1
-        
-        # Energy readout using p1 (scalar features)
-        delta_energy = self.energy_readout(atom_batch, p1.squeeze(1))
-        
-        return {"delta_energy": delta_energy}
+    def __len__(self):
+        return len(self.frames)
+    
+    def __getitem__(self, idx):
+        frame = self.frames[idx]
+        return self.processes.process_one(frame)
 
-def setup_metrics_logging(trainer):
-    """Setup metrics collection and logging for learning curves."""
-    
-    # Define loss extraction function
-    def output_transform(output):
-        return output["delta_energy"], output["target"]
-    
-    # Add metrics to trainer
-    trainer.add_metric("loss", lambda: Loss(nn.MSELoss(), output_transform=output_transform), "trainer")
-    trainer.add_metric("loss", lambda: Loss(nn.MSELoss(), output_transform=output_transform), "evaluator")
-    trainer.add_metric("mae", lambda: MeanAbsoluteError(output_transform=output_transform), "evaluator")
-    trainer.add_metric("rmse", lambda: RootMeanSquaredError(output_transform=output_transform), "evaluator")
-    
-    # Log training loss every 100 iterations
-    @trainer.trainer.on(Events.ITERATION_COMPLETED(every=100))
-    def log_training_loss(engine):
-        iteration = engine.state.iteration
-        loss = engine.state.output["loss"]
-        training_history["train_loss"].append(loss)
-        training_history["iterations"].append(iteration)
-        print(f"Iteration {iteration:5d} | Train Loss: {loss:.6f}")
-    
-    # Log validation metrics every 500 iterations
-    @trainer.trainer.on(Events.ITERATION_COMPLETED(every=500))
-    def log_validation_metrics(engine):
-        iteration = engine.state.iteration
-        metrics = trainer.evaluator.state.metrics
-        
-        val_loss = metrics.get("loss", 0)
-        val_mae = metrics.get("mae", 0)
-        val_rmse = metrics.get("rmse", 0)
-        
-        training_history["val_loss"].append(val_loss)
-        training_history["val_mae"].append(val_mae)
-        training_history["val_rmse"].append(val_rmse)
-        training_history["val_iterations"].append(iteration)
-        
-        print(f"Iteration {iteration:5d} | Val Loss: {val_loss:.6f} | Val MAE: {val_mae:.3f} | Val RMSE: {val_rmse:.3f}")
+# ------------------------------------------------------------------------------
+# Wczytanie i przygotowanie danych
+# ------------------------------------------------------------------------------
+print("🔄 Ładowanie QDpi...")
+ds = QDpiWrapper(subset="all")
+print(f"✅ Załadowano {len(ds)} ramek")
 
-def plot_learning_curves():
-    """Plot and save learning curves."""
-    _, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))  # Ignorujemy fig
-    
-    # Training Loss
-    ax1.plot(training_history["iterations"], training_history["train_loss"], 'b-', label='Training Loss', alpha=0.7)
-    ax1.set_xlabel('Iteration')
-    ax1.set_ylabel('Loss')
-    ax1.set_title('Training Loss')
-    ax1.grid(True, alpha=0.3)
-    ax1.legend()
-    
-    # Validation Loss
-    if training_history["val_loss"]:
-        ax2.plot(training_history["val_iterations"], training_history["val_loss"], 'r-', label='Validation Loss', alpha=0.7)
-        ax2.set_xlabel('Iteration')
-        ax2.set_ylabel('Loss')
-        ax2.set_title('Validation Loss')
-        ax2.grid(True, alpha=0.3)
-        ax2.legend()
-    
-    # Combined Loss
-    ax3.plot(training_history["iterations"], training_history["train_loss"], 'b-', label='Training Loss', alpha=0.7)
-    if training_history["val_loss"]:
-        ax3.plot(training_history["val_iterations"], training_history["val_loss"], 'r-', label='Validation Loss', alpha=0.7)
-    ax3.set_xlabel('Iteration')
-    ax3.set_ylabel('Loss')
-    ax3.set_title('Training vs Validation Loss')
-    ax3.grid(True, alpha=0.3)
-    ax3.legend()
-    ax3.set_yscale('log')  # Log scale for better visualization
-    
-    # Validation Metrics
-    if training_history["val_mae"] and training_history["val_rmse"]:
-        ax4_twin = ax4.twinx()
-        ax4.plot(training_history["val_iterations"], training_history["val_mae"], 'g-', label='MAE', alpha=0.7)
-        ax4_twin.plot(training_history["val_iterations"], training_history["val_rmse"], 'orange', label='RMSE', alpha=0.7)
-        ax4.set_xlabel('Iteration')
-        ax4.set_ylabel('MAE', color='g')
-        ax4_twin.set_ylabel('RMSE', color='orange')
-        ax4.set_title('Validation Metrics')
-        ax4.grid(True, alpha=0.3)
-        ax4.legend(loc='upper left')
-        ax4_twin.legend(loc='upper right')
-    
-    plt.tight_layout()
-    plt.savefig('learning_curves.png', dpi=300, bbox_inches='tight')
-    plt.show()
-    print("📊 Learning curves saved as 'learning_curves.png'")
+# Dodanie procesów
+ds.processes.append(NeighborList(cutoff=CUTOFF_RADIUS))
+ds.processes.append(DeltaEnergyProcessor(cutoff=CUTOFF_RADIUS))
 
-def main():
-    print("🚀 Starting LOKALNY TEST PiNet2 training!")
-    print(f"💾 Device: {DEVICE}")
-    print(f"⚠️  UWAGA: Używam bezpiecznych parametrów dla lokalnego komputera!")
-    print(f"📊 Frames: {MAX_FRAMES}, Batch: {BATCH_SIZE}, Iterations: {MAX_ITERATIONS}")
-    
-    # Load frames for training
-    print("📂 Loading QDpi dataset...")
-    qdpi = QDpi(subset=QDPI_SUBSET)
-    frames = qdpi.prepare()[:MAX_FRAMES]  # ZAWSZE ograniczone dla lokalnego testu
-    
-    print(f"✅ Loaded {len(frames)} frames")
-    
-    # Process frames
-    processor = DeltaEnergyProcessor()
-    processed_frames = []
-    
-    print("⚗️ Processing frames...")
-    for i, frame in enumerate(frames):
-        if i % 50 == 0:
-            print(f"   Processing {i+1}/{len(frames)}...")
-        
-        processed = processor.process_frame(frame)
-        if processed is not None:
-            processed_frames.append(processed)
-    
-    print(f"✅ Successfully processed {len(processed_frames)} frames")
-    
-    if len(processed_frames) < 10:
-        print("❌ Too few frames processed!")
-        return
-    
-    # Normalize ΔE
-    deltas = torch.stack([f[("delta", "energy")] for f in processed_frames])
-    delta_mean, delta_std = deltas.mean(), deltas.std() + 1e-8
-    
-    for frame in processed_frames:
-        frame[("delta", "energy")] = (frame[("delta", "energy")] - delta_mean) / delta_std
-        frame["target"] = frame[("delta", "energy")]  # For metrics
-    
-    print(f"📊 ΔE Statistics: mean={delta_mean:.2f}, std={delta_std:.2f}")
-    
-    # Split data - USE DATALOADER!
-    n_train = int(0.8 * len(processed_frames))
-    train_frames = processed_frames[:n_train]
-    val_frames = processed_frames[n_train:]
-    
-    train_loader = DataLoader(train_frames, batch_size=BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(val_frames, batch_size=BATCH_SIZE, shuffle=False)
-    
-    print(f"📊 Train: {len(train_frames)}, Val: {len(val_frames)}")
-    
-    # Create model
-    model = PiNet2Model().to(DEVICE)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
-    loss_fn = nn.MSELoss()
-    
-    total_params = sum(p.numel() for p in model.parameters())
-    print(f"🧠 Model parameters: {total_params:,}")
-    
-    # USE POTENTIALTRAINER!
-    trainer = PotentialTrainer(
-        model=model,
-        optimizer=optimizer,
-        loss_fn=loss_fn,
-        amp_mode=None,
-        gradient_accumulation_steps=1,
-        clip_grad_norm=1.0
+# Ograniczenie liczby ramek
+n_total = len(ds)
+n_use = min(MAX_FRAMES, n_total)
+ds_subset = Subset(ds, list(range(n_use)))
+
+# Podział train/val
+n_train = int(0.8 * n_use)
+n_val = n_use - n_train
+train_ds, val_ds = random_split(ds_subset, [n_train, n_val])
+print(f"📊 Train: {len(train_ds)}, Val: {len(val_ds)}")
+
+# ------------------------------------------------------------------------------
+# Normalizacja ΔE
+# ------------------------------------------------------------------------------
+print("⚖️ Obliczanie statystyk ΔE...")
+dE_list = []
+for i in range(len(train_ds)):
+    try:
+        frame = train_ds[i]
+        if ("delta","energy") in frame:
+            dE_list.append(frame[("delta","energy")])
+    except:
+        continue
+
+dE_tensor = torch.stack(dE_list)
+dE_mean, dE_std = dE_tensor.mean(), dE_tensor.std() + 1e-8
+print(f"   ΔE mean: {dE_mean:.3f}, std: {dE_std:.3f}")
+
+# Normalizacja labels
+for split_ds in [train_ds, val_ds]:
+    for i in range(len(split_ds)):
+        try:
+            frame = split_ds[i]
+            if ("delta","energy") in frame:
+                dE = frame[("delta","energy")]
+                frame[("labels","energy")] = (dE - dE_mean) / dE_std
+        except:
+            continue
+
+# ------------------------------------------------------------------------------
+# DataLoaders
+# ------------------------------------------------------------------------------
+def collate_fn(batch):
+    from molpot.utils.frame import Frame
+    return Frame.from_frames(batch).densify()
+
+train_loader = DataLoader(
+    train_ds, batch_size=BATCH_SIZE, shuffle=True,
+    collate_fn=collate_fn, num_workers=2, pin_memory=True
+)
+val_loader = DataLoader(
+    val_ds, batch_size=BATCH_SIZE, shuffle=False,
+    collate_fn=collate_fn, num_workers=1, pin_memory=True
+)
+
+# ------------------------------------------------------------------------------
+# Model PiNet2 + Batchwise
+# ------------------------------------------------------------------------------
+print("🏗️ Budowanie modelu...")
+pinet = PiNet2(
+    depth=DEPTH,
+    basis_fn=GaussianRBF(n_rbf=N_BASIS, cutoff=CUTOFF_RADIUS),
+    cutoff_fn=CosineCutoff(cutoff=CUTOFF_RADIUS),
+    pp_nodes=PP_NODES, pi_nodes=PI_NODES, ii_nodes=II_NODES,
+    activation=torch.tanh, max_atomtypes=100
+)
+
+readout = Batchwise(
+    n_neurons=[PI_NODES[-1], 32, 1],
+    in_key=("pinet","p1"),
+    out_key=("predicts","energy"),
+    reduce="sum"
+)
+
+pinet_mod = TensorDictModule(
+    pinet,
+    in_keys=[alias.Z, alias.pair_diff, alias.pair_i, alias.pair_j],
+    out_keys=[("pinet","p1")]
+)
+readout_mod = TensorDictModule(
+    readout,
+    in_keys=[("pinet","p1"), alias.atom_batch],
+    out_keys=[("predicts","energy")]
+)
+model = torch.nn.Sequential(pinet_mod, readout_mod).to(DEVICE)
+
+# ------------------------------------------------------------------------------
+# Trener i metryki
+# ------------------------------------------------------------------------------
+def loss_fn(out, batch):
+    return F.mse_loss(
+        out[("predicts","energy")],
+        batch[("labels","energy")].to(DEVICE)
     )
-    
-    # Add progress bars
-    trainer.enable_progressbar("trainer")
-    trainer.enable_progressbar("evaluator")
-    
-    # Setup metrics
-    setup_metrics_logging(trainer)
-    
-    print(f"🎯 Starting training for {MAX_ITERATIONS} iterations...")
-    
-    # RUN TRAINING WITH POTENTIALTRAINER!
-    trainer.run(
-        train_data=train_loader,
-        eval_data=val_loader,
-        max_steps=MAX_ITERATIONS,
-        epoch_length=len(train_loader)
-    )
-    
-    print("🎉 Training completed with PotentialTrainer!")
-    
-    # Plot learning curves
-    if len(training_history["train_loss"]) > 0:
-        plot_learning_curves()
-    
-    print("✅ DONE!")
 
-if __name__ == "__main__":
-    main() 
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
+trainer = PotentialTrainer(
+    model=model, optimizer=optimizer, loss_fn=loss_fn,
+    amp_mode=None, gradient_accumulation_steps=1, clip_grad_norm=1.0
+)
+
+# Metryki
+RunningAverage(output_transform=lambda out: out).attach(trainer.trainer, "avg_loss")
+
+mae = MeanAbsoluteError(
+    output_transform=lambda out, batch: (
+        out[("predicts","energy")] * dE_std + dE_mean,
+        batch[("labels","energy")] * dE_std + dE_mean
+    )
+)
+mse = MeanSquaredError(
+    output_transform=lambda out, batch: (
+        out[("predicts","energy")] * dE_std + dE_mean,
+        batch[("labels","energy")] * dE_std + dE_mean
+    )
+)
+mae.attach(trainer.evaluator, "MAE")
+mse.attach(trainer.evaluator, "MSE")
+
+@trainer.trainer.on(Events.ITERATION_STARTED)
+def to_device(engine):
+    engine.state.batch = engine.state.batch.to(DEVICE)
+
+# Historia treningu
+history = {"epoch":[], "train_loss":[], "val_mae":[], "val_rmse":[]}
+
+@trainer.trainer.on(Events.EPOCH_COMPLETED)
+def log_epoch(engine):
+    ep = engine.state.epoch
+    tl = engine.state.metrics["avg_loss"]
+    trainer.evaluator.run(val_loader)
+    met = trainer.evaluator.state.metrics
+    v_mae = met["MAE"]
+    v_rmse = met["MSE"].sqrt()
+    
+    print(f"Epoch {ep}: Loss={tl:.4f}, MAE={v_mae:.4f}, RMSE={v_rmse:.4f}")
+    
+    history["epoch"].append(ep)
+    history["train_loss"].append(tl)
+    history["val_mae"].append(v_mae)
+    history["val_rmse"].append(v_rmse)
+
+# ------------------------------------------------------------------------------
+# Trening
+# ------------------------------------------------------------------------------
+print(f"🚀 Rozpoczynam trening ({MAX_EPOCHS} epok)...")
+trainer.run(train_data=train_loader, max_epochs=MAX_EPOCHS, eval_data=val_loader)
+
+# ------------------------------------------------------------------------------
+# Wykresy
+# ------------------------------------------------------------------------------
+print("📊 Generowanie wykresów...")
+epochs = history["epoch"]
+plt.figure(figsize=(12,4))
+
+plt.subplot(1,3,1)
+plt.plot(epochs, history["train_loss"], label="Train MSE")
+plt.plot(epochs, [r*r for r in history["val_rmse"]], label="Val MSE")
+plt.legend()
+plt.title("Loss (MSE)")
+
+plt.subplot(1,3,2)
+plt.plot(epochs, history["val_mae"], label="Val MAE")
+plt.legend()
+plt.title("MAE (kcal/mol)")
+
+plt.subplot(1,3,3)
+plt.plot(epochs, history["val_rmse"], label="Val RMSE")
+plt.legend()
+plt.title("RMSE (kcal/mol)")
+
+plt.tight_layout()
+plt.savefig("learning_curves.png")
+print("✅ Gotowe! Wykresy zapisane w learning_curves.png")

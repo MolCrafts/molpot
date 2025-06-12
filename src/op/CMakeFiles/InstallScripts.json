@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/workspaces/molpot/src/op/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
