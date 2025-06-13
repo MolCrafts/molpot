@@ -52,15 +52,12 @@ class QDpi:
         if not issubclass(self.__class__, MapStyleDataset):
             self.__class__ = type('QDpi', (self.__class__, MapStyleDataset), {})
             MapStyleDataset.__init__(self, self.name, save_dir=self.save_dir, device=self.device)
-        
-        self.frames = []
-
 
     def __len__(self):
-        return len(self.frames)
+        return len(getattr(self, '_frames', []))
 
     def __getitem__(self, idx):
-        return self.frames[idx]
+        return getattr(self, '_frames', [])[idx]
     
     def get_subset_data(self):
         if self.subset == "all":
@@ -90,7 +87,8 @@ class QDpi:
         return dict(ds)
 
     def prepare(self):
-        print(f"[DEBUG] QDpi.prepare() called, current frames: {len(self.frames)}")
+        self._frames = []  # Initialize frames list
+        print(f"[DEBUG] QDpi.prepare() called, current frames: {len(self._frames)}")
         logger.info("preparing QDpi dataset...")
 
         ds = self.get_subset_data()
@@ -99,8 +97,8 @@ class QDpi:
             for key, url in subds.items():
                 self._download(url, key)
         
-        print(f"[DEBUG] QDpi.prepare() finished, frames: {len(self.frames)}")
-        return self.frames
+        print(f"[DEBUG] QDpi.prepare() finished, frames: {len(self._frames)}")
+        return self._frames
 
     def _download(self, url: str, key: str):
         gitlab_root = "https://gitlab.com/RutgersLBSR/QDpiDataset/-/raw/main/data/"
@@ -146,11 +144,11 @@ class QDpi:
                     frame[alias.Q] = net_charge
                     frame[alias.Z] = type_name
 
-                    self.frames.append(frame)
+                    self._frames.append(frame)
                     
                 except Exception as e:
                     logger.warning(f"Skipping molecule {name} due to error: {e}")
                     continue
 
-        logger.info(f"Successfully loaded {len(self.frames)} frames")
-        return self.frames 
+        logger.info(f"Successfully loaded {len(self._frames)} frames")
+        return self._frames 
