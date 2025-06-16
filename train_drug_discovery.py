@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Lokalny trening PiNet2 z residual learning ΔE = E_QM – E_LJ,
-przy użyciu QDpi + inline neighbor‐list + inline ΔE, bez ProcessManager.
-Dodano debug-printy, żeby śledzić ładowanie i przetwarzanie.
+Local PiNet2 training with residual learning ΔE = E_QM – E_LJ,
+using QDpi + inline neighbor-list + inline ΔE, without ProcessManager.
+Added debug prints to track loading and processing.
 """
 
 import time
@@ -28,7 +28,7 @@ from molpot.utils.frame import Frame
 from molpot.pipeline.dataloader import _compact_collate
 
 # ───────────────────────────────────────────────────
-# 1) Konfiguracja
+# 1) Configuration
 # ───────────────────────────────────────────────────
 MAX_FRAMES    = 500
 BATCH_SIZE    = 8
@@ -39,17 +39,17 @@ EPSILON       = 0.02
 SIGMA         = 3.2
 CUTOFF_RADIUS = 5.0
 
-print("🚀 Rozpoczynam trening PiNet2 na QDpi dataset")
+print("🚀 Starting PiNet2 training on QDpi dataset")
 start_time = time.time()
 
 # ───────────────────────────────────────────────────
-# 2) Wczytaj QDpi i obetnij do MAX_FRAMES
+# 2) Load QDpi and truncate to MAX_FRAMES
 # ───────────────────────────────────────────────────
 qdpi = QDpi(subset="all", save_dir="data/qdpi", device="cpu")
 
 n_total = len(qdpi)
 n_use = min(n_total, MAX_FRAMES)
-print(f"📊 Ładowanie {n_use} molekuł z QDpi dataset...")
+print(f"📊 Loading {n_use} molecules from QDpi dataset...")
 frames_raw = [qdpi[i] for i in range(n_use)]
 
 max_Z = max(int(fr[alias.Z].max()) for fr in frames_raw)
@@ -59,29 +59,29 @@ EPS = torch.full((max_Z+1, max_Z+1), EPSILON, dtype=torch.float32, device=DEVICE
 lj_model = LJ126(sig=SIG, eps=EPS).to(DEVICE).eval()
 
 # ───────────────────────────────────────────────────
-# 3) Preprocessing każdej ramki "na zimno"
+# 3) Preprocessing each frame "cold"
 # ───────────────────────────────────────────────────
 processed_frames = []
 
 
 
-print("⚙️ Preprocessing molekuł i obliczanie energii Lennard-Jones...")
+print("⚙️ Preprocessing molecules and calculating Lennard-Jones energies...")
 for idx, fr in enumerate(frames_raw):
     if (idx + 1) % 100 == 0:
-        print(f"   Przetworzono {idx+1}/{n_use} molekuł...")
+        print(f"   Processed {idx+1}/{n_use} molecules...")
     
     R_raw   = fr[alias.R]
     Z_raw   = fr[alias.Z].to(torch.int64)
     EQM_raw = fr[alias.E]
     n_atoms = R_raw.shape[0]
     
-    # Sprawdź czy to trajektoria MD (wiele klatek czasowych)
+    # Check if this is an MD trajectory (multiple time frames)
     if n_atoms % Z_raw.shape[0] == 0:
         n_atoms_per_molecule = Z_raw.shape[0]
         n_frames = n_atoms // n_atoms_per_molecule
         
         if n_frames > 1:
-            # BIERZEMY WSZYSTKIE KLATKI! Każda klatka = osobna ramka treningowa
+            # TAKE ALL FRAMES! Each frame = separate training frame
             for frame_idx in range(n_frames):
                 start_idx = frame_idx * n_atoms_per_molecule
                 end_idx = (frame_idx + 1) * n_atoms_per_molecule
@@ -91,14 +91,14 @@ for idx, fr in enumerate(frames_raw):
                 frame_copy[alias.R] = R_frame
                 frame_copy[alias.Z] = Z_raw
                 
-                # Neighbor-list dla tej klatki
+                # Neighbor-list for this frame
                 i_frame, j_frame = torch.triu_indices(n_atoms_per_molecule, n_atoms_per_molecule, offset=1)
                 diff_frame = R_frame[i_frame] - R_frame[j_frame]
                 dists_frame = diff_frame.norm(dim=-1)
                 mask_frame = dists_frame < CUTOFF_RADIUS
                 i_frame, j_frame, diff_frame, dists_frame = i_frame[mask_frame], j_frame[mask_frame], diff_frame[mask_frame], dists_frame[mask_frame]
                 
-                # Oblicz ELJ dla tej klatki
+                # Calculate ELJ for this frame
                 atom_types = Z_raw.long().to(DEVICE)
                 with torch.no_grad():
                     lj_pairs = lj_model.energy(i_frame.to(DEVICE), j_frame.to(DEVICE), dists_frame.to(DEVICE), atom_types)
@@ -117,7 +117,7 @@ for idx, fr in enumerate(frames_raw):
                 processed_frames.append(frame_copy)
             continue
     
-    # Pojedyncze klatki
+    # Single frames
     i, j = torch.triu_indices(n_atoms, n_atoms, offset=1)
     diff = R_raw[i] - R_raw[j]
     dists = diff.norm(dim=-1)
@@ -141,19 +141,19 @@ for idx, fr in enumerate(frames_raw):
     fr["labels"] = deltaE
     processed_frames.append(fr)
 
-print(f"✅ Preprocessing zakończony: {len(processed_frames)} ramek treningowych")
+print(f"✅ Preprocessing completed: {len(processed_frames)} training frames")
 
-# Split train/val + normalizacja ΔE
-print("📊 Podział na zbiory treningowy i walidacyjny...")
+# Split train/val + ΔE normalization
+print("📊 Splitting into training and validation sets...")
 n = len(processed_frames)
 n_train = int(0.8 * n)
 train_frames, val_frames = random_split(processed_frames, [n_train, n - n_train])
 print(f"   Train: {len(train_frames)}, Val: {len(val_frames)}")
 
-# Normalizacja energii
+# Energy normalization
 dE_tensors = torch.stack([f[("delta","energy")] for f in train_frames])
 dE_mean, dE_std = dE_tensors.mean(), dE_tensors.std() + 1e-8
-print(f"   Normalizacja: mean={dE_mean:.1f}, std={dE_std:.1f}")
+print(f"   Normalization: mean={dE_mean:.1f}, std={dE_std:.1f}")
 
 for ds in (train_frames, val_frames):
     for f in ds:
@@ -164,7 +164,7 @@ for ds in (train_frames, val_frames):
 def collate_fn(batch):
     result = _compact_collate(batch)
     
-    # Napraw indeksy par
+    # Fix pair indices
     if alias.pair_i in result:
         n_atoms_list = [frame[alias.Z].shape[0] for frame in batch]
         atom_offsets = torch.cumsum(torch.tensor([0] + n_atoms_list[:-1]), dim=0)
@@ -182,7 +182,7 @@ def collate_fn(batch):
     
     return result
 
-print("🔄 Tworzenie DataLoaderów...")
+print("🔄 Creating DataLoaders...")
 train_loader = DataLoader(
     train_frames,
     batch_size=BATCH_SIZE,
@@ -200,8 +200,8 @@ val_loader = DataLoader(
     pin_memory=False,
 )
 
-# Model PiNet2 + readout + trainer
-print("🧠 Inicjalizacja modelu PiNet2...")
+# PiNet2 model + readout + trainer
+print("🧠 Initializing PiNet2 model...")
 pinet = PiNet2(
     depth=2,
     basis_fn=GaussianRBF(n_rbf=16, cutoff=CUTOFF_RADIUS),
@@ -212,7 +212,7 @@ pinet = PiNet2(
 readout = Batchwise(
     n_neurons=[32, 32, 1],
     in_key=("pinet","p1"),
-    out_key="predicts",  # Płaski klucz zamiast hierarchicznego
+    out_key="predicts",  # Flat key instead of hierarchical
     reduce="sum"
 )
 
@@ -221,10 +221,10 @@ readout_mod = TensorDictModule(readout, in_keys=[alias.atom_batch, ("pinet","p1"
 model = torch.nn.Sequential(pinet_mod, readout_mod).to(DEVICE)
 model.device = DEVICE
 
-# Usuń debug hooks
+# Remove debug hooks
 
 def loss_fn(predicts, labels):
-    # PotentialTrainer używa model_transform który przekazuje (predicts, labels)
+    # PotentialTrainer uses model_transform which passes (predicts, labels)
     return F.mse_loss(predicts, labels)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
@@ -260,34 +260,34 @@ def log_epoch(engine):
     tl = engine.state.metrics["avg_loss"]
     trainer.evaluator.run(val_loader)
     met = trainer.evaluator.state.metrics
-    print(f"Epoka {ep}: Loss={tl:.4f}, Val MAE={met['MAE']:.4f}, Val RMSE={met['MSE']**0.5:.4f}")
+    print(f"Epoch {ep}: Loss={tl:.4f}, Val MAE={met['MAE']:.4f}, Val RMSE={met['MSE']**0.5:.4f}")
     history["epoch"].append(ep)
     history["train_loss"].append(tl)
     history["val_mae"].append(met["MAE"])
     history["val_rmse"].append(met["MSE"]**0.5)
 
-# Trening
-print(f"🚀 Rozpoczynam trening: {MAX_EPOCHS} epok")
+# Training
+print(f"🚀 Starting training: {MAX_EPOCHS} epochs")
 trainer.run(train_data=train_loader, max_epochs=MAX_EPOCHS, eval_data=val_loader)
 
-# Wykresy krzywych uczenia
-print("📈 Generowanie wykresów...")
+# Learning curve plots
+print("📈 Generating plots...")
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
 # Loss
 ax1.plot(history["epoch"], history["train_loss"], 'b-', label='Train Loss', linewidth=2)
-ax1.set_xlabel('Epoka')
+ax1.set_xlabel('Epoch')
 ax1.set_ylabel('Loss')
-ax1.set_title('Krzywa uczenia - Loss')
+ax1.set_title('Learning Curve - Loss')
 ax1.legend()
 ax1.grid(True, alpha=0.3)
 
-# MAE i RMSE
+# MAE and RMSE
 ax2.plot(history["epoch"], history["val_mae"], 'r-', label='Val MAE', linewidth=2)
 ax2.plot(history["epoch"], history["val_rmse"], 'g-', label='Val RMSE', linewidth=2)
-ax2.set_xlabel('Epoka')
-ax2.set_ylabel('Błąd')
-ax2.set_title('Metryki walidacyjne')
+ax2.set_xlabel('Epoch')
+ax2.set_ylabel('Error')
+ax2.set_title('Validation Metrics')
 ax2.legend()
 ax2.grid(True, alpha=0.3)
 
@@ -295,10 +295,10 @@ plt.tight_layout()
 plt.savefig('learning_curves.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-print(f"✅ Trening zakończony w {time.time() - start_time:.1f}s")
-print(f"📊 Końcowe wyniki:")
+print(f"✅ Training completed in {time.time() - start_time:.1f}s")
+print(f"📊 Final results:")
 print(f"   Final Train Loss: {history['train_loss'][-1]:.4f}")
 print(f"   Final Val MAE: {history['val_mae'][-1]:.4f}")
 print(f"   Final Val RMSE: {history['val_rmse'][-1]:.4f}")
-print(f"💾 Wykresy zapisane jako 'learning_curves.png'")
+print(f"💾 Plots saved as 'learning_curves.png'")
 
