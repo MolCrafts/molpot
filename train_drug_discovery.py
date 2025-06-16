@@ -39,7 +39,7 @@ EPSILON       = 0.02
 SIGMA         = 3.2
 CUTOFF_RADIUS = 5.0
 
-print("▶️ [DEBUG] Start skryptu treningowego")
+print("🚀 Rozpoczynam trening PiNet2 na QDpi dataset")
 start_time = time.time()
 
 # ───────────────────────────────────────────────────
@@ -47,17 +47,12 @@ start_time = time.time()
 # ───────────────────────────────────────────────────
 qdpi = QDpi(subset="all", save_dir="data/qdpi", device="cpu")
 
-print(f"▶️ [DEBUG] Mam w QDpi {len(qdpi)} ramek")
 n_total = len(qdpi)
-
-print(f"▶️ [DEBUG] prepare() zwróciło {n_total} ramek")
-
 n_use = min(n_total, MAX_FRAMES)
-print(f"▶️ [DEBUG] Trenujemy na {n_use} pierwszych ramkach (MAX_FRAMES={MAX_FRAMES})")
+print(f"📊 Ładowanie {n_use} molekuł z QDpi dataset...")
 frames_raw = [qdpi[i] for i in range(n_use)]
 
 max_Z = max(int(fr[alias.Z].max()) for fr in frames_raw)
-print(f"▶️ [DEBUG] max_Z={max_Z}")
 
 SIG = torch.full((max_Z+1, max_Z+1), SIGMA, dtype=torch.float32, device=DEVICE)
 EPS = torch.full((max_Z+1, max_Z+1), EPSILON, dtype=torch.float32, device=DEVICE)
@@ -70,57 +65,71 @@ processed_frames = []
 
 
 
-print("▶️ [DEBUG] Rozpoczynam preprocessing ramek")
+print("⚙️ Preprocessing molekuł i obliczanie energii Lennard-Jones...")
 for idx, fr in enumerate(frames_raw):
-    print(f"   ↪️  Ramka {idx+1}/{n_use}")
-    # ——————————————————————————————
-    # Operujemy na surowym dict-ie fr:
-    R_raw   = fr[alias.R]     # [n_atoms,3]
-    Z_raw   = fr[alias.Z]     # [n_atoms]
-    EQM_raw = fr[alias.E]     # skalar lub [1]
+    if (idx + 1) % 100 == 0:
+        print(f"   Przetworzono {idx+1}/{n_use} molekuł...")
+    
+    R_raw   = fr[alias.R]
+    Z_raw   = fr[alias.Z].to(torch.int64)
+    EQM_raw = fr[alias.E]
     n_atoms = R_raw.shape[0]
-    print(f"       • liczba atomów: {n_atoms}")
-    print(f"       [DEBUG] R_raw.shape={R_raw.shape}, Z_raw.shape={Z_raw.shape}")
-    print(f"       [DEBUG] Z_raw values: {Z_raw}")
     
     # Sprawdź czy to trajektoria MD (wiele klatek czasowych)
-    if R_raw.shape[0] != Z_raw.shape[0]:
+    if n_atoms % Z_raw.shape[0] == 0:
         n_atoms_per_molecule = Z_raw.shape[0]
-        n_total_coords = R_raw.shape[0]
-        n_frames = n_total_coords // n_atoms_per_molecule
+        n_frames = n_atoms // n_atoms_per_molecule
         
-        if n_total_coords % n_atoms_per_molecule != 0:
-            print(f"       [WARNING] Niepodzielna trajektoria! Pomijam ramkę.")
+        if n_frames > 1:
+            # BIERZEMY WSZYSTKIE KLATKI! Każda klatka = osobna ramka treningowa
+            for frame_idx in range(n_frames):
+                start_idx = frame_idx * n_atoms_per_molecule
+                end_idx = (frame_idx + 1) * n_atoms_per_molecule
+                R_frame = R_raw[start_idx:end_idx]
+                
+                frame_copy = fr.copy()
+                frame_copy[alias.R] = R_frame
+                frame_copy[alias.Z] = Z_raw
+                
+                # Neighbor-list dla tej klatki
+                i_frame, j_frame = torch.triu_indices(n_atoms_per_molecule, n_atoms_per_molecule, offset=1)
+                diff_frame = R_frame[i_frame] - R_frame[j_frame]
+                dists_frame = diff_frame.norm(dim=-1)
+                mask_frame = dists_frame < CUTOFF_RADIUS
+                i_frame, j_frame, diff_frame, dists_frame = i_frame[mask_frame], j_frame[mask_frame], diff_frame[mask_frame], dists_frame[mask_frame]
+                
+                # Oblicz ELJ dla tej klatki
+                atom_types = Z_raw.long().to(DEVICE)
+                with torch.no_grad():
+                    lj_pairs = lj_model.energy(i_frame.to(DEVICE), j_frame.to(DEVICE), dists_frame.to(DEVICE), atom_types)
+                    ELJ_frame = lj_pairs.sum()
+                
+                frame_copy["pairs"] = Frame({
+                    "i": i_frame,
+                    "j": j_frame, 
+                    "diff": diff_frame
+                })
+                deltaE_frame = (EQM_raw.flatten()[0] if EQM_raw.dim()>0 else EQM_raw.to(DEVICE)) - ELJ_frame
+                deltaE_frame = deltaE_frame.detach().cpu().unsqueeze(0)
+                frame_copy[("delta","energy")] = deltaE_frame
+                frame_copy["labels"] = deltaE_frame
+                
+                processed_frames.append(frame_copy)
             continue
-            
-        print(f"       [INFO] Trajektoria MD: {n_frames} klatek, {n_atoms_per_molecule} atomów/klatkę")
-        
-        # Weź tylko pierwszą klatkę czasową
-        R_raw = R_raw[:n_atoms_per_molecule]  # [n_atoms, 3]
-        n_atoms = n_atoms_per_molecule
-        print(f"       [INFO] Używam pierwszej klatki: {n_atoms} atomów")
-
-    # inline neighbor-list na surowym tensora R_raw:
+    
+    # Pojedyncze klatki
     i, j = torch.triu_indices(n_atoms, n_atoms, offset=1)
-    diff = R_raw[i] - R_raw[j]             # -> [#pairs,3]
-    dists = diff.norm(dim=-1)              # -> [#pairs]
+    diff = R_raw[i] - R_raw[j]
+    dists = diff.norm(dim=-1)
     mask = dists < CUTOFF_RADIUS
-    # DEBUG można tu zostawić, ale kształty będą 1D:
-    print(f"       [DEBUG] pre-mask: pairs={diff.shape[0]}, mask.sum={mask.sum().item()}")
     i, j, diff, dists = i[mask], j[mask], diff[mask], dists[mask]
-    print(f"       • wygenerowano par: {i.shape[0]}")
 
-    # oblicz ELJ
     atom_types = Z_raw.long().to(DEVICE)
-    print(f"       [DEBUG] atom_types.shape={atom_types.shape}, max_i={i.max().item() if len(i)>0 else 'N/A'}, max_j={j.max().item() if len(j)>0 else 'N/A'}")
     with torch.no_grad():
         lj_pairs = lj_model.energy(i.to(DEVICE), j.to(DEVICE), dists.to(DEVICE), atom_types)
         ELJ = lj_pairs.sum()
-    print(f"       • ELJ = {ELJ.item():.3f}")
 
-    # zbuduj nowy batched-Frame z surowej fr i dodanymi kluczami
     fr = fr.copy()
-    # Stwórz TYLKO hierarchiczną strukturę dla par (bez duplikacji)
     fr["pairs"] = Frame({
         "i": i,
         "j": j, 
@@ -128,101 +137,71 @@ for idx, fr in enumerate(frames_raw):
     })
     deltaE = (EQM_raw.flatten()[0] if EQM_raw.dim()>0 else EQM_raw.to(DEVICE)) - ELJ
     deltaE = deltaE.detach().cpu().unsqueeze(0)
-    fr[("delta","energy")] = deltaE.detach().cpu().unsqueeze(0)
-    fr[("labels","energy")] = deltaE.detach().cpu().unsqueeze(0)  # Dodaj labels od razu
-    print(f"       • ΔE = {deltaE.item():.3f}")
+    fr[("delta","energy")] = deltaE
+    fr["labels"] = deltaE
     processed_frames.append(fr)
 
-print("▶️ [DEBUG] Preprocessing zakończony, mam", len(processed_frames), "ramek\n")
+print(f"✅ Preprocessing zakończony: {len(processed_frames)} ramek treningowych")
 
-# ───────────────────────────────────────────────────
-# 4) Split train/val + normalizacja ΔE
-# ───────────────────────────────────────────────────
-print("▶️ [DEBUG] Robię split na train/val")
+# Split train/val + normalizacja ΔE
+print("📊 Podział na zbiory treningowy i walidacyjny...")
 n = len(processed_frames)
 n_train = int(0.8 * n)
 train_frames, val_frames = random_split(processed_frames, [n_train, n - n_train])
-print(f"       • train: {len(train_frames)}, val: {len(val_frames)}")
+print(f"   Train: {len(train_frames)}, Val: {len(val_frames)}")
 
-# normalizacja
+# Normalizacja energii
 dE_tensors = torch.stack([f[("delta","energy")] for f in train_frames])
 dE_mean, dE_std = dE_tensors.mean(), dE_tensors.std() + 1e-8
-print(f"▶️ [DEBUG] dE_mean={dE_mean:.3f}, dE_std={dE_std:.3f}")
+print(f"   Normalizacja: mean={dE_mean:.1f}, std={dE_std:.1f}")
 
 for ds in (train_frames, val_frames):
     for f in ds:
         dE = f[("delta","energy")]
-        f[("labels","energy")] = ((dE - dE_mean) / dE_std)
+        f["labels"] = ((dE - dE_mean) / dE_std)
 
-# ───────────────────────────────────────────────────
-# 5) DataLoader
-# ───────────────────────────────────────────────────
-print("▶️ [DEBUG] Tworzę DataLoadery")
-
-def debug_collate(batch):
-    print(f"   ↪️  [DEBUG collate] łączę batch o rozmiarze {len(batch)}")
-    
-    # Sprawdźmy co mamy w batch
-    for i, frame in enumerate(batch):
-        print(f"      Frame {i}: {frame[alias.Z].shape[0]} atoms, {len(frame['pairs']['i'])} pairs")
-        print(f"         pair_i range: {frame['pairs']['i'].min()}-{frame['pairs']['i'].max()}")
-    
-    # Użyj _compact_collate
+# DataLoader
+def collate_fn(batch):
     result = _compact_collate(batch)
     
-    # Sprawdź wynik
-    print(f"   [DEBUG] Result: {result[alias.Z].shape[0]} total atoms")
+    # Napraw indeksy par
     if alias.pair_i in result:
-        print(f"   [DEBUG] pair_i range PRZED naprawą: {result[alias.pair_i].min()}-{result[alias.pair_i].max()}")
-        
-        # NAPRAW INDEKSY RĘCZNIE!
-        # Oblicz atom_offsets
         n_atoms_list = [frame[alias.Z].shape[0] for frame in batch]
-        atom_offsets = [0]
-        for n in n_atoms_list[:-1]:
-            atom_offsets.append(atom_offsets[-1] + n)
+        atom_offsets = torch.cumsum(torch.tensor([0] + n_atoms_list[:-1]), dim=0)
         
-        # Napraw pair_i i pair_j
-        all_pair_i, all_pair_j, all_pair_diff = [], [], []
-        for frame_idx, frame in enumerate(batch):
-            offset = atom_offsets[frame_idx]
-            all_pair_i.append(frame['pairs']['i'] + offset)
-            all_pair_j.append(frame['pairs']['j'] + offset)
-            all_pair_diff.append(frame['pairs']['diff'])
+        pair_i_corrected = []
+        pair_j_corrected = []
         
-        # Zastąp w result
-        result[alias.pair_i] = torch.cat(all_pair_i)
-        result[alias.pair_j] = torch.cat(all_pair_j)
-        result[alias.pair_diff] = torch.cat(all_pair_diff)
+        for i, frame in enumerate(batch):
+            offset = atom_offsets[i]
+            pair_i_corrected.append(frame['pairs']['i'] + offset)
+            pair_j_corrected.append(frame['pairs']['j'] + offset)
         
-        print(f"   [DEBUG] pair_i range PO naprawie: {result[alias.pair_i].min()}-{result[alias.pair_i].max()}")
-    else:
-        print(f"   [DEBUG] NO pair_i in result! Keys: {list(result.keys())}")
+        result[alias.pair_i] = torch.cat(pair_i_corrected)
+        result[alias.pair_j] = torch.cat(pair_j_corrected)
     
     return result
 
+print("🔄 Tworzenie DataLoaderów...")
 train_loader = DataLoader(
     train_frames,
     batch_size=BATCH_SIZE,
     shuffle=True,
-    collate_fn=debug_collate,
+    collate_fn=collate_fn,
     num_workers=0,
     pin_memory=False,
 )
-val_loader   = DataLoader(
+val_loader = DataLoader(
     val_frames,
     batch_size=BATCH_SIZE,
     shuffle=False,
-    collate_fn=debug_collate,
+    collate_fn=collate_fn,
     num_workers=0,
     pin_memory=False,
 )
-print("▶️ [DEBUG] DataLoadery gotowe\n")
 
-# ───────────────────────────────────────────────────
-# 6) Model PiNet2 + readout + trainer
-# ───────────────────────────────────────────────────
-print("▶️ [DEBUG] Inicjalizacja modelu i trenera")
+# Model PiNet2 + readout + trainer
+print("🧠 Inicjalizacja modelu PiNet2...")
 pinet = PiNet2(
     depth=2,
     basis_fn=GaussianRBF(n_rbf=16, cutoff=CUTOFF_RADIUS),
@@ -233,36 +212,36 @@ pinet = PiNet2(
 readout = Batchwise(
     n_neurons=[32, 32, 1],
     in_key=("pinet","p1"),
-    out_key=("predicts","energy"),
+    out_key="predicts",  # Płaski klucz zamiast hierarchicznego
     reduce="sum"
 )
 
 pinet_mod   = TensorDictModule(pinet,   in_keys=[alias.Z, alias.pair_diff, alias.pair_i, alias.pair_j], out_keys=[("pinet","p1")])
-readout_mod = TensorDictModule(readout, in_keys=[("pinet","p1"), alias.atom_batch], out_keys=[("predicts","energy")])
+readout_mod = TensorDictModule(readout, in_keys=[alias.atom_batch, ("pinet","p1")], out_keys=["predicts"])
 model = torch.nn.Sequential(pinet_mod, readout_mod).to(DEVICE)
 model.device = DEVICE
 
-def loss_fn(out, batch):
-    return F.mse_loss(
-        out[("predicts","energy")],
-        batch[("labels","energy")].to(DEVICE)
-    )
+# Usuń debug hooks
+
+def loss_fn(predicts, labels):
+    # PotentialTrainer używa model_transform który przekazuje (predicts, labels)
+    return F.mse_loss(predicts, labels)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
 trainer = PotentialTrainer(model=model, optimizer=optimizer, loss_fn=loss_fn,
                            amp_mode=None, gradient_accumulation_steps=1, clip_grad_norm=1.0)
 
-RunningAverage(output_transform=lambda out: out).attach(trainer.trainer, "avg_loss")
+RunningAverage(output_transform=lambda out: out["loss"]).attach(trainer.trainer, "avg_loss")
 mae = MeanAbsoluteError(
-    output_transform=lambda out, batch: (
-        out[("predicts","energy")] * dE_std + dE_mean,
-        batch[("labels","energy")]  * dE_std + dE_mean
+    output_transform=lambda out: (
+        out["predicts"] * dE_std + dE_mean,
+        out["labels"] * dE_std + dE_mean
     )
 )
 mse = MeanSquaredError(
-    output_transform=lambda out, batch: (
-        out[("predicts","energy")] * dE_std + dE_mean,
-        batch[("labels","energy")]  * dE_std + dE_mean
+    output_transform=lambda out: (
+        out["predicts"] * dE_std + dE_mean,
+        out["labels"] * dE_std + dE_mean
     )
 )
 mae.attach(trainer.evaluator, "MAE")
@@ -271,17 +250,7 @@ mse.attach(trainer.evaluator, "MSE")
 @trainer.trainer.on(Events.ITERATION_STARTED)
 def to_device(engine):
     batch = engine.state.batch
-    print(f"   [DEBUG] Batch keys: {list(batch.keys())}")
-    print(f"   [DEBUG] Batch shapes: {[(k, v.shape if hasattr(v, 'shape') else type(v)) for k, v in batch.items()]}")
-    
-    # DEBUG TYPÓW DANYCH
-    print(f"   [DEBUG] Data types:")
-    print(f"      Z dtype: {batch[alias.Z].dtype}")
-    print(f"      R dtype: {batch[alias.R].dtype}")
-    print(f"      pair_i dtype: {batch[alias.pair_i].dtype}")
-    print(f"      pair_j dtype: {batch[alias.pair_j].dtype}")
-    print(f"      pair_diff dtype: {batch[alias.pair_diff].dtype}")
-    
+    batch[alias.Z] = batch[alias.Z].to(torch.int64)
     engine.state.batch = batch.to(DEVICE)
 
 history = {"epoch":[], "train_loss":[], "val_mae":[], "val_rmse":[]}
@@ -289,21 +258,47 @@ history = {"epoch":[], "train_loss":[], "val_mae":[], "val_rmse":[]}
 def log_epoch(engine):
     ep = engine.state.epoch
     tl = engine.state.metrics["avg_loss"]
-    print(f"▶️ [DEBUG] Koniec epoki {ep}, train_loss={tl:.4f}")
     trainer.evaluator.run(val_loader)
     met = trainer.evaluator.state.metrics
-    print(f"   ▶️ Val MAE={met['MAE']:.4f}, Val RMSE={met['MSE']**0.5:.4f}")
+    print(f"Epoka {ep}: Loss={tl:.4f}, Val MAE={met['MAE']:.4f}, Val RMSE={met['MSE']**0.5:.4f}")
     history["epoch"].append(ep)
     history["train_loss"].append(tl)
     history["val_mae"].append(met["MAE"])
     history["val_rmse"].append(met["MSE"]**0.5)
 
-# ───────────────────────────────────────────────────
-# 7) Trening + wizualizacja
-# ───────────────────────────────────────────────────
-print(f"▶️ [DEBUG] Rozpoczynam trening: {MAX_EPOCHS} epok")
+# Trening
+print(f"🚀 Rozpoczynam trening: {MAX_EPOCHS} epok")
 trainer.run(train_data=train_loader, max_epochs=MAX_EPOCHS, eval_data=val_loader)
 
-print(f"✅ [DEBUG] Cały skrypt wykonał się w {time.time() - start_time:.1f}s")
-# … (rysowanie wykresów jak poprzednio) …
+# Wykresy krzywych uczenia
+print("📈 Generowanie wykresów...")
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+# Loss
+ax1.plot(history["epoch"], history["train_loss"], 'b-', label='Train Loss', linewidth=2)
+ax1.set_xlabel('Epoka')
+ax1.set_ylabel('Loss')
+ax1.set_title('Krzywa uczenia - Loss')
+ax1.legend()
+ax1.grid(True, alpha=0.3)
+
+# MAE i RMSE
+ax2.plot(history["epoch"], history["val_mae"], 'r-', label='Val MAE', linewidth=2)
+ax2.plot(history["epoch"], history["val_rmse"], 'g-', label='Val RMSE', linewidth=2)
+ax2.set_xlabel('Epoka')
+ax2.set_ylabel('Błąd')
+ax2.set_title('Metryki walidacyjne')
+ax2.legend()
+ax2.grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.savefig('learning_curves.png', dpi=300, bbox_inches='tight')
+plt.show()
+
+print(f"✅ Trening zakończony w {time.time() - start_time:.1f}s")
+print(f"📊 Końcowe wyniki:")
+print(f"   Final Train Loss: {history['train_loss'][-1]:.4f}")
+print(f"   Final Val MAE: {history['val_mae'][-1]:.4f}")
+print(f"   Final Val RMSE: {history['val_rmse'][-1]:.4f}")
+print(f"💾 Wykresy zapisane jako 'learning_curves.png'")
 

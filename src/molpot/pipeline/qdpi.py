@@ -119,22 +119,22 @@ class QDpi:
             
             for name, mol in f.items():
                 try:
-                    # Basic data
+                    # Basic data - konwertuj wszystkie float na config.ftype (float32)
                     pbc = not bool(mol["nopbc"])
-                    coord = torch.tensor(np.array(mol["set.000"]["coord.npy"])).reshape(-1, 3)
-                    energy = torch.tensor(np.array(mol["set.000"]["energy.npy"]))
-                    force = torch.tensor(np.array(mol["set.000"]["force.npy"])).reshape(-1, 3)
+                    coord = torch.tensor(np.array(mol["set.000"]["coord.npy"]), dtype=config.ftype).reshape(-1, 3)
+                    energy = torch.tensor(np.array(mol["set.000"]["energy.npy"]), dtype=config.ftype)
+                    force = torch.tensor(np.array(mol["set.000"]["force.npy"]), dtype=config.ftype).reshape(-1, 3)
                     
                     # Net charge might not exist for all molecules
                     if "net_charge.npy" in mol["set.000"]:
-                        net_charge = torch.tensor(np.array(mol["set.000"]["net_charge.npy"]))
+                        net_charge = torch.tensor(np.array(mol["set.000"]["net_charge.npy"]), dtype=config.ftype)
                     else:
-                        net_charge = torch.tensor(0.0)  # Default to neutral
+                        net_charge = torch.tensor(0.0, dtype=config.ftype)  # Default to neutral
                     
-                    # Type information
-                    type_raw = torch.tensor(np.array(mol["type.raw"]))
+                    # Type information - atomic numbers jako int
+                    type_raw = torch.tensor(np.array(mol["type.raw"]), dtype=config.itype)
                     type_map = [mol["type_map.raw"][i].decode() for i in range(len(mol["type_map.raw"]))]
-                    type_name = torch.tensor([mpot.Element(type_map[i]).number for i in type_raw])
+                    type_name = torch.tensor([mpot.Element(type_map[i]).number for i in type_raw], dtype=config.itype)
 
                     # Create frame
                     frame = mpot.Frame()
