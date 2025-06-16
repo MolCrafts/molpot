@@ -207,6 +207,24 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+*.txt
+*.hdf5
+.cmake
+
+# CMake and build files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+build/
+_build/
+.cmake/
+
+# Test data files
+**/tests/**/*.hdf5
+**/tests/**/*.txt
+dummy_*.hdf5
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

@@ -126,7 +126,7 @@ class QDpi:
             
             for name, mol in f.items():
                 try:
-                    # Basic data - konwertuj wszystkie float na config.ftype (float32)
+                    # Basic data 
                     pbc = not bool(mol["nopbc"])
                     coord_raw = torch.tensor(np.array(mol["set.000"]["coord.npy"]), dtype=config.ftype)
                     energy_raw = torch.tensor(np.array(mol["set.000"]["energy.npy"]), dtype=config.ftype)
