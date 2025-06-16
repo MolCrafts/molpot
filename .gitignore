@@ -8,7 +8,49 @@ runs/
 log*
 tblog/
 ckpt/
+checkpoints/
 *.db
+
+# Machine Learning / Training specific
+*.pth
+*.pt
+*.ckpt
+*.model
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+wandb/
+mlruns/
+.neptune/
+lightning_logs/
+learning_curves.png
+training_plots/
+model_checkpoints/
+experiments/
+
+# Molecular data and cache
+*.xyz
+*.sdf
+*.mol2
+*.pdb
+cache/
+processed/
+raw/
+
+# Output files from training scripts
+*.out
+*.err
+slurm-*.out
+nohup.out
+*.log.*
+
+# Temporary Python files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
 # ide
 .vscode/
 

@@ -86,7 +86,7 @@ class QDpi:
 
         return dict(ds)
 
-    def prepare(self):
+    def prepare(self, total: int = None, preprocess=[]):  # Remove default limit
         self._frames = []  # Initialize frames list
         print(f"[DEBUG] QDpi.prepare() called, current frames: {len(self._frames)}")
         logger.info("preparing QDpi dataset...")
@@ -95,12 +95,19 @@ class QDpi:
 
         for category, subds in ds.items():
             for key, url in subds.items():
-                self._download(url, key)
+                self._download(url, key, total)
+        
+        # Apply total limit after loading all data (like QM9 does)
+        if total is not None and len(self._frames) > total:
+            # Randomly select total frames like QM9 does
+            import torch
+            indices = torch.randperm(len(self._frames))[:total]
+            self._frames = [self._frames[i] for i in indices]
         
         print(f"[DEBUG] QDpi.prepare() finished, frames: {len(self._frames)}")
         return self._frames
 
-    def _download(self, url: str, key: str):
+    def _download(self, url: str, key: str, total_limit: int = None):
         gitlab_root = "https://gitlab.com/RutgersLBSR/QDpiDataset/-/raw/main/data/"
         qdpi_hdf5 = f"{self.save_dir}/{key}.hdf5"
         
@@ -121,9 +128,9 @@ class QDpi:
                 try:
                     # Basic data - konwertuj wszystkie float na config.ftype (float32)
                     pbc = not bool(mol["nopbc"])
-                    coord = torch.tensor(np.array(mol["set.000"]["coord.npy"]), dtype=config.ftype).reshape(-1, 3)
-                    energy = torch.tensor(np.array(mol["set.000"]["energy.npy"]), dtype=config.ftype)
-                    force = torch.tensor(np.array(mol["set.000"]["force.npy"]), dtype=config.ftype).reshape(-1, 3)
+                    coord_raw = torch.tensor(np.array(mol["set.000"]["coord.npy"]), dtype=config.ftype)
+                    energy_raw = torch.tensor(np.array(mol["set.000"]["energy.npy"]), dtype=config.ftype)
+                    force_raw = torch.tensor(np.array(mol["set.000"]["force.npy"]), dtype=config.ftype)
                     
                     # Net charge might not exist for all molecules
                     if "net_charge.npy" in mol["set.000"]:
@@ -136,15 +143,51 @@ class QDpi:
                     type_map = [mol["type_map.raw"][i].decode() for i in range(len(mol["type_map.raw"]))]
                     type_name = torch.tensor([mpot.Element(type_map[i]).number for i in type_raw], dtype=config.itype)
 
-                    # Create frame
-                    frame = mpot.Frame()
-                    frame[alias.R] = coord
-                    frame[alias.F] = force
-                    frame[alias.E] = energy
-                    frame[alias.Q] = net_charge
-                    frame[alias.Z] = type_name
+                    # QDpi has trajectory data - extract each timestep as separate frame
+                    if coord_raw.dim() == 2 and coord_raw.shape[0] > 1:
+                        # Multiple timesteps - create separate frame for each
+                        n_timesteps = coord_raw.shape[0]
+                        
+                        for t in range(n_timesteps):
+                            # Extract data for timestep t
+                            coord_t = coord_raw[t].reshape(-1, 3)
+                            
+                            # Energy handling
+                            if energy_raw.dim() == 1 and len(energy_raw) == n_timesteps:
+                                energy_t = energy_raw[t]
+                            else:
+                                energy_t = energy_raw  # Same energy for all timesteps
+                            
+                            # Force handling  
+                            if force_raw.dim() == 2 and force_raw.shape[0] == n_timesteps:
+                                force_t = force_raw[t].reshape(-1, 3)
+                            else:
+                                force_t = force_raw.reshape(-1, 3)  # Same force for all timesteps
 
-                    self._frames.append(frame)
+                            # Create frame for this timestep
+                            frame = mpot.Frame()
+                            frame[alias.R] = coord_t
+                            frame[alias.F] = force_t
+                            frame[alias.E] = energy_t
+                            frame[alias.Q] = net_charge
+                            frame[alias.Z] = type_name
+
+                            self._frames.append(frame)
+                    else:
+                        # Single timestep - original behavior
+                        coord = coord_raw.reshape(-1, 3)
+                        energy = energy_raw
+                        force = force_raw.reshape(-1, 3)
+
+                        # Create frame
+                        frame = mpot.Frame()
+                        frame[alias.R] = coord
+                        frame[alias.F] = force
+                        frame[alias.E] = energy
+                        frame[alias.Q] = net_charge
+                        frame[alias.Z] = type_name
+
+                        self._frames.append(frame)
                     
                 except Exception as e:
                     logger.warning(f"Skipping molecule {name} due to error: {e}")
