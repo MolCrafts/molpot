@@ -8,7 +8,49 @@ runs/
 log*
 tblog/
 ckpt/
+checkpoints/
 *.db
+
+# Machine Learning / Training specific
+*.pth
+*.pt
+*.ckpt
+*.model
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+wandb/
+mlruns/
+.neptune/
+lightning_logs/
+learning_curves.png
+training_plots/
+model_checkpoints/
+experiments/
+
+# Molecular data and cache
+*.xyz
+*.sdf
+*.mol2
+*.pdb
+cache/
+processed/
+raw/
+
+# Output files from training scripts
+*.out
+*.err
+slurm-*.out
+nohup.out
+*.log.*
+
+# Temporary Python files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
 # ide
 .vscode/
 
@@ -165,6 +207,25 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+*.txt
+*.hdf5
+.cmake
+
+# CMake and build files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+Makefile
+*.cmake
+build/
+_build/
+.cmake/
+
+# Test data files
+**/tests/**/*.hdf5
+**/tests/**/*.txt
+dummy_*.hdf5
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

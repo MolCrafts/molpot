@@ -136,6 +136,12 @@ pair_force = pairs_ns.set("force", "pair force", float, shape=(None, 3))
 pair_batch = pairs_ns.set("pair_batch", "pairs batch mask", int)
 pair_offset = pairs_ns.set("pair_offset", "pairs offset", int)
 
+# energy and forces section
+energy_ns = NameSpace("energy")
+E = energy_ns.set("energy", "total energy", float, unit="kcal/mol")
+F = energy_ns.set("forces", "atomic forces", float, shape=(None, 3), unit="kcal/mol/angstrom")
+Q = energy_ns.set("charge", "net charge", float)
+
 # prop section
 props_ns = NameSpace("props")
 n_atoms = props_ns.set("n_atoms", "number of atoms", int)
